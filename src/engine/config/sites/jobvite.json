@@ -1,0 +1,49 @@
+{
+  "ats": "Jobvite",
+  "urls": ["*://jobs.jobvite.com/*/job/*/apply*"],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [
+    {
+      "kind": "file",
+      "fieldPath": "//input[@id='file-input-0'][@type='file']",
+      "label": "Resume",
+      "requiredPath": "//*[@id='attachResume']//button[@aria-required='true']",
+      "fillActions": [
+        { "path": "//*[@id='attachResume']//button[@jv-add-attachment]/i[contains(@class,'icon')]", "method": "click", "allowFailure": true },
+        { "method": "uploadFile" }
+      ]
+    },
+    {
+      "kind": "file",
+      "fieldPath": "//input[@id='file-input-1'][@type='file']",
+      "label": "Cover Letter",
+      "fillActions": [
+        { "path": "//button[@jv-add-attachment][@attachment-label='Cover Letter']", "method": "click", "allowFailure": true },
+        { "method": "uploadFile" }
+      ]
+    }
+  ],
+  "inputSelectors": [
+    ["resume", [{
+      "path": [".//input[@id='file-input-0'][@type='file']"],
+      "actions": [
+        { "path": "//*[@id='attachResume']//button[@jv-add-attachment]/i[contains(@class,'icon')]", "method": "click", "allowFailure": true },
+        { "method": "uploadResume" }
+      ]
+    }]],
+    ["coverLetter", [{
+      "path": [".//input[@id='file-input-1'][@type='file']"],
+      "actions": [
+        { "path": "//button[@jv-add-attachment][@attachment-label='Cover Letter']", "method": "click", "allowFailure": true },
+        { "method": "uploadCoverLetter" }
+      ]
+    }]]
+  ]
+}

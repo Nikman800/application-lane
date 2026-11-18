@@ -47,10 +47,13 @@ export function fallbackProblems(
       ),
     );
     // A list the fill answered (one box of it ticked) is not left: the
-    // sanctions list given "None of the above" was still listed.
+    // sanctions list given "None of the above" was still listed. Nor one
+    // with a box ticked already (JazzHR's clearance list on a refill, "No
+    // Current Clearance" ticked).
     const answeredLists = new Set(
       frame.observation.fields
-        .filter((field) => field.question && (planned.has(field.id) || listAnswered(field, profile)))
+        .filter((field) => field.question && (planned.has(field.id) || listAnswered(field, profile) ||
+          (field.kind === "checkbox" && /^(yes|true|on)$/i.test(field.value))))
         .map((field) => field.question),
     );
     if (!legalToo)
@@ -540,7 +543,12 @@ export async function assist(app: Application, tabId: number) {
       }
       if (job.status !== "complete" || app.fieldFallbackSession !== session || !idle()) break;
       const listed = session.frames.flatMap((frame) => frame.fields.map((field) => ({ ...field, id: `${frame.frameId}|${field.id}` })));
-      for (const draft of (job.fieldDrafts || []).filter((candidate) => !candidate.value?.trim() && legalQuestion(`${candidate.question || ""} ${candidate.label}`))) {
+      // A box left clear in a list another box answers is not a question
+      // left: JazzHR's clearance list, "No Current Clearance" ticked, listed
+      // "Top Secret" and every other box as left for the applicant.
+      const answeredQuestions = new Set((job.fieldDrafts || []).filter((draft) => draft.question && draft.value?.trim()).map((draft) => draft.question));
+      for (const draft of (job.fieldDrafts || []).filter((candidate) => !candidate.value?.trim() && !(candidate.question && answeredQuestions.has(candidate.question)) &&
+          legalQuestion(`${candidate.question || ""} ${candidate.label}`))) {
         const note = `Legal or eligibility question left for you: ${draft.label}`.slice(0, 350);
         if (!app.missing.includes(note)) app.missing.push(note);
       }

@@ -134,6 +134,8 @@ export function plainStance(answer: string, optionText: string, question?: strin
   return claims.every((word) => asked.has(stemmed(word)));
 }
 
+const usStateCodes = new Set("AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY PR GU VI AS MP".split(" "));
+
 export function rankOption(
   proposal: { value: string; choices?: string[]; decline?: boolean; numeric?: number; scale?: number; question?: string },
   optionText: string,
@@ -166,6 +168,16 @@ export function rankOption(
     // Or the code in brackets first: "(+1) United States" (iCIMS').
     optionText.match(/^\s*\(\+\d{1,4}\)\s*(.+?)\s*$/)?.[1];
   if (coded && norm(coded) === norm(proposal.value)) return 40;
+  // A list that appends the place's state to a name: Oracle's School list
+  // offers "Contoso University Mesa AZ" for the whole answer
+  // "Contoso University Mesa". Only a US state's code counts as that
+  // note, and the rest must be the whole answer, or one of its names.
+  const stated = optionText.match(/^(.+?)[\s,]+([A-Z]{2})\s*$/);
+  if (stated && usStateCodes.has(stated[2])) {
+    if (norm(stated[1]) === norm(proposal.value)) return 40.2;
+    const statedChoice = (proposal.choices || []).findIndex((c) => norm(c) === norm(stated[1]));
+    if (statedChoice >= 0) return 40.3 + statedChoice / 1000;
+  }
   // Or one of the answer's other names: "United States +1" for the
   // profile's "United States of America".
   const codedChoice = coded ? (proposal.choices || []).findIndex((c) => norm(c) === norm(coded)) : -1;

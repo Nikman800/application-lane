@@ -1,6 +1,6 @@
 // Part of the content script (content.ts): reading controls' values, and the marks the fill leaves on what it wrote.
 // Split out of content.ts as it was; see content.ts for how it starts.
-import { type Control, currentFileName, isToggleChoice, toggleGroup, selectedCustomValue, placeholderOption, sectionFor, legacyLabels, writable } from "../semantics";
+import { type Control, iconRadioLabel, currentFileName, isToggleChoice, toggleGroup, selectedCustomValue, placeholderOption, sectionFor, legacyLabels, writable } from "../semantics";
 import { radioGroup, clip, isTrackableControl, openModal, lockKey, searchWithoutPick, placeholder, nativeActivationControl } from "../content-dom";
 import { configEngineEnabled } from "../../engine/mode";
 import { configuredFileControls, configuredRadioControls } from "../../engine/runtime";
@@ -33,7 +33,9 @@ export const valueOf = (element: Control): string => {
   const role = element.getAttribute("role");
   if (role === "radio" && !(element instanceof HTMLInputElement)) {
     const selected = radioGroup(element).find(
-      (candidate) => candidate.getAttribute("aria-checked") === "true",
+      (candidate) =>
+        candidate.getAttribute("aria-checked") === "true" ||
+        (iconRadioLabel(candidate)?.control as HTMLInputElement | null | undefined)?.checked === true,
     );
     return selected ? ownLabel(selected) : "";
   }
@@ -56,7 +58,10 @@ export const valueOf = (element: Control): string => {
       : "";
   if (element instanceof HTMLSelectElement) {
     const option = element.selectedOptions[0];
-    return !option || placeholderOption(option) ? "" : element.value;
+    if (!option || placeholderOption(option)) return "";
+    // Angular's ng-options give each option a value of its own ("string:AZ",
+    // Jobvite's State): the option is read as what it shows.
+    return /^(string|number|boolean|object):/.test(element.value) ? option.label || option.text.trim() : element.value;
   }
   if (element instanceof HTMLInputElement) {
     if (element.type === "checkbox") {

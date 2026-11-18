@@ -2137,3 +2137,13 @@ test("drafts no second model checked are recorded with why, and checked ones are
   // Everything checked: no record.
   assert.equal(await run("thorough", async (drafts) => clean(drafts)), undefined);
 });
+
+test("a list that appends the place's US state code to a name is picked for the whole name, and no other code is a note", () => {
+  const listed = ["Contoso University Mesa AZ", "Contoso University Downtown AZ"];
+  assert.equal(pickOption({ value: "Contoso University Mesa" }, listed, (o) => o), "Contoso University Mesa AZ");
+  assert.equal(pickOption({ value: "Contoso Institute", choices: ["Contoso"] }, ["Contoso, VA", "Contoso Institute of Art VA"], (o) => o), "Contoso, VA");
+  // Part of the name is not the name, and two letters that are no state are not a note.
+  assert.equal(pickOption({ value: "Contoso University" }, ["Contoso University Mesa AZ"], (o) => o), undefined);
+  assert.equal(pickOption({ value: "Acme University" }, ["Acme University QQ"], (o) => o), undefined);
+  assert.equal(rankOption({ value: "Penn State" }, "Penn State PA"), 40.2);
+});

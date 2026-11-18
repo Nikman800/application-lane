@@ -289,6 +289,17 @@
               ]
             ],
             [
+              "degree_check",
+              [
+                {
+                  "valueKey": "degree",
+                  "path": ".//ul[@role='radiogroup'][contains(@class,'cx-select-pills-container')][contains(@aria-label,'Degree')]//button[@role='radio']",
+                  "method": "click",
+                  "time": 3000
+                }
+              ]
+            ],
+            [
               "save",
               [
                 {

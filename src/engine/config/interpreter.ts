@@ -2336,6 +2336,28 @@ export async function interpretConfig(
           false,
           options,
         );
+      // Pills that were drawn while this step waited are picked from like
+      // pills found at once: by the answer's wording, not the first one.
+      if (element && !candidates.length && element.matches('button[role="radio"]') && element.closest(".cx-select-pills-container")) {
+        const drawn = [...(element.closest(".cx-select-pills-container")?.querySelectorAll('button[role="radio"]') || [])];
+        const picked = matchOption(
+          values,
+          drawn.map((candidate, at) => ({ label: (candidate.textContent || "").replace(/\s+/g, " ").trim(), value: `pill:${at}` })),
+          globals,
+        );
+        element = picked ? drawn[Number(picked.value.slice(5))] : undefined;
+        if (!element) {
+          state.lastReason = `The site's list has no option for "${values[0]}".`;
+          state.lastStatus = "skipped";
+          continue;
+        }
+        if (element.getAttribute("aria-checked") === "true") {
+          options.onConfirmed?.(element);
+          results.push({ key, status: "skipped", reason: "The site's value is already right." });
+          state.completed = true;
+          break;
+        }
+      }
       if (!element) continue;
       // A signature, or its date, only as the applicant's settings allow
       // (signatures.ts): a typed name there signs for them.
@@ -3479,6 +3501,17 @@ async function applyChoice(
     }
     if (!accepted)
       throw new Error("Site did not accept the configured value.");
+    // A pill that Oracle marks checked a moment after its click (176 ms in
+    // a recording): the rule after it (the entry's save, held back while a
+    // pill group has no checked pill) looked at once, found none, and the
+    // entry was filled but never saved. The pill is waited for.
+    if (accepted && element.matches('button[role="radio"]') && element.closest(".cx-select-pills-container")) {
+      for (
+        const deadline = (options.now?.() ?? Date.now()) + 2_000;
+        element.getAttribute("aria-checked") !== "true" && (options.now?.() ?? Date.now()) < deadline;
+      )
+        await sleep(options.pollMs ?? 100, options.signal);
+    }
     // A search whose optional pick found nothing ("No results") leaves
     // its list open, and an open list hides the rest of the form from
     // the next look at it (Ashby, Talos's Location; eval).

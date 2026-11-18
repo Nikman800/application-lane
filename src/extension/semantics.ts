@@ -699,7 +699,19 @@ function icimsCellQuestion(element: Control): string {
   return text && text.length <= 120 ? text : "";
 }
 
+// An ARIA radio drawn as an icon inside the label of a native radio that the
+// page keeps out of sight (Jobvite's <i role="radio"> in a label for its
+// input): the label's text is the option, the native input holds the state.
+export function iconRadioLabel(element: Element): HTMLLabelElement | undefined {
+  if (element instanceof HTMLInputElement || element.getAttribute("role") !== "radio") return undefined;
+  const label = element.closest("label");
+  const control = label?.control;
+  return label && control instanceof HTMLInputElement && control.type === "radio" && !element.contains(control) ? label : undefined;
+}
+
 export function ownLabel(element: Control): string {
+  const iconLabel = iconRadioLabel(element);
+  if (iconLabel) return cleanLabel(iconLabel.textContent || "");
   // A toggle choice's option is its own text ("Yes", "No").
   if (isToggleChoice(element)) return cleanLabel(element.textContent || "");
   const question = fileQuestion(element);

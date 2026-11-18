@@ -79,6 +79,7 @@ const talNetOrigin = "https://careers-fixture.tal.net";
 const amazonOrigin = "https://account.amazon.jobs";
 const paylocityOrigin = "https://recruiting.paylocity.com";
 const jazzOrigin = "https://acme.applytojob.com";
+const jobviteOrigin = "https://jobs.jobvite.com";
 const avatureOrigin = "https://acme.avature.net";
 const breezyOrigin = "https://acme.breezy.hr";
 const ripplingOrigin = "https://ats.rippling.com";
@@ -288,7 +289,7 @@ test.beforeEach(async () => {
       backendOrigin,
     ),
   );
-  manifest.host_permissions.push(...[...atsOrigins, oracleOrigin, workableOrigin, sapsfOrigin, adpOrigin, talNetOrigin, amazonOrigin, paylocityOrigin, jazzOrigin, avatureOrigin, breezyOrigin, ripplingOrigin, teslaOrigin, tiktokOrigin, smartRecruitersOrigin, "https://smartapply.indeed.com", "https://www.linkedin.com"].map((origin) => `${origin}/*`));
+  manifest.host_permissions.push(...[...atsOrigins, oracleOrigin, workableOrigin, sapsfOrigin, adpOrigin, talNetOrigin, amazonOrigin, paylocityOrigin, jazzOrigin, jobviteOrigin, avatureOrigin, breezyOrigin, ripplingOrigin, teslaOrigin, tiktokOrigin, smartRecruitersOrigin, "https://smartapply.indeed.com", "https://www.linkedin.com"].map((origin) => `${origin}/*`));
   await writeFile(
     join(extensionPath, "manifest.json"),
     JSON.stringify(manifest),
@@ -7703,6 +7704,88 @@ test("JazzHR's Yes and No boxes under two questions are each answered by their o
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
+// The same form's clearance question, answered by the AI step: it ticked
+// "No Current Clearance" and left the other boxes clear, and each of them
+// ("Top Secret", "Public Trust", …) was listed as a legal question left for
+// the applicant, though the question was answered; and on a refill, the
+// box ticked already, the same.
+test("a box list the AI step answered with one box is not listed as legal questions left", async () => {
+  const question = "Which of the following best describes your current U.S. Government security clearance?";
+  const options = ["No Current Clearance", "Public Trust", "Secret", "Top Secret", "Top Secret/ SCI"];
+  // A second list ticked already, as a refill finds the first: listed too.
+  const polygraph = "Which of the following best describes the U.S. Government security clearance you held before?";
+  const providerServer = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const input = JSON.parse(JSON.parse(Buffer.concat(chunks).toString()).messages[1].content);
+    const suggestions = (input.fields || []).map((candidate: { id: string; label: string }) =>
+      /^no current clearance$/i.test(candidate.label) && !/held before/.test(JSON.stringify(candidate))
+        ? { fieldId: candidate.id, value: "Yes", sourceIds: ["legal.clearance"] }
+        : { fieldId: candidate.id, skip: "Not in the saved details." });
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ suggestions }) } }] }));
+  });
+  providerServer.listen(0, "127.0.0.1");
+  await once(providerServer, "listening");
+  try {
+    appConfig.endpoint = `http://127.0.0.1:${(providerServer.address() as { port: number }).port}/v1`;
+    // The stub cites the saved clearance detail: a source id the request lacks drops the answer.
+    await ui({
+      type: "API",
+      path: "/v1/profile",
+      method: "PUT",
+      body: { ...profile, legal: { clearance: "No security clearance, and never held one" } },
+    });
+    await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, modelFill: "auto", legalQuestions: "model" } });
+    await panel.reload();
+    await context.route(`${jazzOrigin}/**`, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `<!doctype html><html><head><title>Analyst - Acme - Career Page</title></head><body><form onsubmit="window.submissions++; return false">
+          <div class="form-group"><label for="resumator-email-value" class="control-label">Email Address</label><input id="resumator-email-value" name="resumator-email-value" type="email"></div>
+          <div class="form-group"><label id="resumator-questionnaire-q5-label" for="resumator-questionnaire-q5" class="control-label">${question}<i class="asterisk">*</i></label><input type="hidden" name="resumator-questionnaire[5]" id="resumator-questionnaire-q5" maxlength="" class="resumator-questionnaire-checkbox-answer">` +
+          options.map((name, index) => `<label class="checkbox" for="resumator-checkbox-5-${index + 1}"><input type="checkbox" id="resumator-checkbox-5-${index + 1}" name="resumator-checkbox-5-${index + 1}" class="resumator-questionnaire-checkbox">${name}</label>`).join("") +
+          `</div>
+          <div class="form-group"><label id="resumator-questionnaire-q6-label" for="resumator-questionnaire-q6" class="control-label">${polygraph}<i class="asterisk">*</i></label><input type="hidden" name="resumator-questionnaire[6]" id="resumator-questionnaire-q6" maxlength="" class="resumator-questionnaire-checkbox-answer">` +
+          ["No Current Clearance", "Secret", "Top Secret"].map((name, index) => `<label class="checkbox" for="resumator-checkbox-6-${index + 1}"><input type="checkbox" id="resumator-checkbox-6-${index + 1}" name="resumator-checkbox-6-${index + 1}" class="resumator-questionnaire-checkbox"${index === 0 ? " checked" : ""}>${name}</label>`).join("") +
+          `</div>
+          <button type="submit">Submit Application</button></form><script>window.submissions = 0;</script></body></html>`,
+      }),
+    );
+    const page = await context.newPage();
+    await page.goto(`${jazzOrigin}/apply/AbCdEf1234/Analyst`);
+    await panel.bringToFront();
+    await enqueue([page]);
+    await expect.poll(() => page.locator("input:checked").evaluateAll((inputs) => inputs.map((input) => input.id)), { timeout: 45000 }).toEqual(["resumator-checkbox-5-1", "resumator-checkbox-6-1"]);
+    const app = async () => (await state()).applications[0];
+    await expect.poll(async () => (await app()).fieldFallbackSession, { timeout: 30000 }).toBeUndefined();
+    expect((await app()).missing.filter((item: string) => item.startsWith("Legal or eligibility question left for you"))).toEqual([]);
+    expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+  } finally {
+    providerServer.close();
+  }
+});
+
+// Jobvite's lists are Angular's ng-options: each option's value is
+// "string:AZ", and the list read as that value, not "Arizona", so a check
+// called State and Country not among their options.
+test("an Angular list is read as the option it shows, not its string: value", async () => {
+  await context.route(`${jobviteOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Apply</title></head><body><form onsubmit="return false">
+        <label for="state">State</label><select id="state" name="input-state" ng-model="ngModel.state"><option value="" class="">Select</option><option label="Alaska" value="string:AK">Alaska</option><option label="Arizona" value="string:AZ" selected>Arizona</option></select>
+        <label for="country">Country</label><select id="country" name="input-country"><option value="number:0">Select</option><option label="United States" value="string:United States" selected>United States</option><option label="Canada" value="string:Canada">Canada</option></select>
+        <label for="code">Code</label><select id="code" name="code"><option value="">Choose</option><option value="AZ" selected>Arizona</option></select>
+      </form></body></html>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${jobviteOrigin}/acme/job/oAbCdEf1/apply`);
+  const fields = (await content(page, { type: "INSPECT" })).data.fields as { label: string; value: string }[];
+  expect(Object.fromEntries(fields.map((field) => [field.label, field.value]))).toMatchObject({ State: "Arizona", Country: "United States", Code: "AZ" });
+});
+
 // The same form again: the resume went into an input JazzHR
 // keeps hidden until "Attach resume" is chosen, so the applicant saw none
 // attached; and a school the list lacks was left, where the applicant wanted
@@ -7748,6 +7831,96 @@ test("a JazzHR form attaches the resume where it shows, and names an unlisted sc
   await expect.poll(() => page.locator("#resumator-resume-value").evaluate((input: HTMLInputElement) => input.files?.[0]?.name || ""), { timeout: 60000 }).toMatch(/resume.*\.pdf$/i);
   await expect(page.locator("#resumator-resume-value")).toBeVisible();
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+});
+
+// A Jobvite application: the resume and cover letter each have a "Select" /
+// "Add Cover Letter" button that opens a menu of sources, and the native file
+// input sits in that menu (a hidden dialog elsewhere on the page), so the
+// fill reached no file field and attached neither document.
+test("a Jobvite form attaches the resume and cover letter through the menus its buttons open", async () => {
+  await context.route(`${jobviteOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Analyst - Acme</title><style>.ng-hide { display: none !important; }</style></head><body>
+        <form onsubmit="window.submissions++; return false"><div class="jv-form-field"><label for="jv-field-first">First Name</label><input id="jv-field-first" type="text" name="firstName"></div>
+        <div class="jv-apply-section"><h3 class="jv-step-header" id="jv-resume-header">Add Resume*</h3>
+          <div class="jv-apply-with jv-apply-section" id="attachResume">
+            <div><button jv-add-attachment="{ social: true }" attachment-label="Resume" class="jv-button" type="button" aria-haspopup="true" aria-labelledby="jv-resume-header" aria-expanded="false" aria-required="true" id="resume-button">Select <i class="icon icon-arrow-down jv-text-icon"></i></button></div>
+            <div class="jv-add-attachment jv-add-attachment-paste ng-hide" aria-hidden="true"><label for="jv-edit-resume-textarea0" class="jv-visually-hidden">Type or paste your Resume here</label><textarea id="jv-edit-resume-textarea0"></textarea></div>
+            <ul class="jv-file-list" id="resume-list"></ul>
+          </div></div>
+        <div class="jv-additional-files jv-apply-section"><h3 class="jv-step-header">Additional Files (optional)</h3>
+          <span><button jv-add-attachment="" attachment-label="Cover Letter" class="jv-button" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Add Cover Letter" id="cover-button">Add Cover Letter</button></span>
+          <ul class="jv-file-list" id="cover-list"></ul></div>
+        <button type="submit">Submit Application</button></form>
+        ${[0, 1].map((n) => `<div class="jv-add-attachment ng-hide" id="attachmentDropdown" role="dialog" aria-label="Attachment Options" aria-hidden="true" tabindex="-1" data-menu="${n}">
+          <div class="jv-add-attachment-item"><span class="jv-text-block jv-text-link" tabindex="0" role="button">Dropbox</span></div><hr>
+          <div class="jv-add-attachment-item"><label class="jv-text-block jv-text-link" for="file-input-${n}"><span tabindex="0" role="button">File</span></label><input id="file-input-${n}" type="file" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;"></div></div>`).join("")}
+        <script>
+          window.submissions = 0;
+          [["resume-button", 0, "resume-list"], ["cover-button", 1, "cover-list"]].forEach(([button, n, list]) => {
+            document.getElementById(button).addEventListener("click", () => {
+              document.querySelector('[data-menu="' + n + '"]').classList.remove("ng-hide");
+            });
+            document.getElementById("file-input-" + n).addEventListener("change", (event) => {
+              // The site takes a file only from a menu that is open.
+              if (document.querySelector('[data-menu="' + n + '"]').classList.contains("ng-hide")) return;
+              document.getElementById(list).innerHTML = "<li>" + event.target.files[0].name + "</li>";
+            });
+          });
+        </script></body></html>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${jobviteOrigin}/acme/job/oAbC123/apply`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator("#resume-list li")).toHaveText(/resume.*\.pdf$/i, { timeout: 60000 });
+  await expect(page.locator("#cover-list li")).toHaveText(/cover.*\.pdf$/i, { timeout: 60000 });
+  expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+});
+
+// Jobvite draws each choice of a Yes/No question as a label holding an icon
+// (<i role="radio">) and the real radio input, which the page keeps out of
+// sight. Each icon was read as a radio question of its own with no option
+// text, both refused as "another field has the same label". The question is
+// one, its options Yes and No, answered through the icon's label.
+test("a Jobvite Yes/No question drawn with icons beside hidden radios is one question and is answered", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: { ...profile, answers: [{ question: "Are you legally authorized to work in the United States?", answer: "No" }] },
+  });
+  await context.route(`${jobviteOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Analyst - Acme</title><style>.jv-input-group-row input { display: none; }</style></head><body>
+        <form class="jv-form" onsubmit="return false"><fieldset class="jv-input-group">
+          <legend class="jv-form-field-legend">Are you legally authorized to work in the United States?<span class="jv-required-label">*</span></legend>
+          ${["Yes", "No"].map((answer, n) => `<label class="jv-input-group-row" for="jv-field-abc123-${n}" tabindex="-1">
+            <i class="icon icon-radio-empty" tabindex="0" role="radio" aria-selected="false"></i>
+            <input id="jv-field-abc123-${n}" name="abc123" aria-required="true" type="radio" required="required" value="${answer}">
+            ${answer}
+          </label>`).join("")}
+        </fieldset></form>
+        <script>
+          document.addEventListener("change", (event) => {
+            for (const icon of document.querySelectorAll('[role="radio"]'))
+              icon.setAttribute("aria-selected", String(icon.closest("label").control.checked));
+          });
+        </script></body></html>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${jobviteOrigin}/acme/job/oAbC123/apply`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator("#jv-field-abc123-1")).toBeChecked({ timeout: 45000 });
+  await expect(page.locator("#jv-field-abc123-0")).not.toBeChecked();
+  const radios = (await content(page, { type: "INSPECT" })).data.fields.filter((field: any) => field.kind === "radio");
+  expect(radios).toHaveLength(1);
+  expect(radios[0]).toMatchObject({ options: ["Yes", "No"], protected: false });
 });
 
 // The same form (an employer, task 8135eb3d): JazzHR's "-- No answer --" choice,
@@ -10369,6 +10542,225 @@ test("Oracle's timeline picks a pills Degree before saving, then adds the next e
   expect(await page.evaluate(() => ({ refusedSaves: (window as any).refusedSaves, clickedWhileDisabled: (window as any).clickedWhileDisabled }))).toEqual({ refusedSaves: 0, clickedWhileDisabled: 0 });
 });
 
+// (a recorded Oracle form, check 4c6fa71b): Oracle marked the clicked Degree pill checked
+// 176 ms after the click, and the save, held back while a Degree pill group had no checked pill,
+// looked once, found none, and was skipped: the second education was filled but never
+// saved, so no Add button came back and no work entry was added.
+test("Oracle's timeline Degree pill that Oracle marks checked a moment after the click still lets the entry be saved, so the next entries are added", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Acme University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" },
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+      ],
+      work: [{ organization: "Contoso", title: "Software Engineer Intern", location: "Phoenix, AZ", details: "Built APIs.", startDate: "2023-07", endDate: "2023-09" }],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Experience</title><main>
+        <div class="apply-flow-section" data-section-number="3">
+          <div class="apply-flow-block apply-flow-block--work-and-education-timeline">
+            <div class="apply-flow-block__form-list" role="region" aria-label="Work and Education History ">
+              <div class="timeline-container">
+                <div id="timeline-anchor" class="input-row__control-container work-and-education-timeline__actions-container work-and-education-timeline__actions-container--disabled">
+                  <div class="work-and-education-timeline__actions work-and-education-timeline__actions--pinned">
+                    <button id="timeline-add-experience-button" type="button" class="work-and-education-timeline-add-button timeline-work-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Experience</span></button>
+                    <button id="timeline-add-education-button" type="button" class="work-and-education-timeline-add-button timeline-education-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Education</span></button>
+                  </div>
+                </div>
+                <div id="items"></div>
+                <div id="slot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main><div id="lists"></div><script>
+        ${oracleEntryLists}
+        window.saved = [];
+        window.refusedSaves = 0;
+        window.clickedWhileDisabled = 0;
+        let n = 200;
+        const actions = document.getElementById('timeline-anchor');
+        const slot = document.getElementById('slot');
+        const degrees = ["Graduate Doctoral Degrees (e.g., Doctor of Medicine, Juris Doctor, Doctor of Philosophy)", "Graduate Master's Degrees (e.g., Master of Arts, Master of Engineering, Master of Business Administration, Master of Education)", "Lower Secondary Education (e.g., Middle School Diploma, Junior Secondary Certificate, GCSEs)", "None", "Other", "Undergraduate Associate Degrees (e.g., Associate of Arts, Associate of Science)", "Undergraduate Bachelor's Degrees (e.g., Bachelor of Science, Bachelor of Business Administration, Bachelor of Fine Arts)", "Upper Secondary Education (e.g., High School Diploma, A-Levels, GED, International Baccalaureate)"];
+        const pills = (id) => '<div class="input-row input-row--has-picker"><label class="input-row__label input-row__label--required" for="contentItemId-' + id + '"><span class="input-row__linebreak">Degree</span></label>'
+          + '<div class="input-row__control-container reset-z-index" data-qa="contentItemId"><div><ul role="radiogroup" aria-label="Degree" class="cx-select-pills-container">'
+          + degrees.map((name) => '<li role="presentation"><button type="button" aria-disabled="false" role="radio" aria-checked="false" tabindex="-1" class="cx-select-pill-section"><span class="cx-select-pill-name"> ' + name + '</span></button></li>').join('')
+          + '</ul></div></div></div>';
+        const forms = {
+          experience: () => text('Employer Name', 'employerName-' + n, 'employerName') + text('Job Title', 'jobTitle-' + n, 'jobTitle') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+          education: () => pills(n) + select('Major', 'major-' + n, 'major') + select('School', 'educationalEstablishment-' + n, 'educationalEstablishment') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+        };
+        const open = (kind) => {
+          n += 10;
+          actions.classList.add('work-and-education-timeline__actions-container--disabled');
+          const word = kind === 'education' ? 'Education' : 'Experience';
+          slot.innerHTML = '<div class="standard-apply-flow-timeline-form"><div class="timeline-form-content"><form novalidate>' + forms[kind]() + '</form></div>'
+            + '<div class="timeline-form-footer"><div class="app-dialog__buttons-bar font-family-secondary text-color-primary">'
+            + '<button class="button app-dialog__footer-button cancel-btn"><span class="button__label">Cancel</span></button>'
+            + '<button class="button app-dialog__footer-button save-btn" data-qa="addTimelineItemDialogButton"><span class="button__label">Add ' + word + '</span></button></div></div></div>';
+          const form = slot.firstElementChild;
+          wireLists(form);
+          for (const pill of form.querySelectorAll('button[role="radio"]'))
+            pill.addEventListener('click', () => { 
+              // Oracle marks the pill checked only after its own handling of the click (the recording: 176 ms; slower here, since a click settles for a moment).
+              setTimeout(() => {
+                for (const other of form.querySelectorAll('button[role="radio"]')) other.setAttribute('aria-checked', String(other === pill));
+              }, 1200);
+            });
+          form.querySelector('.save-btn').addEventListener('click', () => {
+            const degree = form.querySelector('button[role="radio"][aria-checked="true"] .cx-select-pill-name');
+            // Oracle refuses to save an education entry with no Degree.
+            if (kind === 'education' && !degree) { window.refusedSaves++; return; }
+            const name = kind === 'education' ? picked(form, 'input[name="educationalEstablishment"]') : form.querySelector('input[name="employerName"]').value;
+            window.saved.push(kind + ': ' + name + ' | ' + (degree ? degree.textContent.trim() + ' | ' : '') + entryDates(form));
+            setTimeout(() => {
+              slot.innerHTML = '';
+              document.getElementById('items').insertAdjacentHTML('beforeend', '<div class="timeline-item">' + name + '</div>');
+              actions.classList.remove('work-and-education-timeline__actions-container--disabled');
+            }, 400);
+          });
+        };
+        const add = (kind) => () => {
+          if (actions.classList.contains('work-and-education-timeline__actions-container--disabled')) { window.clickedWhileDisabled++; return; }
+          open(kind);
+        };
+        document.getElementById('timeline-add-experience-button').addEventListener('click', add('experience'));
+        document.getElementById('timeline-add-education-button').addEventListener('click', add('education'));
+        // An Add Education from an earlier pass left its form open.
+        open('education');
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/3`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).saved.length), { timeout: 90000 }).toBe(3);
+  const saved: string[] = await page.evaluate(() => (window as any).saved);
+  expect([...saved].sort()).toEqual([
+    expect.stringContaining("education: Acme University | Graduate Master's Degrees (e.g., Master of Arts"),
+    expect.stringContaining("education: Penn State | Undergraduate Bachelor's Degrees (e.g., Bachelor of Science"),
+    "experience: Contoso | July 2023 September 2023",
+  ]);
+  expect(saved.find((entry) => entry.startsWith("education: Acme"))).toContain("| August 2025 May 2027");
+  expect(await page.evaluate(() => ({ refusedSaves: (window as any).refusedSaves, clickedWhileDisabled: (window as any).clickedWhileDisabled }))).toEqual({ refusedSaves: 0, clickedWhileDisabled: 0 });
+});
+
+// (a recorded Oracle form, check 45b425a5): the Degree pills were not drawn yet when the rule
+// looked for them, so Degree stayed empty, the save was held back for it, and the
+// entry was never saved or the next one added.
+test("Oracle's timeline Degree pills drawn a moment after the form opens are still picked before saving, so the entry is saved and the next is added", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Acme University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" },
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+      ],
+      work: [],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Experience</title><main>
+        <div class="apply-flow-section" data-section-number="3">
+          <div class="apply-flow-block apply-flow-block--work-and-education-timeline">
+            <div class="apply-flow-block__form-list" role="region" aria-label="Work and Education History ">
+              <div class="timeline-container">
+                <div id="timeline-anchor" class="input-row__control-container work-and-education-timeline__actions-container work-and-education-timeline__actions-container--disabled">
+                  <div class="work-and-education-timeline__actions work-and-education-timeline__actions--pinned">
+                    <button id="timeline-add-experience-button" type="button" class="work-and-education-timeline-add-button timeline-work-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Experience</span></button>
+                    <button id="timeline-add-education-button" type="button" class="work-and-education-timeline-add-button timeline-education-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Education</span></button>
+                  </div>
+                </div>
+                <div id="items"></div>
+                <div id="slot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main><div id="lists"></div><script>
+        ${oracleEntryLists}
+        window.saved = [];
+        window.refusedSaves = 0;
+        window.clickedWhileDisabled = 0;
+        let n = 200;
+        const actions = document.getElementById('timeline-anchor');
+        const slot = document.getElementById('slot');
+        const degrees = ["Graduate Doctoral Degrees (e.g., Doctor of Medicine, Juris Doctor, Doctor of Philosophy)", "Graduate Master's Degrees (e.g., Master of Arts, Master of Engineering, Master of Business Administration, Master of Education)", "Lower Secondary Education (e.g., Middle School Diploma, Junior Secondary Certificate, GCSEs)", "None", "Other", "Undergraduate Associate Degrees (e.g., Associate of Arts, Associate of Science)", "Undergraduate Bachelor's Degrees (e.g., Bachelor of Science, Bachelor of Business Administration, Bachelor of Fine Arts)", "Upper Secondary Education (e.g., High School Diploma, A-Levels, GED, International Baccalaureate)"];
+        const pills = (id) => '<div class="input-row input-row--has-picker"><label class="input-row__label input-row__label--required" for="contentItemId-' + id + '"><span class="input-row__linebreak">Degree</span></label>'
+          + '<div class="input-row__control-container reset-z-index" data-qa="contentItemId"><div><ul role="radiogroup" aria-label="Degree" class="cx-select-pills-container">'
+          + degrees.map((name) => '<li role="presentation"><button type="button" aria-disabled="false" role="radio" aria-checked="false" tabindex="-1" class="cx-select-pill-section"><span class="cx-select-pill-name"> ' + name + '</span></button></li>').join('')
+          + '</ul></div></div></div>';
+        const forms = {
+          experience: () => text('Employer Name', 'employerName-' + n, 'employerName') + text('Job Title', 'jobTitle-' + n, 'jobTitle') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+          education: () => select('Major', 'major-' + n, 'major') + select('School', 'educationalEstablishment-' + n, 'educationalEstablishment') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+        };
+        const open = (kind) => {
+          n += 10;
+          actions.classList.add('work-and-education-timeline__actions-container--disabled');
+          const word = kind === 'education' ? 'Education' : 'Experience';
+          slot.innerHTML = '<div class="standard-apply-flow-timeline-form"><div class="timeline-form-content"><form novalidate>' + forms[kind]() + '</form></div>'
+            + '<div class="timeline-form-footer"><div class="app-dialog__buttons-bar font-family-secondary text-color-primary">'
+            + '<button class="button app-dialog__footer-button cancel-btn"><span class="button__label">Cancel</span></button>'
+            + '<button class="button app-dialog__footer-button save-btn" data-qa="addTimelineItemDialogButton"><span class="button__label">Add ' + word + '</span></button></div></div></div>';
+          const form = slot.firstElementChild;
+          wireLists(form);
+          // Oracle draws the Degree pills once its list arrives, after the form is open.
+          if (kind === 'education') setTimeout(() => {
+            form.querySelector('form').insertAdjacentHTML('afterbegin', pills(n));
+            for (const pill of form.querySelectorAll('button[role="radio"]'))
+              pill.addEventListener('click', () => {
+                for (const other of form.querySelectorAll('button[role="radio"]')) other.setAttribute('aria-checked', String(other === pill));
+              });
+          }, 1500);
+          form.querySelector('.save-btn').addEventListener('click', () => {
+            const degree = form.querySelector('button[role="radio"][aria-checked="true"] .cx-select-pill-name');
+            // Oracle refuses to save an education entry with no Degree.
+            if (kind === 'education' && !degree) { window.refusedSaves++; return; }
+            const name = kind === 'education' ? picked(form, 'input[name="educationalEstablishment"]') : form.querySelector('input[name="employerName"]').value;
+            window.saved.push(kind + ': ' + name + ' | ' + (degree ? degree.textContent.trim() + ' | ' : '') + entryDates(form));
+            setTimeout(() => {
+              slot.innerHTML = '';
+              document.getElementById('items').insertAdjacentHTML('beforeend', '<div class="timeline-item">' + name + '</div>');
+              actions.classList.remove('work-and-education-timeline__actions-container--disabled');
+            }, 400);
+          });
+        };
+        const add = (kind) => () => {
+          if (actions.classList.contains('work-and-education-timeline__actions-container--disabled')) { window.clickedWhileDisabled++; return; }
+          open(kind);
+        };
+        document.getElementById('timeline-add-experience-button').addEventListener('click', add('experience'));
+        document.getElementById('timeline-add-education-button').addEventListener('click', add('education'));
+        // An Add Education from an earlier pass left its form open.
+        open('education');
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/3`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).saved.length), { timeout: 90000 }).toBe(2);
+  const saved: string[] = await page.evaluate(() => (window as any).saved);
+  expect([...saved].sort()).toEqual([
+    expect.stringContaining("education: Acme University | Graduate Master's Degrees (e.g., Master of Arts"),
+    expect.stringContaining("education: Penn State | Undergraduate Bachelor's Degrees (e.g., Bachelor of Science"),
+  ]);
+  expect(saved.find((entry) => entry.startsWith("education: Acme"))).toContain("| August 2025 May 2027");
+  expect(await page.evaluate(() => ({ refusedSaves: (window as any).refusedSaves, clickedWhileDisabled: (window as any).clickedWhileDisabled }))).toEqual({ refusedSaves: 0, clickedWhileDisabled: 0 });
+});
+
 // Higher's Oracle form names its education
 // region "College / University", not "Education": the form Add Education
 // opened was never confirmed as the row, so its dates were never filled, and
@@ -10956,6 +11348,37 @@ test("Oracle's School list is typed with real keys, and the entry naming the sch
     .toEqual(["Example State University - Arizona"]);
   await expect(page.locator("#educationalEstablishmentId-119")).toHaveValue("Example State University - Arizona");
   await expect(page.locator('[role="combobox"][aria-expanded="true"]')).toHaveCount(0);
+});
+
+// A second Oracle layout (check fd65029f): its School list appends the place's
+// state code to the name ("Example University Mesa AZ"), so the whole
+// name the applicant saved was no option, and the entry was left unpicked.
+test("Oracle's School list that appends a state code to each name has the entry named in full chosen", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile,
+    education: [{ organization: "Example University Mesa", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-12", location: "", details: "" }] } });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Education</title><main><div class="apply-flow-section" data-section-number="2">
+        ${oracleEducationInput("educationalEstablishmentId-119", "educationalEstablishmentId", "School")}
+      </div></main><script>
+        window.picks = [];
+        ${oracleEducationScript("educationalEstablishmentId-119", "() => ['Example University Mesa Heights AZ', 'Example University Mesa AZ']", true)}
+        const school = document.getElementById('educationalEstablishmentId-119');
+        school.addEventListener('input', (event) => {
+          if (!event.isTrusted) { school.value = ''; return; }
+          window.openList();
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).picks), { timeout: 60000 })
+    .toEqual(["Example University Mesa AZ"]);
+  await expect(page.locator("#educationalEstablishmentId-119")).toHaveValue("Example University Mesa AZ");
 });
 
 // The same form's grade: "Cumulative GPA (Grade/Mark/GPA)" lists percentage

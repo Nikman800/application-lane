@@ -1,7 +1,7 @@
 // The content script's readers of the page (content.ts): functions that
 // find and read controls, lists and menus, and touch none of a fill's state.
 // Split out of content.ts as they were.
-import { profileImport, select2Selection, toggleGroup, isToggleChoice, redundantAutofill, type Control } from "./semantics";
+import { iconRadioLabel, profileImport, select2Selection, toggleGroup, isToggleChoice, redundantAutofill, type Control } from "./semantics";
 import { normalize, type Field } from "../shared/model";
 import { adapterFor } from "./adapters";
 
@@ -150,6 +150,10 @@ export const radioGroup = (element: Control): Control[] => {
     // slotted into it (SmartRecruiters' spl-radio-group): each Yes and No
     // read as a question of its own, both refused as "another field has
     // the same label" (one employer's screening questions).
+    // Icons drawn in the labels of native radios (Jobvite): the icons of the
+    // question's fieldset are its options.
+    const fieldset = iconRadioLabel(element) && element.closest("fieldset");
+    if (fieldset) return [...fieldset.querySelectorAll<Control>('[role="radio"]')].filter((icon) => iconRadioLabel(icon));
     const parent = element.parentElement;
     if (parent && element.assignedSlot?.closest('[role="radiogroup"]'))
       return [...parent.children].filter((child): child is Control => child.getAttribute("role") === "radio");

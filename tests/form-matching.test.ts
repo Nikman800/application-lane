@@ -2104,6 +2104,22 @@ test("a veteran list whose options load when it opens gets the answer in the wor
   assert.equal(ask("Decline to answer"), "Not disclosed");
 });
 
+// A JazzHR page asks "Are you a U.S Citizen?" and the sponsorship question
+// with a Yes box and a No box under each: the box whose label answers the
+// question is ticked, the other left, a saved answer worded as the question
+// included.
+test("a Yes box and a No box under one question: the box naming the answer is ticked", () => {
+  // The citizenship answer saved in the applicant's own words, as asked.
+  const applicant = profileSchema.parse({ ...profile, country: "US", citizenships: ["US"], workAuthorization: [{ country: "US", status: "citizen", needsSponsorship: false }],
+    answers: [{ question: "Are you a U.S. citizen?", answer: "Yes" }] });
+  const box = (question: string, label: string) =>
+    proposals([field(label, { kind: "checkbox", question, options: ["Yes", "No"] })], applicant)[0]?.value;
+  assert.equal(box("Are you a U.S Citizen?", "Yes"), "Yes");
+  assert.equal(box("Are you a U.S Citizen?", "No"), undefined);
+  assert.equal(box("Do you now or will you in the future require sponsorship to work in the US?", "Yes"), undefined);
+  assert.equal(box("Do you now or will you in the future require sponsorship to work in the US?", "No"), "Yes");
+});
+
 // A SmartRecruiters screening page: its graduation month list
 // holds only months, its past-employment list says No as "Not Applicable",
 // and the date box after it asks for the details, not Yes or No.

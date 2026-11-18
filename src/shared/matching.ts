@@ -139,7 +139,10 @@ const schoolNameQuestion = (label: string) => {
 
 // "State", "Province", "State/Province/Parish" (SuccessFactors),
 // "State / District", "State / Province / Region".
-const stateLabel = /^(state|province)( (province|district|territory|region|parish))*$/;
+const stateLabel = /^(state|province)( (or|and|\/)? ?(province|state|district|territory|region|parish))*$/;
+// A row's own state, named for what it belongs to: Oracle's separate
+// Experience region asks "Employer State or Province".
+const placeStateLabel = /^((employer|company|school|university|college|institution)( s)? )(state|province)( (or|and)? ?(province|state|district|territory|region|parish))*$/;
 
 const citizenAuthorizationQuestion = /^are you currently authorized to work for any employer in the (united states|us|u s)$/;
 const [citizenAuthorizationOption, visaAuthorizationOption] = qualifiedBinarySentences.workAuthorization;
@@ -612,7 +615,12 @@ export function profileAnswer(
     // Yes and No as boxes of their own (JazzHR's sponsorship question): the question is answered as a Yes/No choice, and the box
     // naming that answer is ticked, the other left clear.
     if (/^(yes|no)$/.test(label)) {
-      const answer = profileAnswer({ ...field, kind: "radio", label: field.question!, question: undefined, options: ["Yes", "No"] }, profile);
+      // A saved answer worded as the question itself ("Are you a U.S.
+      // citizen?": Yes) is left by profileAnswer to the saved answers, read
+      // here too, or neither box was ticked (JazzHR).
+      const asRadio: Field = { ...field, kind: "radio", label: field.question!, question: undefined, options: ["Yes", "No"] };
+      const saved = deterministicAnswer(asRadio, profile);
+      const answer = profileAnswer(asRadio, profile) ?? (saved ? { value: saved } : undefined);
       return answer && /^(yes|no)$/i.test(answer.value) ? { value: normalize(answer.value) === label ? "Yes" : "No" } : undefined;
     }
     // "Please indicate all of the locations that you would be interested in
@@ -905,7 +913,7 @@ function educationAndPlaceAnswer({ field, profile, label, asked, educationRow }:
   if (
     schoolPlace ||
     (/work|employment|experience|education/.test(history) &&
-      (countryLabel.test(label) || /^city$/.test(label) || stateLabel.test(label)))
+      (countryLabel.test(label) || /^city$/.test(label) || stateLabel.test(label) || placeStateLabel.test(label)))
   ) {
     const row = schoolPlace
       ? latestRow(profile.education.filter((entry) => entry.organization))

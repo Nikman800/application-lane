@@ -157,3 +157,13 @@ test("AI endpoints exclude ordinary profile answers even when an older client re
   const written = await writeAnswers(config, { ...request, fields: [field("When can you start?", { kind: "textarea", options: [] })] }, who, { profile: "", preferences: "", guidance: "", warnings: [] }, new AbortController().signal);
   assert.deepEqual(written.answers, []);
 });
+
+test("a row's own state asked as Employer State or Province is the row's, by name and code, never the home state", () => {
+  const rows = profileSchema.parse({
+    firstName: "Alex", lastName: "Rivera", email: "alex@example.test", facts: [], confirmed: true, country: "United States", state: "Virginia",
+    work: [{ organization: "Acme", title: "Engineer", location: "Phoenix, AZ", startDate: "2024-01", endDate: "2024-06" }],
+  });
+  const employer = proposals([field("Employer State or Province", { kind: "combobox", options: [], section: "Experience", index: 0 })], rows)[0];
+  assert.equal(employer?.value, "Arizona");
+  assert.ok(employer?.choices?.includes("AZ"));
+});
