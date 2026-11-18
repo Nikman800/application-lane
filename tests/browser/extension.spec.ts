@@ -7674,6 +7674,35 @@ test("a JazzHR form answers its level-of-study questions and ticks the sponsorsh
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
+// A JazzHR form asking two questions as a Yes box and a No box each: the
+// boxes repeat the labels Yes and No, and all four were refused as "another
+// field has the same label", though each question names its own pair.
+test("JazzHR's Yes and No boxes under two questions are each answered by their own question", async () => {
+  const pair = (id: number, label: string) =>
+    `<div class="form-group"><label id="resumator-questionnaire-q${id}-label" for="resumator-questionnaire-q${id}" class="control-label">${label}<i class="asterisk">*</i></label><input type="hidden" name="resumator-questionnaire[${id}]" id="resumator-questionnaire-q${id}" maxlength="" class="resumator-questionnaire-checkbox-answer">` +
+    ["Yes", "No"].map((name, index) => `<label class="checkbox" for="resumator-checkbox-${id}-${index + 1}"><input type="checkbox" id="resumator-checkbox-${id}-${index + 1}" name="resumator-checkbox-${id}-${index + 1}" class="resumator-questionnaire-checkbox">${name}</label>`).join("") +
+    `</div>`;
+  await context.route(`${jazzOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Analyst - Acme - Career Page</title></head><body><form onsubmit="window.submissions++; return false">
+        <div class="form-group"><label for="resumator-email-value" class="control-label">Email Address</label><input id="resumator-email-value" name="resumator-email-value" type="email"></div>
+        ${pair(1, "Are you a U.S Citizen?")}
+        ${pair(2, "Do you now or will you in the future require sponsorship to work in the US?")}
+        <button type="submit">Submit Application</button></form><script>window.submissions = 0;</script></body></html>`,
+    }),
+  );
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, sponsorship: "No", workAuthorization: "US Citizen" } });
+  const page = await context.newPage();
+  await page.goto(`${jazzOrigin}/apply/AbCdEf1234/Analyst`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  await expect.poll(() => page.locator("input:checked").evaluateAll((inputs) => inputs.map((input) => input.id))).toEqual(["resumator-checkbox-1-1", "resumator-checkbox-2-2"]);
+  expect((await state()).applications[0].missing.join(" ")).not.toMatch(/same label/);
+  expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+});
+
 // The same form again: the resume went into an input JazzHR
 // keeps hidden until "Attach resume" is chosen, so the applicant saw none
 // attached; and a school the list lacks was left, where the applicant wanted
@@ -10530,6 +10559,44 @@ test("Oracle's College / University entry form opened for the second profile row
     saved: ["Penn State | Computer Science | September 2020 June 2024"],
     deleted: ["Unnamed Major  "],
   });
+});
+
+// Captured on Oracle Recruiting Cloud: the entry form is a
+// profile-item-content holding a profile-item-content--form, and the
+// education rule's path names both. The site kept the saved first entry's form
+// open, and the nested box was taken for a new row, tagged as the second
+// entry, so the page-wide fill answered its City from the second school.
+test("Oracle's entry form kept open after its save, holding the first row's values, is never read as the second row's", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Acme University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "Roanoke, VA", details: "" },
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "State College, PA", details: "" },
+      ],
+      work: [],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: oracleCollegeRegion([], `
+        form.querySelector('.profile-item-content--form').insertAdjacentHTML('beforeend', text('City', 'city-107', 'city'));
+        add.parentElement.hidden = true;
+        form.querySelector('.save-btn').addEventListener('click', (event) => { event.stopImmediatePropagation(); window.keptSaves = (window.keptSaves || 0) + 1; });`),
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).opened), { timeout: 60000 }).toBe(1);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  // The page-wide fill answers City from a row; wait for it.
+  await expect.poll(() => page.evaluate(() => (document.querySelector('input[name="city"]') as HTMLInputElement | null)?.value ?? ""), { timeout: 60000 }).not.toBe("");
+  expect(await page.evaluate(() => ({ opened: (window as any).opened, city: (document.querySelector('input[name="city"]') as HTMLInputElement).value }))).toEqual({ opened: 1, city: "Roanoke" });
 });
 
 //: "Supporting Documents and URLs" held only Link 1 (the

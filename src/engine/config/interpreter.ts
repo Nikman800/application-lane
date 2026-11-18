@@ -2951,8 +2951,13 @@ async function fillRowChoice(
         // own. A path naming any open editor found the first school's
         // again, and the second was never added (one employer's
         // SmartRecruiters form).
+        // A box nested in (or around) a visited form is that form: Oracle's
+        // path names both its profile-item-content and the
+        // profile-item-content--form inside it, and the inner one was tagged
+        // as the next entry while still holding the first entry's values.
         const otherEntry = (row: Element) =>
-          visitedScopes.has(row) && !(selector.allowReuse && fresh(row));
+          [...visitedScopes].some((visited) => visited === row || visited.contains(row) || row.contains(visited)) &&
+          !(selector.allowReuse && fresh(row));
         let scope: Element | undefined = matchedScopes.size
           ? matchedScopes.get(index)
           : containerPaths.flatMap((path) =>
@@ -3069,7 +3074,7 @@ async function fillRowChoice(
         // Oracle opens every entry's form in the same container. It is
         // used again only once empty (the entry before was saved): an
         // unsaved entry still showing its values is never overwritten.
-        if (!scope || (visitedScopes.has(scope) && !(selector.allowReuse && fresh(scope)))) continue;
+        if (!scope || otherEntry(scope)) continue;
         visitedScopes.add(scope);
         // Whose entry this form is, for the page-wide fill to read: it
         // wrote row 0's school and major into the form opened for row 1.

@@ -1,6 +1,6 @@
 // Part of the content script (content.ts): reading the page's form into an observation.
 // Split out of content.ts as it was; see content.ts for how it starts.
-import { type Observation, type Field } from "../../shared/model";
+import { type Observation, type Field, normalize } from "../../shared/model";
 import { adapterFor } from "../adapters";
 import { writable, controlVisible, isToggleChoice, sectionFor, placeholderOption, isRequired, fieldWordLimit, replacesForm, groupQuestion, checkboxEntryTitle, hiddenAnswerQuestion, validationState, rendered } from "../semantics";
 import { radioGroup, lockKey, closestAcrossShadows, searchWithoutPick, manualSigningControl, clip, drawnOptions, picksOf, inEntryEditor, readableText, nextButton } from "../content-dom";
@@ -327,8 +327,15 @@ export function inspect(): Observation {
     const twins = fields.filter((other) => `${lockKey(other)}:${other.kind}` === `${lockKey(field)}:${field.kind}`);
     return twins.every((other) => other.options.join("\n") === field.options.join("\n"));
   };
+  // A Yes box and a No box under each of two questions ("Are you a U.S.
+  // Citizen?" then "Do you require sponsorship?", one employer's JazzHR
+  // form) repeat the labels Yes and No, but their questions tell them apart.
+  const twinKey = (field: Field) =>
+    `${lockKey(field)}:${field.kind}${field.kind === "checkbox" && field.question ? `:${normalize(field.question)}` : ""}`;
+  const twins = new Map<string, number>();
+  for (const field of fields) twins.set(twinKey(field), (twins.get(twinKey(field)) || 0) + 1);
   for (const field of fields)
-    if ((counts.get(`${lockKey(field)}:${field.kind}`) || 0) > 1 && !positionedRadioGroups.has(field.id) && !sameList(field)) {
+    if ((twins.get(twinKey(field)) || 0) > 1 && !positionedRadioGroups.has(field.id) && !sameList(field)) {
       field.protected = true;
       field.protectedReason ||= "another field has the same label";
     }

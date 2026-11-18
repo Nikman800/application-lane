@@ -224,11 +224,11 @@ export function deterministicAnswer(
     // The row's own address, where one is saved. A row without it says
     // nothing: the applicant's home address is never an employer's.
     if (/^(street |company |employer )?address( line)?( 1| one)?$/.test(label)) return row.address || undefined;
-    if (/^city$/.test(label)) return row.city || (row.location.includes(",") ? row.location.split(",")[0].trim() : undefined);
-    if (/^(state|province|state province)$/.test(label)) return row.state || row.location.split(",")[1]?.trim() || undefined;
-    if (/^county$/.test(label)) return row.county || undefined;
-    if (/^(zip|postal)( code)?$/.test(label)) return row.postalCode || undefined;
-    if (/^country$/.test(label)) return row.country || undefined;
+    if (/^((employer|company) )?city$/.test(label)) return row.city || (row.location.includes(",") ? row.location.split(",")[0].trim() : undefined);
+    if (/^((employer|company) )?(state|province|state province|state or province)$/.test(label)) return row.state || row.location.split(",")[1]?.trim() || undefined;
+    if (/^((employer|company) )?county$/.test(label)) return row.county || undefined;
+    if (/^((employer|company) )?(zip|postal)( code)?$/.test(label)) return row.postalCode || undefined;
+    if (/^((employer|company) )?country$/.test(label)) return row.country || undefined;
     if (/^reason for leaving$/.test(label)) return row.reasonForLeaving || undefined;
     // "Degree Conferred" / "Degree Received" is a date (an employer:
     // the model put "Bachelors of Science" there): when a finished degree was
@@ -1320,6 +1320,25 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
     // States of America)".
     return { value: answer, choices: names.flatMap((name) => [name, `${name} (Not Hispanic or Latino)`,
       `${name} (United States of America)`, `${name} (Not Hispanic or Latino) (United States of America)`]) };
+  }
+  // A veteran list whose options load only when it opens (Oracle's Veteran
+  // Status, a report): left to the model, which typed "I am not a veteran"
+  // into a list of "Not a Protected Veteran", "Not disclosed" and "Protected
+  // Veteran", and matched none. The answer and the ways lists word it are
+  // matched when it opens; only a wording equal to an option is taken.
+  if (demographic === "veteranStatus" && !field.options.length && /combobox|listbox/.test(field.kind)) {
+    const answer = canonicalAnswer("veteranStatus", profile.veteranStatus);
+    const military = plainAnswer(profile.answers.find((saved) => questionTopic(saved.question) === "military")?.answer);
+    const protectedNo = ["Not a Protected Veteran", "I am not a protected veteran", "Not Protected Veteran", "I am not a protected veteran (OFCCP)"];
+    const wordings: Record<string, string[]> = {
+      Yes: ["Protected Veteran", "I am a protected veteran", "I identify as one or more of the classifications of protected veteran"],
+      // Never served: "not a veteran" is true too; a veteran outside the
+      // protected groups is only "not a protected veteran".
+      No: military === "No" ? ["I am not a veteran", "Not a veteran", ...protectedNo] : protectedNo,
+      Decline: ["Decline to answer", "Not disclosed", "I do not wish to self-identify", "I don't wish to answer", "Prefer not to say"],
+    };
+    const names = wordings[answer];
+    return names ? { value: names[0], choices: names } : undefined;
   }
   if (demographic && field.options.length) {
     const answer = canonicalAnswer(demographic, profile[demographic]);

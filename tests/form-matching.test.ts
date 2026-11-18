@@ -1218,6 +1218,21 @@ test("a work-history row's address and reason for leaving come from that row onl
   for (const label of ["Address Line 1", "City", "State", "Zip Code", "Country", "Reason for Leaving"]) assert.equal(inWork(label, bare), undefined, label);
 });
 
+test("an employer's location labels (Oracle Recruiting Cloud's Employer City, Employer State or Province) take the work row's location", () => {
+  const worked = profileSchema.parse({
+    ...profile,
+    work: [{ organization: "Acme", title: "Intern", startDate: "2024-06", endDate: "2024-08", location: "Roanoke, VA", details: "", county: "Roanoke", postalCode: "24060", country: "United States" }],
+  });
+  const inWork = (label: string) => deterministicAnswer(field(label, { section: "Experience", index: 0 }), worked);
+  assert.equal(inWork("Employer City"), "Roanoke");
+  assert.equal(inWork("Company City"), "Roanoke");
+  assert.equal(inWork("Employer State or Province"), "VA");
+  assert.equal(inWork("Employer State"), "VA");
+  assert.equal(inWork("Employer County"), "Roanoke");
+  assert.equal(inWork("Employer Zip Code"), "24060");
+  assert.equal(inWork("Employer Country"), "United States");
+});
+
 test("a school list by campus picks the campus in the profile's city, and a long list is matched on the page", () => {
   const student = profileSchema.parse({ ...profile, education: [{ ...profile.education[0], organization: "University of Michigan", location: "Dearborn, MI" }] });
   const label = "Which university are you currently attending or did you last attend?";
@@ -2068,6 +2083,25 @@ test("a veteran list that words service apart is answered by the saved military 
   // Not known whether they served: neither is said for them.
   assert.equal(ask(undefined), undefined);
   assert.equal(canonicalAnswer("veteranStatus", "I have no military experience"), "No");
+});
+
+// Oracle's Veteran Status loads its options only when opened: the rule
+// proposed nothing, and the model typed "I am not a veteran", which none of
+// "Not a Protected Veteran", "Not disclosed" and "Protected Veteran" is.
+test("a veteran list whose options load when it opens gets the answer in the wordings lists use", () => {
+  const options = ["Not a Protected Veteran", "Not disclosed", "Protected Veteran"];
+  const ask = (veteranStatus: string, military?: string) => {
+    const proposal = proposals([field("Veteran Status", { kind: "combobox", options: [] })], profileSchema.parse({
+      ...profile,
+      veteranStatus,
+      answers: military ? [{ question: "Military status", answer: military }] : [],
+    }))[0];
+    return proposal && pickListOption(proposal, options, (option) => option);
+  };
+  assert.equal(ask("I am not a veteran", "No"), "Not a Protected Veteran");
+  assert.equal(ask("No"), "Not a Protected Veteran");
+  assert.equal(ask("Yes"), "Protected Veteran");
+  assert.equal(ask("Decline to answer"), "Not disclosed");
 });
 
 // A SmartRecruiters screening page: its graduation month list
