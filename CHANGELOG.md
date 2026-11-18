@@ -4,6 +4,7 @@ All notable changes to Application Lane are recorded here. The format follows [K
 
 ## Unreleased
 
+- School lists can match the full names and short names for IIT Bombay, IIT Delhi, and IIT Madras.
 - An AI answer to a legal question that does not cite the saved legal detail the question is about (a saved clearance offered for a conviction question) is filled with a caution beside it in "Filled by AI: check these", not left empty.
 - Claude Code gets its instructions from a file instead of the command line, so drafting works with an npm-installed `claude.cmd` on Windows.
 - Settings → Processing calls the drafting limit **Applications drafted at once**, which is what it limits. The docs describe written answers as model-written and checked, and list every backend route.

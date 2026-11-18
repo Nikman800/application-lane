@@ -33,6 +33,9 @@ const known: string[][] = [
   ["Purdue", "Purdue University"],
   ["Ole Miss", "University of Mississippi"],
   ["UVA", "University of Virginia"],
+  ["IIT Bombay", "Indian Institute of Technology Bombay"],
+  ["IIT Delhi", "Indian Institute of Technology Delhi"],
+  ["IIT Madras", "Indian Institute of Technology Madras"],
 ];
 
 const plain = (text: string) =>
