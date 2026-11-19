@@ -18,10 +18,10 @@
       [
         {
           "containerPath": [
-            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')]]//fieldset[contains(@class,'datasetField__row')][not(contains(@class,'datasetField__row--sample'))]"
+            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')] or preceding-sibling::div[contains(@class,'Separator')][1]//legend[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')]]//fieldset[contains(@class,'datasetField__row')][not(contains(@class,'datasetField__row--sample'))]"
           ],
           "addButtonPath": [
-            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')]]//a[starts-with(@id,'addRowFor_')]"
+            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')] or preceding-sibling::div[contains(@class,'Separator')][1]//legend[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')]]//a[starts-with(@id,'addRowFor_')]"
           ],
           "inputSelectors": [
             [
@@ -39,7 +39,7 @@
             [
               "currently_working",
               [
-                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'current')]]//select"
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'current') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'is current')]]//select"
               ]
             ],
             [
@@ -53,6 +53,12 @@
               [
                 ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'end')]]//input[@type='month']"
               ]
+            ],
+            [
+              "description",
+              [
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'responsibilities') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'description')]]//textarea"
+              ]
             ]
           ]
         }
@@ -63,10 +69,10 @@
       [
         {
           "containerPath": [
-            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//fieldset[contains(@class,'datasetField__row')][not(contains(@class,'datasetField__row--sample'))]"
+            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')] or preceding-sibling::div[contains(@class,'Separator')][1]//legend[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//fieldset[contains(@class,'datasetField__row')][not(contains(@class,'datasetField__row--sample'))]"
           ],
           "addButtonPath": [
-            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//a[starts-with(@id,'addRowFor_')]"
+            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')] or preceding-sibling::div[contains(@class,'Separator')][1]//legend[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//a[starts-with(@id,'addRowFor_')]"
           ],
           "inputSelectors": [
             [
@@ -97,8 +103,51 @@
                   "valueKey": "graduated_flag"
                 }
               ]
+            ],
+            [
+              "end_year",
+              [
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'year received') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'graduation year')]]//input"
+              ]
             ]
           ]
+        }
+      ]
+    ],
+    [
+      "skill",
+      [
+        {
+          "path": [
+            ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'skills')]]//input[contains(@class,'select2-search__field')]"
+          ],
+          "actions": [
+            {
+              "method": "trustedSearch"
+            },
+            {
+              "path": [
+                "//li[contains(@class,'select2-results__option')][@role='option'][translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=\"%LOWERVALUE%\"]"
+              ],
+              "method": "click",
+              "time": 5000,
+              "allowFailure": true
+            },
+            {
+              "method": "clearValue",
+              "allowFailure": true
+            },
+            {
+              "path": [
+                "//main"
+              ],
+              "event": "mousedown",
+              "method": "click",
+              "allowFailure": true
+            }
+          ],
+          "everyValue": true,
+          "limit": 15
         }
       ]
     ]

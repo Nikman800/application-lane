@@ -699,6 +699,21 @@ export function applyMainWorld(
         }
       }
       if (!nativeValue(value)) return fail("No native value setter was found.");
+      // A textarea a TinyMCE editor hides is saved from the editor's own
+      // page, so the text goes there too, one paragraph per line (the same
+      // as page/rich-text.ts, which this self-contained function cannot import).
+      if (element instanceof HTMLTextAreaElement) {
+        const body = element.parentElement?.querySelector<HTMLIFrameElement>(".tox-tinymce iframe")?.contentDocument?.body;
+        if (body?.isContentEditable) {
+          const escape = (line: string) => line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+          body.innerHTML = value
+            .split(/\r?\n/)
+            .filter((line) => line.trim())
+            .map((line) => `<p>${escape(line)}</p>`)
+            .join("");
+          body.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      }
     } else return fail("Configured target is not a supported form control.");
 
     const reactKey = Object.keys(element).find(

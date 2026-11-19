@@ -12397,6 +12397,156 @@ test("each Avature school row gets its school from the site's search, its major 
   await expect.poll(async () => (await state()).applications[0]?.missing.join(" ")).not.toMatch(/same label|filled in by the site/);
 });
 
+async function avatureRegisterWithHeadings() {
+  // one employer's Avature Register page (fill capture): the section's
+  // title is a legend in a heading above, the rows' own label is empty, so
+  // no row was filled by the rules ("Is current position?", the months and
+  // the TinyMCE Responsibilities stayed as the site's resume read left them).
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      work: [
+        { organization: "Acme", title: "Software Engineer", location: "Tucson, AZ", details: "Built services.\nRan the pager rotation.", startDate: "2025-05-12", endDate: "" },
+        { organization: "Contoso", title: "Intern", location: "Remote", details: "Built APIs.", startDate: "2023-06-01", endDate: "2023-09-08" },
+      ],
+      education: [{ organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", location: "", details: "", startDate: "2015-09", endDate: "2019-06" }],
+    },
+  });
+  const labelled = (set: number, row: string, n: number, label: string, control: string) =>
+    `<div class="fieldSpec fieldSpecPadder fieldSpec--in-dataset" id="fieldSpecContainer${set}-${n}-${row}"><label class="requiredField WizardFieldLabel tc_formLabel" for="${set}-${n}-${row}" id="${set}-${n}-${row}-label">${label}<span aria-hidden="true" class="labelRequiredIcon"> *</span></label>${control}</div>`;
+  const text = (set: number, row: string, n: number, label: string) =>
+    labelled(set, row, n, label, `<input type="text" id="${set}-${n}-${row}" name="${set}-${n}-${row}" class="TextField WizardFieldInputContainer WizardFieldInput" aria-labelledby="${set}-${n}-${row}-label">`);
+  const month = (row: string, n: number, label: string) =>
+    `<div class="fieldSpec DateFormField fieldSpecPadder fieldSpec--in-dataset" id="fieldSpecContainer172-${n}-${row}"><div id="172-${n}-${row}-accessibleContainer"><label class="requiredField WizardFieldLabel tc_formLabel" for="172-${n}-${row}" id="172-${n}-${row}-label">${label}</label><input type="month" id="172-${n}-${row}" name="172-${n}-${row}" class="DateFormField WizardFieldInputContainer WizardFieldInput" aria-labelledby="172-${n}-${row}-label"></div></div>`;
+  const current = (row: string) =>
+    labelled(172, row, 3, "Is current position?", `<select name="172-3-${row}" id="172-3-${row}" class="SelectFormField WizardFieldInputContainer WizardFieldInput" aria-labelledby="172-3-${row}-label"><option value="">Select an option</option><option value="7">Yes</option><option value="8">No</option></select>`);
+  const responsibilities = (row: string) =>
+    `<div class="fieldSpec ParagraphWithFormatFormField fieldSpecPadder fieldSpec--in-dataset" id="fieldSpecContainer172-6-${row}"><label class="requiredField WizardFieldLabel tc_formLabel" for="172-6-${row}" id="172-6-${row}-label">Responsibilities</label><textarea id="172-6-${row}" name="172-6-${row}" class="ParagraphWithFormatFormField ParagraphWithFormatTextArea WizardFieldInputContainer WizardFieldInput" style="display: none;"></textarea><div role="application" class="tox tox-tinymce"><div class="tox-edit-area"><iframe id="172-6-${row}_ifr" class="tox-edit-area__iframe" srcdoc="<body contenteditable='true'></body>"></iframe></div></div></div>`;
+  const workRow = (id: string) =>
+    `<fieldset class="datasetField__row${id === "sample" ? " datasetField__row--sample" : ""}" id="datasetField__row--172_${id}"${id === "sample" ? ' aria-hidden="true" hidden=""' : ""}>${text(172, id, 1, "Company")}${text(172, id, 2, "Position title")}${current(id)}${month(id, 4, "Start date")}${month(id, 5, "End date")}${responsibilities(id)}<div class="datasetField__button"><a href="javascript:void(0)" name="removeRowFor_172" role="button" class="action action--remove WizardFieldLink">remove</a></div></fieldset>`;
+  const schoolRow = (id: string) =>
+    `<fieldset class="datasetField__row${id === "sample" ? " datasetField__row--sample" : ""}" id="datasetField__row--790_${id}"${id === "sample" ? ' aria-hidden="true" hidden=""' : ""}>${text(790, id, 1, "Field of Study")}${text(790, id, 3, "University")}${text(790, id, 6, "Year Received")}</fieldset>`;
+  await context.route(`${avatureOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Software Engineer</title><main><form>
+        <fieldset class="Section Section2"><div class="fieldSpec"><label class="WizardFieldLabel" for="first">Preferred first name</label><input type="text" id="first" name="first" class="WizardFieldInput"></div></fieldset>
+        <fieldset class="Section Section4"><div class="Separator Separator4" id="fieldSpecContainer171"><legend class="WizardFieldLabel tc_formTitle" id="171">Work Experience</legend></div>
+          <div class="fieldSpec form__item--hidden-label datasetField" id="fieldSpecContainer172"><p class="requiredField WizardEmptyLabel WizardFieldLabel tc_formLabel" id="172-label"><span aria-hidden="true" class="labelRequiredIcon"> *</span></p>
+            <div class="datasetcontent" id="172" role="group" aria-labelledby="172-label">${workRow("sample")}${workRow("0")}
+              <div class="datasetField__button datasetField__button--add"><a href="#" id="addRowFor_172" class="action action--add WizardFieldLink" role="button">add another</a></div>
+            </div>
+          </div>
+        </fieldset>
+        <fieldset class="Section Section5"><div class="Separator Separator5" id="fieldSpecContainer173"><legend class="WizardFieldLabel tc_formTitle" id="173">Education History</legend></div>
+          <div class="fieldSpec form__item--hidden-label datasetField" id="fieldSpecContainer790"><p class="WizardEmptyLabel WizardFieldLabel tc_formLabel" id="790-label"></p>
+            <div class="datasetcontent" id="790" role="group">${schoolRow("sample")}${schoolRow("0")}
+              <div class="datasetField__button datasetField__button--add"><a href="#" id="addRowFor_790" class="action action--add WizardFieldLink" role="button">add another</a></div>
+            </div>
+          </div>
+        </fieldset>
+      </form></main><script>
+        for (const set of [172, 790]) {
+          let rows = 1;
+          document.querySelector('#addRowFor_' + set).addEventListener('click', (event) => {
+            event.preventDefault();
+            const sample = document.querySelector('#datasetField__row--' + set + '_sample');
+            const html = sample.outerHTML.replaceAll('sample', String(rows++)).replace(' aria-hidden="true" hidden=""', '').replace(' datasetField__row--' + (rows - 1), '');
+            event.target.parentElement.insertAdjacentHTML('beforebegin', html);
+          });
+        }
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${avatureOrigin}/en_US/careers/Register?pipelineId=1`);
+  await enqueue([page]);
+  const input = (id: string) => page.locator(`[id="${id}"]`);
+  await expect(input("172-1-1")).toHaveValue("Contoso", { timeout: 30000 });
+  return { page, input };
+}
+
+test("an Avature work section titled by a heading above it gets each job's dates and current flag, and each school its year", async () => {
+  const { page, input } = await avatureRegisterWithHeadings();
+  const dates = () => Promise.all(["0", "1"].map((row) => Promise.all([4, 5, 3].map((n) => input(`172-${n}-${row}`).inputValue()))));
+  await expect.poll(dates, { timeout: 30000 }).toEqual([
+    ["2025-05", "", "7"],
+    ["2023-06", "2023-09", "8"],
+  ]);
+  await expect(input("790-3-0")).not.toHaveValue("", { timeout: 30000 });
+  await expect(input("790-6-0")).toHaveValue("2019", { timeout: 30000 });
+  void page;
+});
+
+test("an Avature job's Responsibilities editor gets the job's description", async () => {
+  const { page, input } = await avatureRegisterWithHeadings();
+  await expect(input("172-6-0")).toHaveValue(/Ran the pager rotation/, { timeout: 30000 });
+  const written = (row: string) => page.frameLocator(`[id="172-6-${row}_ifr"]`).locator("body").innerText();
+  await expect.poll(() => written("0"), { timeout: 30000 }).toContain("Ran the pager rotation.");
+  await expect.poll(() => written("1"), { timeout: 30000 }).toContain("Built APIs.");
+});
+
+test("an Avature skills box that searches as it is typed in gets each profile skill picked from its list, and is closed after", async () => {
+  // The Register page's "What skills do you have?" (fill capture): a select2
+  // multi-select. The fill left it open with nothing picked.
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, skills: ["Python", "SQL", "Haskell"] } });
+  await context.route(`${avatureOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Software Engineer</title><main><form>
+        <fieldset class="Section Section2"><div class="fieldSpec"><label class="WizardFieldLabel" for="first">Preferred first name</label><input type="text" id="first" name="first" class="WizardFieldInput"></div></fieldset>
+        <fieldset class="Section Section3"><div class="Separator Separator3"><legend class="WizardFieldLabel tc_formTitle">Skills</legend></div>
+          <div class="fieldSpec MultipleSelectFormField AutoCompleteField fieldSpecPadder" id="fieldSpecContainer967"><label class="WizardFieldLabel tc_formLabel" for="967" id="967-label">What skills do you have?</label>
+            <select name="967[]" id="967" multiple class="select2-hidden-accessible" aria-hidden="true" tabindex="-1" style="display:none"></select>
+            <span class="select2 select2-container"><span class="selection"><span class="select2-selection select2-selection--multiple" role="combobox" aria-expanded="false"><ul class="select2-selection__rendered" role="group"><li class="select2-search select2-search--inline" role="none"><input id="967-search__field" class="select2-search__field" type="search" role="searchbox" autocomplete="off" placeholder="Select an option"></li></ul></span></span></span>
+          </div>
+        </fieldset>
+      </form></main><script>
+        const all = [["4316", "Python"], ["4317", "Python Scripting"], ["5001", "SQL"], ["5002", "SQL Server"]];
+        const search = document.querySelector('[id="967-search__field"]');
+        const select = document.querySelector('[id="967"]');
+        const container = document.querySelector(".select2");
+        let menu;
+        const close = () => { menu?.remove(); menu = undefined; container.classList.remove("select2-container--open"); };
+        search.addEventListener("input", () => {
+          close();
+          const text = search.value.trim().toLowerCase();
+          if (!text) return;
+          container.classList.add("select2-container--open");
+          menu = document.createElement("span");
+          menu.className = "select2-container select2-container--open";
+          menu.innerHTML = '<span class="select2-dropdown"><span class="select2-results"><ul class="select2-results__options" role="listbox">' +
+            all.filter(([, name]) => name.toLowerCase().includes(text)).map(([id, name]) => '<li class="select2-results__option" role="option" data-id="' + id + '">' + name + '</li>').join("") + '</ul></span></span>';
+          document.body.append(menu);
+          menu.addEventListener("mouseup", (event) => {
+            const item = event.target.closest("li[data-id]");
+            if (!item) return;
+            select.insertAdjacentHTML("beforeend", '<option value="' + item.dataset.id + '" selected>' + item.textContent + '</option>');
+            search.value = "";
+          });
+          menu.addEventListener("click", (event) => {
+            const item = event.target.closest("li[data-id]");
+            if (!item) return;
+            if (![...select.options].some((o) => o.value === item.dataset.id)) select.insertAdjacentHTML("beforeend", '<option value="' + item.dataset.id + '" selected>' + item.textContent + '</option>');
+            search.value = "";
+          });
+        });
+        document.addEventListener("mousedown", (event) => { if (!event.target.closest(".select2-dropdown, .select2")) close(); });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${avatureOrigin}/en_US/careers/Register?pipelineId=1`);
+  await enqueue([page]);
+  const picked = () => page.locator('[id="967"] option:checked').allTextContents();
+  await expect.poll(picked, { timeout: 60000 }).toEqual(["Python", "SQL"]);
+  await expect(page.locator(".select2-results__option")).toHaveCount(0);
+  await expect(page.locator('[id="967-search__field"]')).toHaveValue("");
+});
+
 test("a question written as text above its options labels the radios and checkboxes under it", async () => {
   // Paylocity's screener questions (issue report): a paragraph,
   // then one row per option, with nothing tying them together. The fields
