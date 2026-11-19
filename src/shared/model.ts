@@ -491,7 +491,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-19-select2-search-box-not-unanswered";
+export const CONTENT_VERSION = "2026-11-19-ashby-radio-question-required";
 export type Proposal = {
   fieldId: string;
   value: string;

@@ -7518,6 +7518,37 @@ test("an Ashby checkbox question keeps its boxes together: each carries the ques
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
+// An Ashby radio question in its own fieldset (fill capture): the title
+// carries _required_, the radios carry no required of their own. A required
+// "select Option C to confirm you apply yourself" and a required question about
+// a coding screen were listed as optional.
+test("an Ashby radio question whose title is marked required is listed as required", async () => {
+  const radios = (path: string, title: string, options: string[]) =>
+    `<div data-field-path="${path}"><fieldset class="_container_1258i_28 _fieldEntry_1e3gg_28 ashby-application-form-input-radio-group"><label class="_heading_f7cvd_52 _required_f7cvd_91 _label_1e3gg_42 ashby-application-form-question-title" for="${path}">${title}</label>${options
+      .map((name, index) => `<div class="_option_1258i_34 false ashby-application-form-input-radio-group-option"><span class="_container_132c8_28" data-disabled="false"><span class="_circle_132c8_77"></span><input type="radio" id="${path}-labeled-radio-${index}" name="${path}" class="ashby-application-form-input-radio-group-option-radio"></span><label for="${path}-labeled-radio-${index}" class="_label_1258i_42  ashby-application-form-input-radio-group-option-label">${name}</label></div>`)
+      .join("")}</fieldset></div>`;
+  await context.route("https://jobs.ashbyhq.com/**", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Engineer @ Acme</title></head><body><form onsubmit="window.submissions++; return false">
+        <div class="ashby-application-form-field-entry" data-field-path="_systemfield_email"><label class="ashby-application-form-question-title" for="email">Email</label><input id="email" name="email" type="email" required></div>
+        ${radios("verify", "Application Verification: To confirm this application is submitted directly by the applicant, please select 'Option C' from the list below.", ["Option A", "Option B", "Option C", "Option D"])}
+        ${radios("screen", "Our technical screen is dispatched shortly after submission and expires within 2 calendar days. Do you have access to a stable computer and internet connection to complete it within the 2-day window?", ["Yes", "No"])}
+        <button type="submit">Submit Application</button></form><script>window.submissions = 0;</script></body></html>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto("https://jobs.ashbyhq.com/acme/00000000-0000-4000-8000-000000000031/application");
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  const missing = (await state()).applications[0].missing.join("\n");
+  expect(missing).not.toMatch(/Optional unanswered: Application Verification/);
+  expect(missing).toMatch(/Required: Application Verification/);
+  await expect(page.locator('input[name="verify"]:checked')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+});
+
 // Rippling's voluntary questions: each is a
 // div that says "Select..." until answered and opens its list on a click.
 // Its rule's opening click was refused as if the box were a list's empty

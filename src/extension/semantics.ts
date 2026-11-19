@@ -1213,7 +1213,9 @@ export function isRequired(element: Control): boolean {
   // title carries the mark, and one employer's "locations you would relocate to"
   // read as two optional boxes.
   const entryTitle = ashby?.querySelector(":scope > .ashby-application-form-question-title, :scope > legend");
-  if (entryTitle && element instanceof HTMLInputElement && element.type === "checkbox" && ashby!.querySelectorAll('input[type="checkbox"]').length > 1)
+  // So is each radio of a radio question (its own fieldset, the title marked
+  // _required_): one employer's required verification read as optional.
+  if (entryTitle && element instanceof HTMLInputElement && (element.type === "checkbox" || element.type === "radio") && ashby!.querySelectorAll(`input[type="${element.type}"]`).length > 1)
     return /required/i.test(String(entryTitle.className)) || /[*✱]|\(required\)/i.test(entryTitle.textContent || "");
   if (title && ashby?.querySelectorAll(controlSelector).length === 1)
     return /required/i.test(String(title.className)) || /[*✱]|\(required\)/i.test(title.textContent || "");
