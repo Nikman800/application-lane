@@ -227,6 +227,94 @@ export function installMonitor(session: string, ownExtensionId: string) {
     observer.disconnect();
     clearTimeout(scan);
   });
+  // A request the site refused: the reason is only in its answer (Oracle
+  // answers an entry it will not save with a 400 and shows nothing).
+  // The page may hold fetch from before this monitor, but it reads the
+  // answer through Response: a refused one's text is kept from there.
+  const reported = new WeakSet<Response>();
+  for (const method of ["json", "text", "arrayBuffer", "blob"] as const) {
+    const original = Response.prototype[method];
+    Response.prototype[method] = function __laneMonitorResponse(this: Response) {
+      if (this.status >= 400 && !reported.has(this)) {
+        reported.add(this);
+        const url = this.url.split("?")[0].slice(0, 200);
+        const status = this.status;
+        try {
+          original
+            .call(this.clone())
+            .then((body: unknown) =>
+              emit({
+                fn: "fetch refused",
+                source: "page",
+                value: `${status} ${url}: ${(typeof body === "string" ? body : body instanceof ArrayBuffer ? new TextDecoder().decode(body) : body instanceof Blob ? "(blob)" : JSON.stringify(body)).replace(/\s+/g, " ").slice(0, 800)}`,
+                frames: [],
+              }),
+            )
+            .catch(() => undefined);
+        } catch {
+          /* A body already read cannot be cloned. */
+        }
+      }
+      return original.call(this) as any;
+    } as any;
+    state.restore.push(() => {
+      Response.prototype[method] = original as any;
+    });
+  }
+  // A page that only checks the status never reads the answer: read a
+  // copy of it when the page looks at a refused one's status.
+  const report = (response: Response, status: number) => {
+    if (status < 400 || reported.has(response)) return;
+    reported.add(response);
+    let copy: Response;
+    try {
+      copy = response.clone();
+    } catch {
+      return;
+    }
+    const url = response.url.split("?")[0].slice(0, 200);
+    textOf
+      .call(copy)
+      .then((body: string) => emit({ fn: "fetch refused", source: "page", value: `${status} ${url}: ${body.replace(/\s+/g, " ").slice(0, 800)}`, frames: [] }))
+      .catch(() => undefined);
+  };
+  const textOf = Response.prototype.text;
+  for (const name of ["status", "ok"] as const) {
+    const descriptor = Object.getOwnPropertyDescriptor(Response.prototype, name);
+    const statusOf = Object.getOwnPropertyDescriptor(Response.prototype, "status")?.get;
+    if (!descriptor?.get || !statusOf) continue;
+    const getter = descriptor.get;
+    Object.defineProperty(Response.prototype, name, {
+      ...descriptor,
+      get(this: Response) {
+        try {
+          report(this, statusOf.call(this));
+        } catch {
+          /* Not a response. */
+        }
+        return getter.call(this);
+      },
+    });
+    state.restore.push(() => Object.defineProperty(Response.prototype, name, descriptor));
+  }
+  // And a request sent the older way.
+  const xhrSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function __laneMonitorXhr(this: XMLHttpRequest, ...args: [Document | XMLHttpRequestBodyInit | null | undefined]) {
+    this.addEventListener("loadend", () => {
+      if (this.status < 400) return;
+      let body = "";
+      try {
+        body = typeof this.response === "string" ? this.response : JSON.stringify(this.response);
+      } catch {
+        /* Unreadable answer. */
+      }
+      emit({ fn: "fetch refused", source: "page", value: `${this.status} ${(this.responseURL || "").split("?")[0].slice(0, 200)}: ${(body || "").replace(/\s+/g, " ").slice(0, 800)}`, frames: [] });
+    });
+    return xhrSend.apply(this, args);
+  };
+  state.restore.push(() => {
+    XMLHttpRequest.prototype.send = xhrSend;
+  });
   // The page's own calls are only counted, never itemized.
   state.flush = () => {
     if (Object.keys(state.pageCalls).length) {

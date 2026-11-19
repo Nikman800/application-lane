@@ -1736,14 +1736,33 @@ async function removeDamagedTiles(
       for (let deadline = now() + 2_000; !(remove = named()) && now() < deadline; ) await sleep(options.pollMs ?? 100, options.signal);
     }
     if (!remove || options.isLocked?.(remove)) continue;
-    const clicked = await (options.execute || defaultExecute)({ element: remove, globals, method: "click", signal: options.signal, values: [] });
+    // Oracle's Delete button has no type, so inside the application's form
+    // it is a submit button, and the click gate refuses it as one. It is the
+    // tile's own button, named Delete or Remove: clicked as an entry's save
+    // is, with every form submission stopped (config-fill.ts).
+    const clicked = await (options.execute || defaultExecute)({
+      element: remove,
+      entrySave: isTag(remove, "button") && card.contains(remove) && controlKind(labelOf(remove)) === "other",
+      globals,
+      method: "click",
+      signal: options.signal,
+      values: [],
+    });
     if (!clicked) continue;
     const now = () => options.now?.() ?? Date.now();
     for (let deadline = now() + 3_000; tile.isConnected && now() < deadline; ) {
       const confirm = [...tile.ownerDocument.querySelectorAll<HTMLElement>('.app-dialog__wrapper--active, [role="dialog"], [role="alertdialog"]')]
         .flatMap((dialog) => [...dialog.querySelectorAll<HTMLElement>("button")])
         .find((button) => /^(delete|yes|ok|confirm|remove)$/i.test((button.textContent || "").trim()) && !button.closest("[hidden]"));
-      if (confirm) await (options.execute || defaultExecute)({ element: confirm, globals, method: "click", signal: options.signal, values: [] });
+      if (confirm)
+        await (options.execute || defaultExecute)({
+          element: confirm,
+          entrySave: isTag(confirm, "button") && controlKind(labelOf(confirm)) === "other",
+          globals,
+          method: "click",
+          signal: options.signal,
+          values: [],
+        });
       await sleep(options.pollMs ?? 100, options.signal);
     }
   }

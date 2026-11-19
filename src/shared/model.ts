@@ -480,7 +480,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-18-oracle-entry-tags-and-timeline-duplicates";
+export const CONTENT_VERSION = "2026-11-19-oracle-card-delete-and-refused-requests";
 export type Proposal = {
   fieldId: string;
   value: string;

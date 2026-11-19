@@ -238,6 +238,11 @@ export function startRecorder(options: RecorderOptions) {
             url: options.redactURL(entry.name).slice(0, 500),
             initiator: entry.initiatorType,
             durationMs: Math.round(entry.duration),
+            // Whether the site took a save: a form that stays open after one
+            // is told apart from one the server refused.
+            ...((entry as PerformanceResourceTiming & { responseStatus?: number }).responseStatus
+              ? { status: (entry as PerformanceResourceTiming & { responseStatus?: number }).responseStatus }
+              : {}),
           });
     });
     network.observe({ type: "resource", buffered: false });

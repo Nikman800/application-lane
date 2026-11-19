@@ -22086,3 +22086,100 @@ test("automatic AI filling fills a military-service question with the rest, and 
     providerServer.close();
   }
 });
+
+// Oracle Candidate Experience: the Experience / Education section shows only
+// saved entry cards, no entry form. Each region holds the entry an earlier
+// fill saved and an empty one ("Unnamed Job Title" / "Unnamed Major", "Fields
+// to fix: 1"). The fill did nothing: no row was matched, the empty cards were
+// never deleted and no missing entry was added.
+test("Oracle's section that shows only saved entry cards deletes the unnamed cards, keeps the matching ones and adds the missing profile rows", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Virginia Tech", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-12", location: "", details: "" },
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+      ],
+      work: [
+        { organization: "Acme", title: "Research Associate", location: "Blacksburg, VA", details: "Built simulations.", startDate: "2026-03", endDate: "" },
+        { organization: "Contoso", title: "Software Engineer Intern", location: "Blacksburg, VA", details: "Built APIs.", startDate: "2023-07", endDate: "2023-09" },
+        { organization: "Fabrikam", title: "Analyst", location: "Blacksburg, VA", details: "Built reports.", startDate: "2022-06", endDate: "2022-08" },
+      ],
+    },
+  });
+  const tile = (n: number, qa: number, title: string, subtitle: string, invalid = false) =>
+    `<article class="apply-flow-profile-item-tile${invalid ? " apply-flow-profile-item-tile--invalid" : ""}" id="tile-${n}" data-qa="profileItem${qa}">
+      <div class="apply-flow-profile-item-tile__summary" data-profile-item-tile="true" role="group" tabindex="0" aria-label="${title} ${subtitle}"${invalid ? ' data-profile-item-invalid="true"' : ""}>
+        <div class="apply-flow-profile-item-tile__summary-content"><div class="apply-flow-profile-item-tile__summary-title"><span>${title}</span></div>
+        ${invalid ? '<div class="apply-flow-profile-item-tile__summary-validation"><span>Fields to fix: 1</span></div>' : `<div class="apply-flow-profile-item-tile__summary-subtitle text-color-secondary">${subtitle}</div>`}</div>
+        <div class="apply-flow-profile-item-tile__actions-container"><button class="apply-flow-profile-item-tile__edit-item-icon" title="Edit" aria-label="Edit"></button><button class="apply-flow-profile-item-tile__delete-icon" title="Delete" aria-label="Delete"></button></div>
+      </div></article>`;
+  const block = (label: string, qa: number, id: number, tiles: string) => `<li><apply-flow-block><div class="apply-flow-block apply-flow-block--tile-profile-items">
+    <div class="apply-flow-block__header"><h2 class="apply-flow-block__title"><span>${label}</span></h2></div>
+    <div class="apply-flow-block__form-list" role="region" aria-label="${label} ">
+      <div class="profile-item-container"><div class="standard-apply-flow-profile-item">
+        <div class="profile-item-list" role="group">${tiles}</div>
+        <div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile" id="profileItemsAddButton-${id}" data-qa="add${qa}"><span class="button__label">Add ${label}</span></button></div>
+        <div class="slot"></div>
+      </div></div>
+    </div></div></apply-flow-block></li>`;
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Experience, Education, Skills</title><main>
+        <form class="apply-flow__content apply-flow__content-form" method="post" onsubmit="window.submitted = true; return false"><div class="apply-flow-section" tabindex="-1" data-section-number="3"><ul class="apply-flow-page-list">
+          ${block("Experience", 129, 1, tile(1, 129, "Research Associate", "Acme 03/2026") + tile(2, 129, "Unnamed Job Title", "", true))}
+          ${block("Education", 106, 2, tile(3, 106, "Data Science", "Virginia Tech 08/2025 - 12/2027") + tile(4, 106, "Unnamed Major", "", true))}
+        </ul></div></form>
+      </main><script>
+        window.saved = [];
+        window.deleted = [];
+        window.submitted = false;
+        for (const button of document.querySelectorAll('.apply-flow-profile-item-tile__delete-icon'))
+          button.addEventListener('click', () => {
+            const article = button.closest('article');
+            const dialog = document.createElement('div');
+            dialog.className = 'app-dialog__wrapper app-dialog__wrapper--active';
+            dialog.innerHTML = '<div class="app-dialog__footer"><button class="button app-dialog__footer-button"><span class="button__label">Cancel</span></button><button class="button app-dialog__footer-button"><span class="button__label">Delete</span></button></div>';
+            document.body.append(dialog);
+            dialog.querySelectorAll('button')[0].addEventListener('click', () => dialog.remove());
+            dialog.querySelectorAll('button')[1].addEventListener('click', () => {
+              window.deleted.push(article.querySelector('.apply-flow-profile-item-tile__summary').getAttribute('aria-label'));
+              article.remove();
+              dialog.remove();
+            });
+          });
+        const forms = {
+          Education: '<div class="input-row"><label for="major">Major</label><input id="major" name="major"></div><div class="input-row"><label for="school">School</label><input id="school" name="educationalEstablishment"></div>',
+          Experience: '<div class="input-row"><label for="employerName">Employer Name</label><input id="employerName" name="employerName" class="input-row__control"></div><div class="input-row"><label for="jobTitle">Job Title</label><input id="jobTitle" name="jobTitle" class="input-row__control"></div>',
+        };
+        for (const add of document.querySelectorAll('.apply-flow-profile-item-tile__new-tile'))
+          add.addEventListener('click', () => {
+            const word = add.textContent.trim().replace(/^Add /, '');
+            const slot = add.closest('.standard-apply-flow-profile-item').querySelector('.slot');
+            add.parentElement.hidden = true;
+            slot.innerHTML = '<div class="profile-item-content">' + forms[word] + '<div class="app-dialog__footer"><button class="button app-dialog__footer-button save-btn">Add ' + word + '</button></div></div>';
+            slot.querySelector('.save-btn').addEventListener('click', () => {
+              window.saved.push(word + ': ' + [...slot.querySelectorAll('input')].map((input) => input.value).join(' / '));
+              setTimeout(() => { slot.innerHTML = ''; add.parentElement.hidden = false; }, 300);
+            });
+          });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/3`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  const result = await page.evaluate(() => ({ saved: (window as any).saved as string[], deleted: (window as any).deleted as string[] }));
+  // The cards' Delete buttons have no type: inside the form they submit it.
+  expect(await page.evaluate(() => (window as any).submitted)).toBe(false);
+  expect(result.deleted.slice().sort()).toEqual(["Unnamed Job Title ", "Unnamed Major "]);
+  expect(result.saved.filter((entry) => entry.startsWith("Education"))).toEqual([expect.stringContaining("Penn State")]);
+  expect(result.saved.filter((entry) => entry.startsWith("Experience")).join("|")).toMatch(/Contoso/);
+  expect(result.saved.filter((entry) => entry.startsWith("Experience")).join("|")).toMatch(/Fabrikam/);
+  expect(result.saved.join("|")).not.toMatch(/Acme|Virginia Tech/);
+});
