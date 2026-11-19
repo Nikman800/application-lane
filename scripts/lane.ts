@@ -375,7 +375,11 @@ async function ui() {
   const rows = () => (searching() ? found?.listings || [] : shown());
   const out = process.stdout;
   const fit = (text: string, width: number) => (text.length > width ? `${text.slice(0, width - 1)}…` : text.padEnd(width));
+  // Set once the view has handed the terminal to its restarted copy: this
+  // one never draws again.
+  let handedOff = false;
   function draw() {
+    if (handedOff) return;
     const width = Math.max(40, out.columns || 100);
     const height = Math.max(12, out.rows || 30);
     const list = rows();
@@ -504,9 +508,14 @@ async function ui() {
     .concat(fileURLToPath(new URL("../src/shared/repairs.ts", import.meta.url)));
   const stamp = () => sources.map((file) => { try { return statSync(file).mtimeMs; } catch { return 0; } }).join(",");
   const started = stamp();
-  setInterval(() => {
-    if (typing !== undefined || stamp() === started) return;
+  // Restarts once: the old view stops checking, drawing and listening, or it
+  // started a new copy every 3 s and every copy drew over the others.
+  const restart = setInterval(() => {
+    if (handedOff || typing !== undefined || stamp() === started) return;
+    handedOff = true;
+    clearInterval(restart);
     if (spinner) clearInterval(spinner);
+    line.close();
     process.stdin.removeAllListeners("data");
     process.stdin.setRawMode(false);
     process.stdin.pause();
