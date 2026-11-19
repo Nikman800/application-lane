@@ -971,10 +971,49 @@ export function sectionFor(element: Control): {
   return { section: found.section || (ruled[1] === "education" ? "Education" : "Experience"), index: Number(ruled[2]) };
 }
 
+// The words a Jobvite prescreen field asks (its label, its legend, or the
+// text of a plain paragraph), lowercased without the required star.
+const jobviteAsked = (holder: Element | null | undefined) =>
+  cleanLabel(holder?.querySelector("label.jv-form-field-label,legend,p")?.textContent || "").replace(/[*?]/g, "").trim().toLowerCase();
+
+// Jobvite's prescreen repeats labels without a row to tell them apart. One
+// table element holds each job as a group of fields that starts with a
+// paragraph "Employer 1", "Employer 2" (the job of that number, in the
+// profile's order). Separate elements ask a school's University, Degree,
+// Years Attended and Graduated? one after another, then the same for a
+// Graduate School: the first group is the undergraduate school and the second
+// the graduate one, told apart by the level of each degree.
+function jobvitePrescreenRow(holder: Element, element: Control): { section: string; index: number } | undefined {
+  if (holder.classList.contains("jv-prescreen-element-table")) {
+    const fields = [...holder.querySelectorAll(".jv-form-field")];
+    const own = fields.indexOf(element.closest(".jv-form-field") as Element);
+    for (let at = own - 1; at >= 0; at--) {
+      const group = jobviteAsked(fields[at]).match(/^employer (\d{1,2})$/);
+      if (group) return { section: "Work History", index: Number(group[1]) - 1 };
+    }
+    return;
+  }
+  const school = /^(university|college)$/;
+  const graduate = /^graduate (school|university)$/;
+  const asked = /^(university|college|degree|(number of )?years attended|graduated|graduate (school|university))$/;
+  const elements = [...(holder.parentElement?.children || [])].filter((child) => child.classList.contains("jv-prescreen-element"));
+  const labels = elements.map(jobviteAsked);
+  const at = elements.indexOf(holder);
+  if (!asked.test(labels[at] || "") || !labels.some((label) => graduate.test(label)) || !labels.some((label) => school.test(label))) return;
+  for (let back = at; back >= 0; back--) {
+    if (graduate.test(labels[back])) return { section: "Graduate Education", index: 0 };
+    if (school.test(labels[back])) return { section: "Undergraduate Education", index: 0 };
+  }
+}
+
 function pageSectionFor(element: Control): {
   section: string;
   index: number;
 } {
+  // Jobvite's prescreen questions are elements of jv-form-field children.
+  const jobvite = element.closest(".jv-prescreen-element");
+  const jobviteRow = jobvite && jobvitePrescreenRow(jobvite, element);
+  if (jobviteRow) return jobviteRow;
   // iCIMS's own education and work blocks: "icims_1_SchoolName" is the second
   // block, and the page's heading above the group ("EDUCATION (COMPLETED)")
   // is its section, which tells a finished degree's blocks from the "currently

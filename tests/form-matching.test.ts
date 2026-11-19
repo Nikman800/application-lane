@@ -760,6 +760,19 @@ test("a language skills checklist is ticked for each language the profile lists 
   assert.equal(value("American Sign Language (ASL)"), undefined);
 });
 
+test("a technology checklist ticks each option naming a profile skill and leaves the rest", () => {
+  const coder = profileSchema.parse({ ...profile, skills: ["Python", "C", "ASP.NET", "html", "SQL"] });
+  const question = "What technology stack do you have work/school experience with?";
+  const options = ["C#", "C, C++", "React", "Python", "Azure", "SQL", "HTML/CSS", ".Net", "GraphQL"];
+  const boxes = options.map((option) => field(`${question}: ${option}`, { id: option, kind: "checkbox", question, options: [], required: true }));
+  const out = new Map(proposals(boxes, coder).map((proposal) => [proposal.fieldId, proposal.value]));
+  for (const yes of ["C, C++", "Python", "SQL", "HTML/CSS", ".Net"]) assert.equal(out.get(yes), "Yes", yes);
+  for (const no of ["C#", "React", "Azure", "GraphQL"]) assert.notEqual(out.get(no), "Yes", no);
+  // No option names a skill: left to the existing flow.
+  const none = profileSchema.parse({ ...profile, skills: ["Welding"] });
+  assert.deepEqual(proposals(boxes, none), []);
+});
+
 test("a current-location list that words places \"City, ST\" gets the state's code (Meta, report 0b2dced5)", () => {
   const here = profileSchema.parse({ ...profile, city: "Flagstaff", state: "Arizona", country: "United States" });
   const proposal = proposals([field("Current location", { kind: "combobox", options: [], required: true })], here)[0];

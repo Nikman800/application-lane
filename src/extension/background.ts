@@ -46,7 +46,7 @@ chrome.commands.onCommand.addListener((command, tab) => {
   });
 });
 // A form framed in an employer's page (Greenhouse on one employer's and
-// Roblox's careers sites) shows its confirmation as a new document in that
+// another employer's careers site) shows its confirmation as a new document in that
 // frame, with no page script in it: one is put there, in an application's
 // tab still being applied to, so it can say whether that is what it is.
 // Frames without access are passed over.

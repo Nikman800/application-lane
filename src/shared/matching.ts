@@ -186,17 +186,16 @@ export function deterministicAnswer(
     return;
   const section = normalize(field.section || "");
   if (!/work|employment|experience/.test(section)) {
-    const row = profile.education[field.index || 0];
+    const row = educationRowFor(profile, section, field.index);
     if (schoolNameQuestion(field.label)) return row?.organization;
     if (/^degree$/.test(label)) return row?.title;
     if (/^(major|discipline|field of study)$/.test(label)) return row?.fieldOfStudy;
   }
   if (/work|employment|experience|education/.test(section)) {
-    const rows = /education/.test(section) ? profile.education : profile.work;
-    const row = rows[field.index || 0];
+    const row = /education/.test(section) ? educationRowFor(profile, section, field.index) : profile.work[field.index || 0];
     if (!row) return;
     if (
-      /^(company|employer|organization|school|university|institution)( name| dropdown)?$/.test(
+      /^(company|employer|organization|school|university|institution)( name| dropdown)?$|^name of (the |your )?(company|employer|organization|school|university|college|institution)$|^graduate (school|university)$/.test(
         label,
       ) || (/education/.test(section) && schoolNameQuestion(field.label))
     )
@@ -222,6 +221,28 @@ export function deterministicAnswer(
       if (row.current) return "No";
       if (!/^\d{4}-\d{2}/.test(row.endDate)) return;
       return row.endDate.slice(0, 7) <= currentMonth() ? "Yes" : "No";
+    }
+    // A form that asks a row's whole span in one box: "Dates of Employment"
+    // (MM/YYYY - MM/YYYY, "Present" for the job held now), a school's "Years
+    // Attended" (2025 - 2027) and its "Number of Years Attended".
+    if (/^dates of (employment|attendance)$/.test(label)) {
+      const from = row.startDate.match(/^(\d{4})-(\d{2})/);
+      if (!from) return;
+      const to = row.endDate.match(/^(\d{4})-(\d{2})/);
+      return `${from[2]}/${from[1]} - ${row.current || !to ? "Present" : `${to[2]}/${to[1]}`}`;
+    }
+    if (/^years attended$/.test(label)) {
+      const from = row.startDate.match(/^(\d{4})/);
+      if (!from) return;
+      const to = row.endDate.match(/^(\d{4})/);
+      return to && !row.current ? `${from[1]} - ${to[1]}` : `${from[1]} - Present`;
+    }
+    if (/^number of years (attended|of attendance)$/.test(label)) {
+      const from = row.startDate.match(/^(\d{4})-(\d{2})/);
+      if (!from) return;
+      const to = row.endDate.match(/^(\d{4})-(\d{2})/) || currentMonth().match(/^(\d{4})-(\d{2})/)!;
+      const months = (Number(to[1]) - Number(from[1])) * 12 + Number(to[2]) - Number(from[2]);
+      return months >= 0 ? String(Math.round(months / 12)) : undefined;
     }
     if (/^location$/.test(label)) return row.location;
     // The row's own address, where one is saved. A row without it says
@@ -487,6 +508,14 @@ function rowAtLevel(profile: Profile, asked: "undergraduate" | "graduate" | "hig
   return matching.length === 1 ? matching[0] : undefined;
 }
 
+// The education row of a section: by its number, or, for a form that titles
+// its schools "Undergraduate Education" and "Graduate Education" (Jobvite's
+// University and Graduate School boxes), by the level of the degree.
+function educationRowFor(profile: Profile, section: string, index = 0) {
+  const level = section.match(/^(undergraduate|graduate) education$/);
+  return level ? rowAtLevel(profile, level[1] as "undergraduate" | "graduate") : profile.education[index];
+}
+
 const plainAnswer = (text: string | undefined): "Yes" | "No" | undefined =>
   /^\s*yes\b/i.test(text || "") ? "Yes" : /^\s*no\b/i.test(text || "") ? "No" : undefined;
 
@@ -614,6 +643,14 @@ export function profileAnswer(
     }
     // Yes and No as boxes of their own (JazzHR's sponsorship question): the question is answered as a Yes/No choice, and the box
     // naming that answer is ticked, the other left clear.
+    // The same boxes of a school's or job's row, labelled "Question: Yes"
+    // (Jobvite's "Graduated?"): the row's answer to the question.
+    const boxOf = label.startsWith(`${asked} `) ? label.slice(asked.length + 1) : "";
+    if (/^(yes|no)$/.test(boxOf) && /work|employment|experience|education/.test(normalize(field.section || ""))) {
+      const asRadio: Field = { ...field, kind: "radio", label: field.question!, question: undefined, options: ["Yes", "No"] };
+      const answer = profileAnswer(asRadio, profile) ?? (deterministicAnswer(asRadio, profile) ? { value: deterministicAnswer(asRadio, profile)! } : undefined);
+      if (answer && /^(yes|no)$/i.test(answer.value)) return { value: normalize(answer.value) === boxOf ? "Yes" : "No" };
+    }
     if (/^(yes|no)$/.test(label)) {
       // A saved answer worded as the question itself ("Are you a U.S.
       // citizen?": Yes) is left by profileAnswer to the saved answers, read
@@ -681,7 +718,7 @@ export function profileAnswer(
   // Inside one row of an education section, a question is about that row's
   // school: its own graduation date, and the profile's GPA only when that row
   // is the program the GPA belongs to (the one ending last).
-  const educationRow = /education/.test(normalize(field.section || "")) ? profile.education[field.index || 0] : undefined;
+  const educationRow = /education/.test(normalize(field.section || "")) ? educationRowFor(profile, normalize(field.section || ""), field.index) : undefined;
   // A school's kind, from its degree: one employer's SuccessFactors lists
   // College, GED, High School, Junior College and Trade School under
   // "Education Type", and left it to the applicant.
@@ -1776,7 +1813,7 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
     if (/^(start|from) date$/.test(normalize(field.label)) && !/\b(employment|experience|work|education|history)\b/.test(normalize(field.section || "")) &&
         fields.some((other) => /^(end|to) date$/.test(normalize(other.label))))
       return [];
-    const choice = listChoice(field, profile) ?? hearAbout(field, profile);
+    const choice = listChoice(field, profile) ?? techStackBox(field, fields, profile) ?? hearAbout(field, profile);
     if (choice === "leave") return [];
     if (
       field.protected ||
@@ -2072,6 +2109,23 @@ function listChoice(field: Field, profile: Profile): Answer | "leave" | undefine
   }
   if (legalQuestion(field.question) || /\b(prior|previous|above) question\b|\bif you (selected|answered|chose|checked)\b/.test(asked)) return "leave";
   return undefined;
+}
+
+// "What technology stack do you have experience with?" as one box per
+// option: a box is ticked when one of its names (split on "," "/" "and") is
+// a profile skill, else left clear. Only when some option of the list is.
+const techQuestion = /\b(technolog\w*|tech stack|programming languages?|languages?|tools?|frameworks?|skills?)\b.*\b(experience|proficien\w*|familiar\w*|used|work with|worked with|comfortable)\b|\b(experience|proficien\w*|familiar\w*|comfortable)\b.*\b(technolog\w*|tech stack|programming languages?|tools?|frameworks?|skills?)\b|^(tech stack|technolog\w+|technical skills)\b/;
+function techStackBox(field: Field, fields: Field[], profile: Profile): Answer | undefined {
+  if (field.kind !== "checkbox" || !field.question || !profile.skills.length) return undefined;
+  if (!techQuestion.test(normalize(field.question)) || /\blanguages? (do you|are you|you) (speak|fluent)/.test(normalize(field.question))) return undefined;
+  const skills = profile.skills.map((skill) => skill.trim().toLowerCase()).filter(Boolean);
+  const optionOf = (box: Field) => (box.label.startsWith(box.question!) ? box.label.slice(box.question!.length) : box.label).replace(/^\s*:\s*/, "").trim();
+  const names = (option: string) => option.toLowerCase().split(/\s*,\s*|\s*\/\s*|\s+and\s+/).map((name) => name.trim()).filter(Boolean);
+  const has = (option: string) => names(option).some((name) =>
+    skills.includes(name) || (/^\.net$/.test(name) && skills.some((skill) => /(^|[^a-z0-9])\.net\b/.test(skill) || /\basp\.net\b/.test(skill))));
+  const group = fields.filter((other) => other.kind === "checkbox" && other.question === field.question);
+  if (!group.some((box) => has(optionOf(box)))) return undefined;
+  return { value: has(optionOf(field)) ? "Yes" : "No" };
 }
 
 // How the applicant heard of an opening: their own sources

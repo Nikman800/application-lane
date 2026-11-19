@@ -92,7 +92,7 @@ export const checkSession = (): void => {
 };
 export const checkSubmitted = () => {
   // In any frame: an employer's careers page shows the Greenhouse form,
-  // and its "thank you", in a frame of its own (an employer, Roblox). The site rules for the frame's own address decide.
+  // and its "thank you", in a frame of its own. The site rules for the frame's own address decide.
   if (cs.toldSubmitted) return;
   if (submittedOnPage()) {
     cs.toldSubmitted = true;

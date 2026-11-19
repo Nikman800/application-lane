@@ -7977,6 +7977,69 @@ test("a Jobvite Yes/No question drawn with icons beside hidden radios is one que
   expect(radios[0]).toMatchObject({ options: ["Yes", "No"], protected: false });
 });
 
+// Jobvite's prescreen asks the employment history as one table element of
+// fifteen fields, five groups of "Employer N", "Employer Information", Name of
+// Employer, Dates of Employment and Reason for Leaving, and the schools as
+// separate elements: University, Degree, Number of Years Attended, Graduated?
+// (a Yes and a No box), then Graduate School, Degree and Years Attended. The
+// repeated labels were all refused, and University took the graduate row.
+test("a Jobvite prescreen fills each Employer group from a work row and each school from its own degree", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      work: [
+        { organization: "Acme", title: "Analyst", location: "Tucson, AZ", details: "", startDate: "2024-03", endDate: "", current: true },
+        { organization: "Contoso", title: "Intern", location: "Tucson, AZ", details: "", startDate: "2022-06", endDate: "2023-08" },
+      ],
+      education: [
+        { organization: "Penn State", title: "Masters of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "State College, PA", details: "" },
+        { organization: "Virginia Tech", title: "Bachelors of Science", fieldOfStudy: "Computer Science", startDate: "2018-09", endDate: "2022-05", location: "Blacksburg, VA", details: "" },
+      ],
+    },
+  });
+  const element = (kind: string, fields: string) => `<div class="jv-prescreen-element jv-prescreen-element-${kind}">${fields}</div>`;
+  const text = (id: string, label: string) => `<div class="jv-form-field"><div class="jv-form-field-input"><label for="jv-field-${id}" class="jv-form-field-label">${label}</label><div class="jv-form-field-control"><input id="jv-field-${id}" type="text" aria-required="false"></div></div></div>`;
+  const note = (words: string) => `<div class="jv-form-field"><div class="jv-form-field-p"><div class="jv-form-field-control"><p><span>${words}</span></p></div></div></div>`;
+  const jobs = [1, 2, 3].map((n) => note(`Employer ${n}`) + note("Employer Information") + text(`f16_${(n - 1) * 3}`, "Name of Employer") + text(`f16_${(n - 1) * 3 + 1}`, "Dates of Employment") + text(`f16_${(n - 1) * 3 + 2}`, "Reason for Leaving")).join("");
+  const graduated = `<div class="jv-form-field"><div class="jv-form-field-checkbox"><div class="jv-form-field-control"><fieldset class="jv-input-group"><legend class="jv-form-field-legend">Graduated?</legend>${["Yes", "No"].map((answer, n) => `<label class="jv-input-group-row"><input id="jv-field-f22-${n}" name="f22" type="checkbox">${answer}</label>`).join("")}</fieldset></div></div></div>`;
+  await context.route(`${jobviteOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Analyst - Acme</title></head><body><form class="jv-form" onsubmit="return false">
+        ${element("table", jobs)}
+        ${element("textentryfield", text("f20", "University"))}
+        ${element("textentryfield", text("f21", "Degree"))}
+        ${element("textentryfield", text("f23", "Number of Years Attended"))}
+        ${element("checkboxes", graduated)}
+        ${element("textentryfield", text("f24", "Graduate School"))}
+        ${element("textentryfield", text("f25", "Degree"))}
+        ${element("textentryfield", text("f26", "Years Attended"))}
+        </form></body></html>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${jobviteOrigin}/acme/job/oAbC123/apply`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator("#jv-field-f16_0")).toHaveValue("Acme", { timeout: 60000 });
+  await expect(page.locator("#jv-field-f16_1")).toHaveValue("03/2024 - Present");
+  await expect(page.locator("#jv-field-f16_3")).toHaveValue("Contoso");
+  await expect(page.locator("#jv-field-f16_4")).toHaveValue("06/2022 - 08/2023");
+  await expect(page.locator("#jv-field-f16_6")).toHaveValue("");
+  await expect(page.locator("#jv-field-f16_7")).toHaveValue("");
+  await expect(page.locator("#jv-field-f20")).toHaveValue("Virginia Tech");
+  await expect(page.locator("#jv-field-f21")).toHaveValue("Bachelors of Science");
+  await expect(page.locator("#jv-field-f23")).toHaveValue("4");
+  await expect(page.locator("#jv-field-f22-0")).toBeChecked();
+  await expect(page.locator("#jv-field-f22-1")).not.toBeChecked();
+  await expect(page.locator("#jv-field-f24")).toHaveValue("Penn State");
+  await expect(page.locator("#jv-field-f25")).toHaveValue("Masters of Science");
+  await expect(page.locator("#jv-field-f26")).toHaveValue("2025 - 2027");
+});
+
 // The same form (an employer, task 8135eb3d): JazzHR's "-- No answer --" choice,
 // valued resumator_no_selection, read as an answer the site had given, so the
 // experience questions were neither answered nor listed as unanswered.
@@ -8249,7 +8312,7 @@ test("a form whose labels name no box, around invisible joiners, is read and fil
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
-// Reports: one employer's and Roblox's careers pages show the
+// Reports: two employers' careers pages show the
 // Greenhouse form, and its "thank you" after Submit, in a frame of their own.
 // Only the top page was asked whether it showed a confirmation.
 test("a confirmation drawn in the form's own frame marks the application submitted", async () => {
