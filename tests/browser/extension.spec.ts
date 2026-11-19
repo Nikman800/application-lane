@@ -14044,11 +14044,11 @@ test("answers blanked when a slow resume parse answers long after the upload are
   // upload, and the page then blanked the typed Address and Postal Code/Zip,
   // after the form had held still for longer than the watch's steady reads.
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, state: "Arizona", address: "100 Test Way", postalCode: "85001" } });
-  await context.route(`${origin}/api/resume_upload**`, async (route) => {
+  await context.route(`${microsoftOrigin}/api/resume_upload**`, async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 8000));
     await route.fulfill({ contentType: "application/json", body: "{}" });
   });
-  await context.route(`${origin}/slow-parse`, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html><form>
+  await context.route(`${microsoftOrigin}/careers/apply?slow-parse`, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html><form>
     <label for="Contact_Information_q_address">Address</label><input id="Contact_Information_q_address" autocomplete="one-time-code" aria-required="true">
     <label for="Contact_Information_q_zip">Postal Code/Zip</label><input id="Contact_Information_q_zip" autocomplete="one-time-code" aria-required="true">
     <label>Upload your resume<input type="file" accept=".pdf,.doc,.docx,.txt,.rtf"></label>
@@ -14064,7 +14064,7 @@ test("answers blanked when a slow resume parse answers long after the upload are
       });
     </script>` }));
   const page = await context.newPage();
-  await page.goto(`${origin}/slow-parse`);
+  await page.goto(`${microsoftOrigin}/careers/apply?slow-parse`);
   await enqueue([page]);
   await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 90000 }).toMatch(/^(ready|awaiting-user)$/);
   expect(await page.evaluate(() => (window as any).cleared)).toBe(1);

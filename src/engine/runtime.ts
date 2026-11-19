@@ -56,6 +56,11 @@ export async function fillDocument(
 
 // Whether the page has an empty resume slot its site rewrites the form from
 // (the rule's resumeFirstPaths): the resume then goes first and alone.
+// Whether this page's site parses an uploaded resume late (slowResumeParse).
+export function slowResumeParse(): boolean {
+  return Boolean(siteConfig()?.slowResumeParse);
+}
+
 export function resumeSlotOpen(): boolean {
   const config = siteConfig();
   return paths(config?.resumeFirstPaths).some((path) => queryXPathAll(document, path).length > 0);

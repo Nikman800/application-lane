@@ -477,6 +477,8 @@ export type Observation = {
   // Requests to the site's upload or parse endpoints that have finished (a
   // resume parse that answers seconds after the upload, and then rewrites the form).
   uploadRequests?: number;
+  // Its site config's slowResumeParse: wait for a late parse after the upload.
+  slowResumeParse?: boolean;
   // The documents its site config's upload steps can put on this page
   // ("resume", "coverLetter"), file box or not (configUploadSlots).
   uploadSlots?: string[];
@@ -489,7 +491,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-19-revalidate-after-trusted-type";
+export const CONTENT_VERSION = "2026-11-19-slow-parse-only-where-configured";
 export type Proposal = {
   fieldId: string;
   value: string;

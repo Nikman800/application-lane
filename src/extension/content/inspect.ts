@@ -5,7 +5,7 @@ import { adapterFor } from "../adapters";
 import { writable, controlVisible, isToggleChoice, sectionFor, placeholderOption, isRequired, fieldWordLimit, replacesForm, groupQuestion, checkboxEntryTitle, hiddenAnswerQuestion, validationState, rendered } from "../semantics";
 import { radioGroup, lockKey, closestAcrossShadows, searchWithoutPick, manualSigningControl, clip, drawnOptions, picksOf, inEntryEditor, readableText, nextButton } from "../content-dom";
 import { configEngineEnabled } from "../../engine/mode";
-import { resumeSlotOpen, configUploadSlots, addableCollections } from "../../engine/runtime";
+import { resumeSlotOpen, slowResumeParse, configUploadSlots, addableCollections } from "../../engine/runtime";
 import { cs } from "./state";
 import { adoptSiteValue, besideLastWrite, controls, hasEditLock, lockReason, valueOf, writePending } from "./controls";
 import { INVISIBLE_CAPTCHA, calendarBox, dateFormatHint, legacyReactSelect, pickerBox } from "./core";
@@ -433,6 +433,7 @@ export function inspect(): Observation {
       .map((label) => /cover\s*letter/i.test(label.textContent || "") ? "cover" : /\b(resume|cv)\b/i.test(label.textContent || "") ? "resume" : "")
       .filter(Boolean))]),
     ...(configEngineEnabled && resumeSlotOpen() ? { resumeSlotOpen: true } : {}),
+    ...(configEngineEnabled && slowResumeParse() ? { slowResumeParse: true } : {}),
     uploadRequests: performance.getEntriesByType("resource").filter((entry) =>
       /^(xmlhttprequest|fetch)$/.test((entry as PerformanceResourceTiming).initiatorType) && /upload|parse/i.test(entry.name.split("?")[0])).length,
     ...((slots) => (slots.length ? { uploadSlots: slots } : {}))(configEngineEnabled ? configUploadSlots() : []),

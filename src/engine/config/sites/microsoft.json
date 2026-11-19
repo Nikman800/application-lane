@@ -8,6 +8,7 @@
   "pathsExcluded": [],
   "containerPath": [],
   "containerRequired": false,
+  "slowResumeParse": true,
   "defaultMethod": "default",
   "submitButtonPaths": [],
   "submittedSuccessPaths": [],

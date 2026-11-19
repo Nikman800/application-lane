@@ -197,6 +197,10 @@ export const siteConfigSchema = z
     // is uploaded first and alone, and the form is filled once the site has
     // settled, so the profile's values are written last.
     resumeFirstPaths: z.array(z.string()).optional(),
+    // A site whose resume parse answers many seconds after the upload and then
+    // blanks typed answers: the fill watches the form for up to 20 seconds
+    // after the upload when no parse request has answered yet.
+    slowResumeParse: z.boolean().optional(),
     submitButtonPaths: z.array(z.string()),
     submittedSuccessPaths: z.array(z.string()),
     trackedInputSelectors: z.array(trackedInputSelectorSchema),
