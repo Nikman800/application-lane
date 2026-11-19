@@ -4,11 +4,14 @@ import { extensionBuild, describeBuild } from "../../shared/build";
 import { DraftingSettings } from "../drafting-settings";
 import { storeBuild } from "../../shared/store-build";
 import { Appearance } from "../appearance";
-import { emptyProfile } from "../../shared/model";
+import { emptyProfile, withPermissions, type SignaturePolicy } from "../../shared/model";
 import { Icon, api, command, type PanelState } from "../panel";
 
 export function SettingsPage({ panel }: { panel: PanelState }) {
-  const { action, busy, connected, deleteConfirm, deleteDocuments, loadBackend, pairToken, queue, setDeleteConfirm, setDeleteDocuments, setIssues, setPairToken, setProfile, setQueue, waitingBuild } = panel;
+  const { action, busy, connected, deleteConfirm, deleteDocuments, loadBackend, pairToken, profile, queue, setDeleteConfirm, setDeleteDocuments, setIssues, setPairToken, setProfile, setQueue, waitingBuild } = panel;
+  // What a fill may agree to and sign: Settings once set here, until then
+  // what an older version saved on Your profile (withPermissions).
+  const permissions = withPermissions(profile, queue.settings);
   return (
     <>
       <div className="eyebrow">LOCAL BY DESIGN</div>
@@ -200,6 +203,35 @@ export function SettingsPage({ panel }: { panel: PanelState }) {
               <option value="manual">Leave for me unless my profile answers them (they are listed)</option>
               <option value="model">Let AI answer them like any other question</option>
             </select>
+          </label>
+          <label>
+            Terms and consent boxes
+            <select
+              value={permissions.acknowledgeTerms ? "on" : "off"}
+              onChange={(e) =>
+                setQueue((q) => ({ ...q, settings: { ...q.settings, agreeToTerms: e.target.value === "on" ? "on" : "off" } }))
+              }
+            >
+              <option value="off">Leave them for me</option>
+              <option value="on">Tick boxes agreeing to terms, a privacy notice or a certification</option>
+            </select>
+          </label>
+          <label>
+            Signatures
+            <select
+              value={permissions.signatures}
+              onChange={(e) =>
+                setQueue((q) => ({ ...q, settings: { ...q.settings, signatures: e.target.value as SignaturePolicy } }))
+              }
+            >
+              <option value="never">Leave every signature for me</option>
+              <option value="self-id">Sign self-identification forms (disability, veteran)</option>
+              <option value="all">Sign every form, including attestations</option>
+            </select>
+            <small className="help">
+              Signing types your full name into a signature box and dates it today. It is a legal
+              signature, made for you: check the form before you submit it.
+            </small>
           </label>
           <label>
             Pre-filled answers

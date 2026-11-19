@@ -1,6 +1,6 @@
 // Part of the extension's service worker (background.ts): scheduling fills, and starting, resuming and tracking applications.
 // Split out of background.ts as it was; see background.ts for how it starts.
-import { type Application, type Observation, activeStatuses, type GenerationJob, type Profile, forRole } from "../../shared/model";
+import { type Application, type Observation, activeStatuses, type GenerationJob, type Profile, forRole, withPermissions } from "../../shared/model";
 import { transitionTiming } from "../../shared/timing";
 import { releaseTrustedInput } from "../trusted-input";
 import { locationCountry, type Geography } from "../../shared/geography";
@@ -196,7 +196,8 @@ export function forApplication(profile: Profile, app: Application): Profile {
   // Its tabs' titles too: Tesla's application was saved as "Tesla
   // homepageCareers…" while its tab said "Internship, Software Engineer…".
   const named = [app.posting?.title, app.title, ...app.tabs.map((tab) => tab.title)].filter(Boolean).join(" | ");
-  return { ...forRole(profile, named), applyingTo: { ...(country ? { country } : {}), ...(app.company ? { company: app.company } : {}), ...(title ? { title } : {}) } };
+  // What the fill may agree to and sign comes from Settings.
+  return { ...withPermissions(forRole(profile, named), bg.state.settings), applyingTo: { ...(country ? { country } : {}), ...(app.company ? { company: app.company } : {}), ...(title ? { title } : {}) } };
 }
 // An automatic carry-on (after the site filled the form from the resume, or
 // after the posting's Apply button) that could not start: said on the card,

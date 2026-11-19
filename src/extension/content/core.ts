@@ -131,7 +131,7 @@ export type Command = {
   fieldIds?: string[];
   listButtonsOnly?: boolean;
   profile?: Profile;
-  // What the applicant lets a fill sign (Profile.signatures), on commands
+  // What the applicant lets a fill sign (Settings → Signatures, through the fill's profile), on commands
   // that write proposals without the whole profile.
   signatures?: SignaturePolicy;
   // PRESS_STEP: which control, and its label as the applicant confirmed it.

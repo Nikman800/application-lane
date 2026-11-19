@@ -65,7 +65,7 @@ You can fill several applications at the same time; each one runs in its own lan
 ## What it does not do
 
 - It **never submits** an application and **never clicks Next, Continue or Submit** on its own. Every click a fill makes passes one check that refuses those buttons; they are pressed only when you ask, one press per request.
-- It does not sign, initial or tick consent boxes unless you allow it: **Your profile → Signatures** can sign self-identification forms (disability, veteran) or every form, and a separate box allows ticking terms and privacy acknowledgements. Both are off until you turn them on.
+- It does not sign, initial or tick consent boxes unless you allow it: **Settings → Processing → Signatures** can sign self-identification forms (disability, veteran) or every form, and **Terms and consent boxes** allows ticking terms and privacy acknowledgements. Both are off until you turn them on.
 - It does not solve CAPTCHAs or log in for you.
 - It does not invent facts: résumé bullets and saved answers use your own confirmed wording, and drafted text (cover letters and written answers) is checked against your profile.
 - It only reads and drafts on LinkedIn and Indeed; it does not fill or scrape there.

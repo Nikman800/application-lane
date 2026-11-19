@@ -1,5 +1,5 @@
 // Fields that sign for the applicant, and whether their settings let a fill
-// write them (Your profile → Signatures; Profile.signatures).
+// write them (Settings → Signatures; withPermissions in shared/model.ts).
 //
 // A typed name in a signature box is a legal signature, and its date says
 // when it was signed. Two kinds are told apart:
@@ -67,7 +67,7 @@ function hasSigningDate(container: Element, except: Element): boolean {
 export function signatureField(element: Element): SignatureKind | undefined {
   // A signature is typed: a box or a date. A Yes/No about something signed
   // ("Have you signed a non-compete?") or a consent box is not one (consent
-  // boxes are Profile.acknowledgeTerms).
+  // boxes are Settings → Terms and consent boxes).
   if (element.tagName.toLowerCase() !== "input") return undefined;
   if (/^(checkbox|radio|file|hidden|button|submit|image|reset|password|range|color)$/i.test((element as HTMLInputElement).type)) return undefined;
   const own = identity(element);
@@ -90,6 +90,6 @@ export function signingAllowed(policy: SignaturePolicy | undefined, kind: Signat
 
 export function signatureLeftReason(kind: SignatureKind): string {
   return kind === "self-id"
-    ? "Signing a self-identification form is left for you (Your profile → Signatures)."
-    : "Signatures and attestations are left for you (Your profile → Signatures).";
+    ? "Signing a self-identification form is left for you (Settings → Signatures)."
+    : "Signatures and attestations are left for you (Settings → Signatures).";
 }

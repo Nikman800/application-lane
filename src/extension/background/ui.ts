@@ -1,6 +1,6 @@
 // Part of the extension's service worker (background.ts): messages from the side panel and the dashboard.
 // Split out of background.ts as it was; see background.ts for how it starts.
-import { BACKEND, type QueueState, type Profile, activeStatuses } from "../../shared/model";
+import { BACKEND, type QueueState, type Profile, type SignaturePolicy, activeStatuses } from "../../shared/model";
 import { capturing, startCapture } from "../network-capture";
 import { trustedInputTabs, releaseTrustedInput } from "../trusted-input";
 import { bg } from "./state";
@@ -191,6 +191,8 @@ export async function uiMessage(message: any) {
       throw new Error("Invalid concurrency settings.");
     const nextButton = ["on", "off"].includes(message.settings.nextButton) ? (message.settings.nextButton as "on" | "off") : bg.state.settings.nextButton;
     const submitButton = ["on", "off"].includes(message.settings.submitButton) ? (message.settings.submitButton as "on" | "off") : bg.state.settings.submitButton;
+    const agreeToTerms = ["on", "off"].includes(message.settings.agreeToTerms) ? (message.settings.agreeToTerms as "on" | "off") : bg.state.settings.agreeToTerms;
+    const signatures = ["never", "self-id", "all"].includes(message.settings.signatures) ? (message.settings.signatures as SignaturePolicy) : bg.state.settings.signatures;
     await api("/v1/settings", "PUT", { generationConcurrency, checking });
     bg.state.settings = {
       concurrency, generationConcurrency, checking, prefilled, networkCapture,
@@ -198,6 +200,8 @@ export async function uiMessage(message: any) {
       ...(legalQuestions ? { legalQuestions } : {}),
       ...(nextButton ? { nextButton } : {}),
       ...(submitButton ? { submitButton } : {}),
+      ...(agreeToTerms ? { agreeToTerms } : {}),
+      ...(signatures ? { signatures } : {}),
     };
     await persist();
     schedule();

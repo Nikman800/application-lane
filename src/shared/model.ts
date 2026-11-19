@@ -339,10 +339,16 @@ const profileObject = z.object({
   // Which migrations (migrateProfile) this profile has had.
   schemaVersion: z.number().int().optional(),
   legal: legalDetailsSchema,
+  // What a fill may agree to and sign for the applicant. These are settings
+  // (Settings → Processing; Settings.agreeToTerms and .signatures), not
+  // facts about the applicant: a fill's profile carries them from there
+  // (withPermissions, below). What is saved here is only what an older
+  // version set on Your profile, and counts until Settings sets them.
+  // acknowledgeTerms: tick boxes agreeing to terms, a privacy notice or a
+  // certification. signatures (src/engine/page/signatures.ts): nothing, the
+  // name and date on voluntary self-identification forms, or every
+  // signature and attestation. Left to the applicant by default.
   acknowledgeTerms: z.boolean().default(false),
-  // What a fill may sign for the applicant (src/engine/page/signatures.ts):
-  // nothing, the name and date on voluntary self-identification forms, or
-  // every signature and attestation. Left to the applicant by default.
   signatures: signaturePolicySchema.default("never"),
   facts: z.array(factSchema).max(300),
   work: z.array(historySchema).max(30).default([]),
@@ -922,6 +928,11 @@ export type Settings = {
   // never answered by the model, listed for the applicant; model: answered
   // like any other question.
   legalQuestions?: "manual" | "model";
+  // What a fill may agree to and sign for the applicant (Profile's comment
+  // above withPermissions). Unset: what the profile saved, from before they
+  // were settings.
+  agreeToTerms?: "on" | "off";
+  signatures?: SignaturePolicy;
   // The step's own buttons, pressed only when the applicant asks from the
   // panel or the command line (step-controls.ts); a fill never presses them.
   // nextButton: Next step (default on). submitButton: Submit, after a
@@ -929,6 +940,16 @@ export type Settings = {
   nextButton?: "on" | "off";
   submitButton?: "on" | "off";
 };
+// The profile a fill works from, with what the applicant lets it agree to
+// and sign taken from Settings; a setting not yet made keeps what the
+// profile saved before these moved there.
+export function withPermissions(profile: Profile, settings: Pick<Settings, "agreeToTerms" | "signatures">): Profile {
+  return {
+    ...profile,
+    acknowledgeTerms: settings.agreeToTerms ? settings.agreeToTerms === "on" : Boolean(profile.acknowledgeTerms),
+    signatures: settings.signatures ?? profile.signatures ?? "never",
+  };
+}
 // What the applicant is shown before pressing a step's Next or Submit
 // (STEP_CHECK): the control each would press, or why none, and what on the
 // step is unfinished or worth a look.

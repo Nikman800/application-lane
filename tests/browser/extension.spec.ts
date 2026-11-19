@@ -3400,6 +3400,29 @@ test("in a window without focus, a Workday field the site already focused is sav
     .toBe(`${profile.firstName} ${profile.lastName}`);
 });
 
+// Signing and agreeing are settings (Settings → Processing), not profile
+// facts: a fill follows them over what an older version saved on the profile.
+test("a fill signs and agrees as Settings say, whatever the profile saved before", async () => {
+  const workdayOrigin = atsOrigins[0];
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, signatures: "never", acknowledgeTerms: false } });
+  await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, signatures: "self-id", agreeToTerms: "on" } });
+  await context.route(`${workdayOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main data-automation-id="applicationPage">
+        <div data-automation-id="formField-name"><label for="selfIdentifiedDisabilityData--name">Name<abbr>*</abbr></label>
+          <input id="selfIdentifiedDisabilityData--name" type="text"></div>
+        <div data-automation-id="formField-acceptTermsAndAgreements"><label><input type="checkbox" id="terms" name="acceptTermsAndAgreements"> I have read and agree to the Terms and Conditions</label></div>
+      </main>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${workdayOrigin}/en-US/acme/job/settings-sign`);
+  await enqueue([page]);
+  await expect(page.locator("#selfIdentifiedDisabilityData--name")).toHaveValue(`${profile.firstName} ${profile.lastName}`, { timeout: 30_000 });
+  await expect(page.locator("#terms")).toBeChecked({ timeout: 30_000 });
+});
+
 test("a field the site rebuilds empty after a fill is filled again, not protected", async () => {
   await context.route(`${origin}/rebuilt-empty`, (route) =>
     route.fulfill({

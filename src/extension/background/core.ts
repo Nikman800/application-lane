@@ -143,7 +143,7 @@ export async function api(path: string, method = "GET", body?: unknown): Promise
 export const alive = (app: Application, operation: number) =>
   app.operation === operation &&
   !["paused", "cancelled", "failed"].includes(app.status);
-// What each application's fill may sign (Profile.signatures), as its last
+// What each application's fill may sign (Settings → Signatures), as its last
 // fill read the profile.
 export const signingPolicies = new Map<string, SignaturePolicy>();
 export async function frameCall(
