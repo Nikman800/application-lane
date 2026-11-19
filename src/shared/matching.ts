@@ -1401,6 +1401,12 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
     const names = wordings[answer];
     return names ? { value: names[0], choices: names } : undefined;
   }
+  // A gender combobox that lists its options only once opened: the answer and
+  // the other words for it ("Man" for Male, "Woman" for Female) are looked for.
+  if (demographic === "gender" && !field.options.length && /combobox|listbox/.test(field.kind)) {
+    const answer = canonicalAnswer("gender", profile.gender);
+    if (answer === "Male" || answer === "Female") return { value: answer, choices: choiceSynonyms[answer] };
+  }
   if (demographic && field.options.length) {
     const answer = canonicalAnswer(demographic, profile[demographic]);
     if (!answer) return;

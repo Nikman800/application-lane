@@ -2873,3 +2873,17 @@ test("an acknowledgement question drawn as one box per option ticks only the box
   assert.deepEqual(ticks(["Yes", "No"]), ["Yes", undefined]);
   assert.deepEqual(ticks(["Yes, I confirm the above", "No, I have remaining coursework that will make it difficult"]), ["Yes", undefined]);
 });
+
+test("a gender identity combobox listing Man and Woman takes Male and Female from the profile (report f9a26be6)", () => {
+  const options = ["Man", "Non-binary", "Woman", "I prefer to self-describe", "I don't wish to answer"];
+  const pick = (gender: string) =>
+    valueOf("How would you describe your gender identity?", { kind: "combobox", options }, profileSchema.parse({ ...rivera, gender }));
+  assert.equal(pick("Male"), "Man");
+  assert.equal(pick("Female"), "Woman");
+  // A react-select that lists its options only once opened: the answer carries
+  // the wordings to look for, and each is a whole option.
+  const closed = (gender: string) =>
+    proposals([field("How would you describe your gender identity?", { kind: "combobox", options: [] })], profileSchema.parse({ ...rivera, gender }))[0]?.choices;
+  assert.deepEqual(closed("Male"), ["Man"]);
+  assert.deepEqual(closed("Female"), ["Woman"]);
+});

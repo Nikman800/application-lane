@@ -84,6 +84,9 @@ export const choiceSynonyms: Record<string, string[]> = {
   Gay: ["Gay or lesbian"],
   Lesbian: ["Gay or lesbian"],
   Bisexual: ["Bi-Sexual", "Bi"],
+  // Whole options only: "Woman" is never a wording of Male.
+  Male: ["Man"],
+  Female: ["Woman"],
   Other: [
     "Not listed",
     "I identify as an orientation not listed",
