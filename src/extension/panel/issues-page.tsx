@@ -39,6 +39,7 @@ export function IssuesPage({ panel }: { panel: PanelState }) {
                     <strong>{fixerLabels[issue.fixer.status]}</strong>
                     {issue.fixer.commit ? ` (${issue.fixer.commit.slice(0, 7)})` : ""}
                     {issue.fixer.summary ? `: ${issue.fixer.summary}` : ""}
+                    {issue.fixer.cause && <span className="fixer-cause"> Cause: {issue.fixer.cause}</span>}
                     {issue.fixer.liveCheck && <span className="live-check"> Check on the live site: {issue.fixer.liveCheck}</span>}
                   </p>
                 )}

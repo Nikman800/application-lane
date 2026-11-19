@@ -1128,6 +1128,8 @@ export type FixerResult = {
   // partly-fixed: some of the note's problems were fixed and others could not be.
   status: "queued" | "working" | "fixed" | "needs-live-check" | "partly-fixed" | "not-a-bug" | "could-not-fix" | "failed";
   summary?: string;
+  // Why it broke, as the fixer found it (Repair.cause).
+  cause?: string;
   problems?: FixerProblem[];
   // What to try on the live site, when the fix could not be proven offline.
   liveCheck?: string;

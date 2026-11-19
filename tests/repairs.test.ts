@@ -11,6 +11,7 @@ import {
   SETTLE_MS,
   claim,
   defectId,
+  explain,
   fromFixingFlag,
   lapse,
   mayRetry,
@@ -96,7 +97,13 @@ test("a repair is needed, owned, and released only when every targeted defect is
   assert.equal(done.repair.verification?.capture, "c3");
   assert.equal(done.repair.regression, "pending");
   assert.equal(outcome(done.repair), "fixed");
-  assert.equal(published(done.repair, "1234567", 7000).regression, "published");
+  // Published only once the cause is on the record, which outlasts the note.
+  assert.throws(() => published(done.repair, "1234567", 7000), /No cause on the record/);
+  const explained = explain(done.repair, "  The City list loads its options only once opened,\n so the fill read it as empty. ", 6500);
+  assert.equal(explained.cause, "The City list loads its options only once opened, so the fill read it as empty.");
+  assert.throws(() => explain(done.repair, "   ", 6500), /Say why/);
+  assert.equal(release(explained, 6600, "the rest is theirs").cause, explained.cause, "a later note leaves the cause");
+  assert.equal(published(explained, "1234567", 7000).regression, "published");
   // Seen again later: back in the queue.
   const again = openRepair(done.repair, { applicationId: APP, evidence: { kind: "capture", id: "c4" }, ...found(city) }, 8000);
   assert.equal(section(again), "needs fixing");

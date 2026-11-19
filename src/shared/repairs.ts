@@ -72,6 +72,10 @@ export const repairSchema = z.object({
   // The regression test for the code repair, and the commit that published it.
   regression: z.enum(["none", "pending", "passed", "published"]),
   commit: z.string().max(80).optional(),
+  // Why it broke, in the fixer's words once found (lane cause): kept apart
+  // from the note, which each step of the work overwrites, so the reason
+  // stays on the record after the fix. A repair is published only with one.
+  cause: z.string().max(800).optional(),
   note: z.string().max(500).optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
@@ -262,7 +266,17 @@ export function release(repair: Repair, now: number, why: string): Repair {
   return { ...repair, state: "released", owner: undefined, note: why.slice(0, 500), updatedAt: now };
 }
 
+// The cause, as the fixer found it from the evidence.
+export function explain(repair: Repair, cause: string, now: number): Repair {
+  const text = cause.replace(/\s+/g, " ").trim();
+  if (!text) throw new Error("Say why it broke.");
+  return { ...repair, cause: text.slice(0, 800), updatedAt: now };
+}
+
+// Published only with its cause on the record: a fix pushed without one
+// leaves nobody able to say later why the application broke.
 export function published(repair: Repair, commit: string, now: number): Repair {
+  if (!repair.cause) throw new Error("No cause on the record: say why it broke first (lane cause <app> \"<why>\").");
   return { ...repair, regression: "published", commit, updatedAt: now };
 }
 

@@ -93,7 +93,8 @@ const repairLine = (app: QueueSummaryItem) => {
   const repair = repairs[app.id];
   if (!repair) return "";
   const open = repair.defects.filter((defect) => defect.status === "open");
-  return repair.nextAction || open.map((defect) => defect.field || defect.detail).slice(0, 3).join("; ").slice(0, 160);
+  const doing = repair.nextAction || open.map((defect) => defect.field || defect.detail).slice(0, 3).join("; ").slice(0, 160);
+  return [doing, repair.cause && `cause: ${repair.cause.slice(0, 200)}`].filter(Boolean).join("\n    ");
 };
 
 const readRepairs = async () => {
@@ -695,6 +696,7 @@ const commands: Record<string, () => Promise<unknown>> = {
   check: () => repairCommands(repairContext()).check(),
   fixed: () => repairCommands(repairContext()).fixed(),
   release: () => repairCommands(repairContext()).release(),
+  cause: () => repairCommands(repairContext()).cause(),
   repairs: () => repairCommands(repairContext()).list(),
   published: () => repairCommands(repairContext()).publish(),
   search,
@@ -723,6 +725,7 @@ if (!run) {
   check <application> [--confirm <n>]  check the settled page; releases it once every defect is gone
   fixed <application> the same check
   release <application> "<why>"  back to the applicant with defects open, saying why
+  cause <application> "<why>"  why it broke, once found; kept on the record, needed before published
   repairs [--all] [--json]  repair records; published <commit> marks a pushed batch
   search [options]    find openings to apply for (see below); search add 1 2 queues them
   ui                  a full-screen view: tabs by stage, f fill, n next, S submit, s switch, x abandon, a add links, a find-jobs tab

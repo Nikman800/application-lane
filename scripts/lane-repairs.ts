@@ -20,6 +20,10 @@
 //   lane release <app> "<why>"
 //                         back to the applicant with defects still open
 //                         (theirs to do, or blocked), saying why
+//   lane cause <app> "<why>"
+//                         why it broke, once found: kept on the record (the
+//                         note is overwritten as work goes on), shown with it,
+//                         and required before the repair is published
 //   lane repairs [--json] every record not yet published
 //   lane published <commit>
 //                         the batch is pushed: its repairs' regressions are
@@ -33,6 +37,7 @@ import {
   SETTLE_MS,
   claim,
   defectId,
+  explain,
   heartbeat,
   mayRetry,
   openRepair,
@@ -236,6 +241,16 @@ export function repairCommands(ctx: RepairContext) {
     print(`${ctx.name(app)}: back with the applicant; ${repair.defects.filter((defect) => defect.status === "open").length} defect(s) stay open on the record.`);
   }
 
+  // lane cause <app> "<why>": why it broke, found from the evidence.
+  async function cause() {
+    const app = await target();
+    const repair = (await all())[app.id];
+    if (!repair) throw new Error(`${ctx.name(app)} has no repair. Open one first (lane repair or lane fixing).`);
+    const why = positional(ctx.words).slice(1).join(" ");
+    await save(explain(repair, why, now()));
+    print(`${ctx.name(app)}: cause recorded.`);
+  }
+
   async function show(everything: boolean) {
     const repairs = Object.values(await all()).filter((repair) => everything || repair.state !== "released" || repair.regression === "pending");
     if (ctx.json) return print(JSON.stringify(repairs, null, 2));
@@ -248,6 +263,7 @@ export function repairCommands(ctx: RepairContext) {
     for (const repair of repairs.sort((a, b) => b.updatedAt - a.updatedAt)) {
       const where = section(repair) || "released";
       print(`${label(repair.applicationId)}  ${where}, ${outcome(repair)}${repair.owner ? `, ${repair.owner.name}` : ""}${repair.regression !== "none" ? `, regression ${repair.regression}` : ""}`);
+      if (repair.cause) print(`   cause: ${repair.cause}`);
       if (repair.nextAction) print(`   next: ${repair.nextAction}`);
       if (repair.note) print(`   ${repair.note}`);
       list(repair);
@@ -260,14 +276,28 @@ export function repairCommands(ctx: RepairContext) {
     if (!commit) throw new Error("Give the commit that was pushed.");
     const repairs = await all();
     let count = 0;
+    const unexplained: string[] = [];
     for (const repair of Object.values(repairs)) {
       if (repair.regression !== "pending" && repair.regression !== "passed") continue;
+      // The rest of the batch is published; these wait for their cause.
+      if (!repair.cause) {
+        unexplained.push(repair.applicationId);
+        continue;
+      }
       const done = published(repair, commit, now());
       await save(done);
       count++;
       for (const evidence of done.evidence.filter((item) => item.kind === "report")) await writeRecord(evidence.id, done, commit);
     }
     print(`${count} repair${count === 1 ? "" : "s"} marked published in ${commit}.`);
+    if (unexplained.length) {
+      const queue = await ctx.snapshot().catch(() => undefined);
+      const names = unexplained.map((id) => {
+        const app = queue?.applications.find((candidate) => candidate.id === id);
+        return app ? `[${ctx.short(app)}] ${ctx.name(app)}` : `[${id.slice(0, 6)}]`;
+      });
+      throw new Error(`Not marked published, no cause on the record: ${names.join("; ")}. Run lane cause <app> "<why>" for each, then lane published ${commit} again.`);
+    }
   }
   // .local/fixer/<report>.json, its status taken from the record: "fixed"
   // only when it was seen working live with nothing open.
@@ -279,8 +309,8 @@ export function repairCommands(ctx: RepairContext) {
     const open = repair.defects.filter((defect) => defect.status === "open");
     const status = outcome(repair);
     const summary = `${status === "fixed" ? "Confirmed live" : status === "needs-live-check" ? "Not yet confirmed live" : status === "partial" ? "Partly confirmed live" : "Not confirmed live"}: ${repair.defects.filter((defect) => defect.status === "resolved").map(describe).join("; ") || "nothing resolved yet"}.`;
-    await writeFile(file, JSON.stringify({ status, summary: previous.summary && status === "fixed" ? previous.summary : summary, problems: open.map(describe), commit, startedAt: previous.startedAt || repair.createdAt, finishedAt: now() }, null, 2));
+    await writeFile(file, JSON.stringify({ status, summary: previous.summary && status === "fixed" ? previous.summary : summary, ...(repair.cause ? { cause: repair.cause } : {}), problems: open.map(describe), commit, startedAt: previous.startedAt || repair.createdAt, finishedAt: now() }, null, 2));
   }
 
-  return { open, own, retry, check, fixed: check, release: giveBack, list: () => show(ctx.words.includes("--all")), publish };
+  return { open, own, retry, check, fixed: check, release: giveBack, cause, list: () => show(ctx.words.includes("--all")), publish };
 }
