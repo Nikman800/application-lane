@@ -7330,6 +7330,19 @@ test("Lever's location is picked when its search answers only after several seco
   expect({ box: await page.locator("#location-input").inputValue(), picked }, timeline.join("\n")).toMatchObject({ box: `${profile.city}, AZ, USA`, picked: JSON.stringify({ name: `${profile.city}, AZ, USA`, id: "first" }) });
 });
 
+test("Lever's location is picked when its search answers only after sixteen seconds", async () => {
+  await context.route("https://jobs.lever.co/**", (route) => route.fulfill({ contentType: "text/html", body: leverLocationPage.replace("}, 250);", "}, 16000);") }));
+  const page = await context.newPage();
+  await page.goto("https://jobs.lever.co/acme/00000000-0000-4000-8000-000000000012/apply");
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 90000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.waitForTimeout(1500);
+  const timeline = await page.evaluate(() => (window as any).timeline);
+  expect({ box: await page.locator("#location-input").inputValue(), picked: await page.locator("#selected-location").inputValue() }, timeline.join("\n")).toMatchObject({ box: `${profile.city}, AZ, USA`, picked: JSON.stringify({ name: `${profile.city}, AZ, USA`, id: "first" }) });
+  expect(timeline.filter((line: string) => / input box=/.test(line)).length, timeline.join("\n")).toBeLessThanOrEqual(3);
+});
+
 // A Lever multiple-select question draws one checkbox per option. The
 // acknowledgement rule ticked every box naming "I confirm" (report 55bf383a):
 // the "No" box and "No, I have remaining coursework…" were ticked beside Yes.
@@ -7367,6 +7380,23 @@ test("a Lever multiple-select question worded in sentences has only the confirmi
   await expect(page.locator(`input[value="${yes}"]`)).toBeChecked({ timeout: 30000 });
   await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
   await page.waitForTimeout(1500);
+  await expect(page.locator(`input[value="${no}"]`)).not.toBeChecked();
+});
+
+test("a Lever question of two sentence boxes with the Yes box already ticked leaves the No box clear on a refill", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, acknowledgeTerms: true, answers: [{ question: "Are you available to work full time?", answer: "Yes" }] } });
+  const question = "I confirm that I will have fully completed my degree requirements and available to begin full-time work, which may include travel, by January 2027?";
+  const yes = "Yes, I confirm the above";
+  const no = "No, I have remaining coursework that will make it difficult";
+  const html = leverConfirmBoxes(question, [yes, no]).replace(`value="${yes}"`, `value="${yes}" checked`);
+  await context.route("https://jobs.lever.co/**", (route) => route.fulfill({ contentType: "text/html", body: html }));
+  const page = await context.newPage();
+  await page.goto("https://jobs.lever.co/acme/00000000-0000-4000-8000-000000000015/apply");
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.waitForTimeout(1500);
+  await expect(page.locator(`input[value="${yes}"]`)).toBeChecked();
   await expect(page.locator(`input[value="${no}"]`)).not.toBeChecked();
 });
 
@@ -19282,6 +19312,30 @@ test("a resume uploader that rewrites the form gets the resume first, once", asy
     .poll(async () => (await state()).applications[0].status, { timeout: 25000 })
     .toMatch(/awaiting-user|ready/);
   expect(await page.evaluate(() => (window as any).uploads)).toBe(1);
+});
+
+test("the resume-first ending still lists a required question left empty", async () => {
+  await context.route(`${origin}/resume-first-needs`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Candidate Profile</title><form onsubmit="return false">
+        <div id="resume-row"><h3>Resume</h3>
+          <p>Provide your resume below to pre-fill your profile. Existing data in the form will be replaced.</p>
+          <label>Please upload your resume<input type="file" name="Resume_File" accept=".pdf,.docx"></label>
+        </div>
+        <label>First name<input name="firstName"></label>
+        <label>What is the Country of your birth?<input name="birthCountry" required aria-required="true"></label>
+      </form>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/resume-first-needs`);
+  await enqueue([page]);
+  await expect
+    .poll(async () => ((await state()).applications[0].missing || []).join("\n"), { timeout: 40000 })
+    .toMatch(/Resume uploaded first[\s\S]*Required: What is the Country of your birth\?/);
+  const missing = (await state()).applications[0].missing || [];
+  expect(missing.filter((line: string) => /Country of your birth/.test(line))).toHaveLength(1);
 });
 
 // Microsoft's careers form: an uploaded résumé is taken into

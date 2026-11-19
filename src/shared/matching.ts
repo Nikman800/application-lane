@@ -721,6 +721,15 @@ export function profileAnswer(
     const tie = sanctionedTie(profile);
     if (tie !== undefined) return { value: tie ? "Yes" : "No" };
   }
+  // One box of a question's options that begins with Yes or No ("Yes, I
+  // confirm the above", "No, I have remaining coursework"): the standing
+  // answer to the question picks the box that says it. Read on the box's
+  // label, which carries the whole question, the answer "Yes" to "available
+  // to begin full-time work" ticked the No box too.
+  if (field.kind === "checkbox" && field.question && /^(yes|no)\b/.test(ownOption)) {
+    const asked = standingAnswer({ ...field, kind: "radio", label: field.question, question: undefined, options: ["Yes", "No"] }, profile);
+    return asked && /^(yes|no)$/i.test(asked.value) ? { value: ownOption.startsWith(normalize(asked.value)) ? "Yes" : "No" } : undefined;
+  }
   const standing = standingAnswer(field, profile);
   if (standing) return standing;
   // Inside one row of an education section, a question is about that row's

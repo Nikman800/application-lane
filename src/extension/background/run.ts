@@ -777,7 +777,18 @@ export async function run(app: Application, operation: number) {
     if ((await fillByConfig({ app, configResumeFirst, fieldKinds, fileKind, frame, issues, job, operation, profile, resumeFirst })) === "stop") return;
     // The site is now parsing the resume and may reload; nothing else here
     // is worth reading until it settles.
-    if (resumeFirst) continue;
+    if (resumeFirst) {
+      // Not read again, but what was left empty is still the applicant's to
+      // know: the resume slot itself is filled by now, the rest is listed as
+      // a normal ending lists it. The next fill step rebuilds this list.
+      const left = emptyFields(frame.observation.fields).filter((f) => f.kind !== "file");
+      issues.push(
+        ...left.filter((f) => f.required).map((f) => `Required: ${f.label}`),
+        ...left.filter((f) => !f.required && f.protected).map((f) => `Protected: ${f.label} (${f.protectedReason || "left alone"})`),
+        ...left.filter((f) => !f.required && !f.protected).map((f) => `Optional unanswered: ${f.label}`),
+      );
+      continue;
+    }
     // Allow reactive validators and upload parsers to settle before inspecting.
     await new Promise((resolve) => setTimeout(resolve, 350));
     if (!alive(app, operation)) return;
@@ -939,7 +950,7 @@ export async function run(app: Application, operation: number) {
   const unresolved = resumeFirst
     ? [
         "Resume uploaded first: this site fills the form from it and may reload the page. When it settles, choose Fill this step to fill what it left empty.",
-        ...issues.filter((issue) => /upload|document|file|access/i.test(issue)),
+        ...new Set(issues.filter((issue) => /upload|document|file|access|^(?:Required|Protected|Optional unanswered):/i.test(issue))),
       ]
     : [...new Set(issues)];
   // Whole questions: a long one's ask comes last ("If you qualify, please
