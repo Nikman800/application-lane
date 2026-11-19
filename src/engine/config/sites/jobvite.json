@@ -12,7 +12,7 @@
   "trackedInputSelectors": [
     {
       "kind": "file",
-      "fieldPath": "//input[@id='file-input-0'][@type='file']",
+      "fieldPath": "//input[@id='file-input-0'][@type='file'][//*[@id='attachResume']//button[@jv-add-attachment]]",
       "label": "Resume",
       "requiredPath": "//*[@id='attachResume']//button[@aria-required='true']",
       "fillActions": [
@@ -22,7 +22,7 @@
     },
     {
       "kind": "file",
-      "fieldPath": "//input[@id='file-input-1'][@type='file']",
+      "fieldPath": "//input[@id='file-input-1'][@type='file'][//button[@jv-add-attachment][@attachment-label='Cover Letter']]",
       "label": "Cover Letter",
       "fillActions": [
         { "path": "//button[@jv-add-attachment][@attachment-label='Cover Letter']", "method": "click", "allowFailure": true },
@@ -32,14 +32,14 @@
   ],
   "inputSelectors": [
     ["resume", [{
-      "path": [".//input[@id='file-input-0'][@type='file']"],
+      "path": [".//input[@id='file-input-0'][@type='file'][//*[@id='attachResume']//button[@jv-add-attachment]]"],
       "actions": [
         { "path": "//*[@id='attachResume']//button[@jv-add-attachment]/i[contains(@class,'icon')]", "method": "click", "allowFailure": true },
         { "method": "uploadResume" }
       ]
     }]],
     ["coverLetter", [{
-      "path": [".//input[@id='file-input-1'][@type='file']"],
+      "path": [".//input[@id='file-input-1'][@type='file'][//button[@jv-add-attachment][@attachment-label='Cover Letter']]"],
       "actions": [
         { "path": "//button[@jv-add-attachment][@attachment-label='Cover Letter']", "method": "click", "allowFailure": true },
         { "method": "uploadCoverLetter" }

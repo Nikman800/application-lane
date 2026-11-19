@@ -7880,6 +7880,60 @@ test("a Jobvite form attaches the resume and cover letter through the menus its 
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
+// Jobvite keeps the attachment menus (and their file inputs) on later steps
+// that have no resume or cover letter button, such as the voluntary
+// self-identification step: the fill attached both documents there again,
+// and the panel showed "Answering: Cover Letter" on a page that asks for none.
+test("a Jobvite step without attachment buttons gets no documents through the attachment menus left on it", async () => {
+  await context.route(`${jobviteOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Analyst - Acme</title><style>.ng-hide { display: none !important; }</style></head><body>
+        <form onsubmit="return false"><div class="jv-form-field"><label for="jv-gender">Gender</label><select id="jv-gender" name="gender"><option value="">Select</option><option>Male</option><option>Female</option><option>I choose not to disclose</option></select></div>
+        <button type="submit">Next</button></form>
+        ${[0, 1].map((n) => `<div class="jv-add-attachment ng-hide" id="attachmentDropdown" role="dialog" aria-label="Attachment Options" aria-hidden="true" tabindex="-1" data-menu="${n}">
+          <div class="jv-add-attachment-item"><span class="jv-text-block jv-text-link" tabindex="0" role="button">Dropbox</span></div><hr>
+          <div class="jv-add-attachment-item"><label class="jv-text-block jv-text-link" for="file-input-${n}"><span tabindex="0" role="button">File</span></label><input id="file-input-${n}" type="file" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;"></div></div>`).join("")}
+        <script>
+          window.attached = [];
+          [0, 1].forEach((n) => document.getElementById("file-input-" + n).addEventListener("change", () => window.attached.push(n)));
+        </script></body></html>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${jobviteOrigin}/acme/job/oAbC123/apply`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect(await page.evaluate(() => (window as any).attached)).toEqual([]);
+});
+
+// Jobvite's self-identification step signs its veteran form and its
+// disability form each with "Your Name" and "Today's Date". The repeated
+// labels were held back as "another field has the same label", though the
+// name and the date are the same answer in both.
+test("a Your Name and Today's Date asked once per self-identification form are both filled", async () => {
+  const signed = (n: number) => `<div class="jv-form-field-input JVA_NAME"><label for="jv-field-n${n}" class="jv-form-field-label"> Your Name<span class="jv-required-label">*</span> </label><div class="jv-form-field-control"><input id="jv-field-n${n}" name="input-n${n}" type="text" aria-required="true" required="required"></div></div>
+    <div class="jv-form-field-input"><label for="jv-field-d${n}" class="jv-form-field-label"> Today's Date<span class="jv-required-label">*</span> </label><div class="jv-form-field-control"><input id="jv-field-d${n}" name="input-d${n}" type="date" aria-required="true" required="required"></div></div>`;
+  await context.route(`${jobviteOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Analyst - Acme</title></head><body><form onsubmit="return false">
+        <h3>Protected Veteran Status</h3>${signed(1)}
+        <h3>Voluntary Self-Identification of Disability</h3>${signed(2)}
+        <button type="submit">Next</button></form></body></html>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${jobviteOrigin}/acme/job/oAbC123/apply`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  for (const n of [1, 2]) {
+    await expect(page.locator(`#jv-field-n${n}`)).toHaveValue(/\S/, { timeout: 60000 });
+    await expect(page.locator(`#jv-field-d${n}`)).toHaveValue(/^\d{4}-\d{2}-\d{2}$/, { timeout: 60000 });
+  }
+});
+
 // Jobvite draws each choice of a Yes/No question as a label holding an icon
 // (<i role="radio">) and the real radio input, which the page keeps out of
 // sight. Each icon was read as a radio question of its own with no option
@@ -8320,6 +8374,23 @@ test("a page saying the resume was received, after the form, marks the applicati
   await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
   expect((await state()).applications[0].workflowStage).not.toBe("submitted");
   await page.goto(`${origin}/careers/applied`);
+  await expect.poll(async () => (await state()).applications[0].workflowStage, { timeout: 20000 }).toBe("submitted");
+});
+
+// Jobvite: submitting leads to /applyConfirmation, a page message
+// "Application Sent!" It was left as an application in progress.
+test("a Jobvite Application Sent page after the form marks the application submitted", async () => {
+  await context.route(`${origin}/acme/job/abc/apply`, (route) =>
+    route.fulfill({ contentType: "text/html; charset=utf-8", body: `<!doctype html><title>Apply</title><form onsubmit="return false"><label>Email<input name="email" type="email"></label><label>Phone<input name="phone"></label><button type="submit">Submit</button></form>` }));
+  await context.route(`${origin}/acme/job/abc/applyConfirmation`, (route) =>
+    route.fulfill({ contentType: "text/html; charset=utf-8", body: `<!doctype html><title>Acme Careers</title><section class="section"><article class="jv-page-body" role="main"><div class="jv-wrapper"><div class="jv-page-message"><i class="jv-page-message-icon jv-icon-success icon icon-check"></i><h2 class="jv-page-message-header">Application Sent!</h2><p>We will review your application and will contact you if it's a good match.</p></div></div></article></section>` }));
+  const page = await context.newPage();
+  await page.goto(`${origin}/acme/job/abc/apply`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect((await state()).applications[0].workflowStage).not.toBe("submitted");
+  await page.goto(`${origin}/acme/job/abc/applyConfirmation`);
   await expect.poll(async () => (await state()).applications[0].workflowStage, { timeout: 20000 }).toBe("submitted");
 });
 
@@ -10029,6 +10100,124 @@ test("Oracle's Add buttons are waited for across work and education while one en
   expect(saved.find((entry) => entry.startsWith("education"))).toContain("Example Polytechnic");
 });
 
+// An Oracle profile-item layout (not the timeline): one saved tile and one
+// entry form open for the first row. After a save the site keeps its Add
+// button disabled while it stores the draft; a click on it then does nothing,
+// and the added entry's form was waited for in vain, so the second degree was
+// never filled or saved.
+test("Oracle's profile-item Add button that stays disabled while the draft is stored is clicked once it is enabled, so the second degree is filled and saved", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2016-09", endDate: "2020-06", location: "", details: "" },
+        { organization: "Virginia Tech", title: "Master of Science", fieldOfStudy: "Data Analytics", startDate: "2020-09", endDate: "2022-06", location: "", details: "" },
+      ],
+      work: [],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Education</title><main>
+        <div class="apply-flow-section" data-section-number="2">
+          <div class="apply-flow-block__form-list" role="region" aria-label="Education " id="education"></div>
+        </div>
+      </main><script>
+        window.saved = [];
+        let tiles = 1;
+        let open = true;
+        let enabledAt = 0;
+        const block = document.getElementById('education');
+        const tile = '<article class="apply-flow-profile-item-tile"><div class="apply-flow-profile-item-tile__summary" data-profile-item-tile="true" role="group"><div class="apply-flow-profile-item-tile__summary-content"><div class="apply-flow-profile-item-tile__summary-title"><span></span></div></div></div></article>';
+        const render = () => {
+          const disabled = open || Date.now() < enabledAt;
+          block.innerHTML = '<div class="profile-item-container"><div class="standard-apply-flow-profile-item">'
+            + '<div class="profile-item-list' + (open ? ' profile-item-list--disabled' : '') + '" role="group">' + tile.repeat(tiles)
+            + '</div><div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile" id="profileItemsAddButton-1"' + (disabled ? ' disabled=""' : '') + '><span class="button__label">Add Education</span></button></div>'
+            + (open ? '<div class="profile-item-content"><div class="profile-item-content--form"><div class="input-row input-row--text"><label class="input-row__label" for="major-1"><span class="input-row__linebreak">Major</span></label><div class="input-row__control-container"><input class="input-row__control" id="major-1" name="major"></div></div>'
+              + '<div class="input-row input-row--text"><label class="input-row__label" for="school-1"><span class="input-row__linebreak">School</span></label><div class="input-row__control-container"><input class="input-row__control" id="school-1" name="educationalEstablishment"></div></div></div>'
+              + '<div class="profile-item-footer"><div class="app-dialog__buttons-bar"><button class="button app-dialog__footer-button cancel-btn"><span class="button__label">Cancel</span></button><button class="button app-dialog__footer-button save-btn"><span class="button__label">Add Education</span></button></div></div></div>' : '')
+            + '</div></div>';
+          block.querySelector('.profile-add-item button').addEventListener('click', () => { open = true; render(); });
+          block.querySelector('.save-btn')?.addEventListener('click', () => {
+            window.saved.push([...block.querySelectorAll('.profile-item-content input')].map((input) => input.value).join(' / '));
+            setTimeout(() => { open = false; tiles++; enabledAt = Date.now() + 3500; render(); setTimeout(() => { if (!open) render(); }, 3600); }, 400);
+          });
+        };
+        render();
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).saved.length), { timeout: 60000 }).toBe(2);
+  const saved: string[] = await page.evaluate(() => (window as any).saved);
+  expect(saved[0]).toContain("Penn State");
+  expect(saved[1]).toContain("Virginia Tech");
+});
+
+test("Oracle's profile-item entry form holding an in-progress degree stays unticked as Graduated after a full fill, whatever an earlier pass tagged inside it", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Virginia Tech", title: "Master of Science", fieldOfStudy: "Data Analytics", startDate: "2025-08", endDate: "2099-05", current: true, location: "", details: "" },
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2016-09", endDate: "2020-06", location: "", details: "" },
+      ],
+      work: [],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Education</title><main>
+        <div class="apply-flow-section" data-section-number="2">
+          <div class="apply-flow-block__form-list" role="region" aria-label="Education " id="education">
+            <div class="profile-item-container"><div class="standard-apply-flow-profile-item">
+              <div class="profile-item-list profile-item-list--disabled" role="group"><article class="apply-flow-profile-item-tile" id="tile-1" data-qa="profileItem106"><div class="apply-flow-profile-item-tile__summary" role="group"></div></article></div>
+              <div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile" data-qa="add106" disabled=""><span class="button__label">Add Education</span></button></div>
+              <div class="profile-item-content" data-lane-entry="education:0"><div class="profile-item-content--form" data-lane-entry="education:1">
+                <div class="input-row input-row--text"><label class="input-row__label" for="major-1"><span class="input-row__linebreak">Major</span></label><div class="input-row__control-container"><input class="input-row__control" id="major-1" name="major"></div></div>
+                <div class="input-row input-row--text"><label class="input-row__label" for="school-1"><span class="input-row__linebreak">School</span></label><div class="input-row__control-container"><input class="input-row__control" id="school-1" name="educationalEstablishment"></div></div>
+                <div class="input-row input-row--checkbox" aria-labelledby="graduatedFlag-63-label">
+                  <input type="checkbox" class="input-row__hidden-control" id="af-checkbox-graduatedFlag-63" aria-labelledby="graduatedFlag-63-label" checked>
+                  <div class="input-row__control-container"><label class="apply-flow-input-checkbox" for="af-checkbox-graduatedFlag-63"><span class="apply-flow-input-checkbox__button apply-flow-input-checkbox__button--checked" id="graduated-button"></span><span class="apply-flow-input-checkbox__label" id="graduatedFlag-63-label">Graduated</span></label></div>
+                </div>
+              </div>
+              <div class="profile-item-footer"><div class="app-dialog__buttons-bar"><button class="button app-dialog__footer-button save-btn"><span class="button__label">Add Education</span></button></div></div></div>
+            </div></div>
+          </div>
+        </div>
+      </main><script>
+        window.saved = [];
+        const box = document.getElementById('af-checkbox-graduatedFlag-63');
+        const drawn = document.getElementById('graduated-button');
+        box.addEventListener('change', () => drawn.classList.toggle('apply-flow-input-checkbox__button--checked', box.checked));
+        // The save is refused (the form stays open, its values kept).
+        document.querySelector('.save-btn').addEventListener('click', () => {
+          window.saved.push([...document.querySelectorAll('.profile-item-content input:not([type=checkbox])')].map((input) => input.value).join(' / '));
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).saved.length), { timeout: 60000 }).toBeGreaterThan(0);
+  // Left to settle: the page-wide fill runs after the row rule.
+  await page.waitForTimeout(25000);
+  expect(await page.evaluate(() => (window as any).saved[0])).toContain("Virginia Tech");
+  expect(await page.locator("#af-checkbox-graduatedFlag-63").isChecked()).toBe(false);
+});
+
 // Oracle's lists as its entry forms draw them: a cx-select box whose list of
 // gridcells opens on a click, or for School is filtered by keys typed.
 const oracleEntryLists = `
@@ -10344,6 +10533,114 @@ test("Oracle's timeline cards already showing a degree are not added again, only
   expect(await page.evaluate(() => (window as any).refused)).toBe(0);
 });
 
+
+test("Oracle's timeline card an earlier fill saved three times is deleted down to one through the Delete it shows on hover", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Acme University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" },
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+      ],
+      work: [],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Experience</title><main>
+        <div class="apply-flow-section" data-section-number="3">
+          <div class="apply-flow-block apply-flow-block--work-and-education-timeline">
+            <div class="apply-flow-block__form-list" role="region" aria-label="Work and Education History ">
+              <div class="timeline-container">
+                <div id="timeline-anchor" class="input-row__control-container work-and-education-timeline__actions-container">
+                  <div class="work-and-education-timeline__actions work-and-education-timeline__actions--pinned">
+                    <button id="timeline-add-experience-button" type="button" class="work-and-education-timeline-add-button timeline-work-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Experience</span></button>
+                    <button id="timeline-add-education-button" type="button" class="work-and-education-timeline-add-button timeline-education-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Education</span></button>
+                  </div>
+                </div>
+                <div id="items"><div class="beautiful-timeline"><div class="beautiful-timeline__column beautiful-timeline__column--right"><beautiful-timeline-item><div class="beautiful-timeline-item beautiful-timeline-item--level0 beautiful-timeline-item--educations__4 beautiful-timeline-item--color-4" tabindex="0" data-profile-item-tile="true" role="group"><div class="beautiful-timeline-item__content"><div class="beautiful-timeline-item__info"><span class="beautiful-timeline-item__title">Data Science</span><span class="beautiful-timeline-item__subtitle">Acme University</span><span class="oj-helper-hidden-accessible">From August 2025 to May 2027</span></div></div></div></beautiful-timeline-item><beautiful-timeline-item><div class="beautiful-timeline-item beautiful-timeline-item--level0 beautiful-timeline-item--educations__3 beautiful-timeline-item--color-4" tabindex="0" data-profile-item-tile="true" role="group"><div class="beautiful-timeline-item__content"><div class="beautiful-timeline-item__info"><span class="beautiful-timeline-item__title">Data Science</span><span class="beautiful-timeline-item__subtitle">Acme University</span><span class="oj-helper-hidden-accessible">From August 2025 to May 2027</span></div></div></div></beautiful-timeline-item><beautiful-timeline-item><div class="beautiful-timeline-item beautiful-timeline-item--level0 beautiful-timeline-item--educations__2 beautiful-timeline-item--color-4" tabindex="0" data-profile-item-tile="true" role="group"><div class="beautiful-timeline-item__content"><div class="beautiful-timeline-item__info"><span class="beautiful-timeline-item__title">Data Science</span><span class="beautiful-timeline-item__subtitle">Acme University</span><span class="oj-helper-hidden-accessible">From August 2025 to May 2027</span></div></div></div></beautiful-timeline-item><beautiful-timeline-item><div class="beautiful-timeline-item beautiful-timeline-item--level0 beautiful-timeline-item--educations__5 beautiful-timeline-item--color-4" tabindex="0" data-profile-item-tile="true" role="group"><div class="beautiful-timeline-item__content"><div class="beautiful-timeline-item__info"><span class="beautiful-timeline-item__title">Computer Science</span><span class="beautiful-timeline-item__subtitle">Penn State</span><span class="oj-helper-hidden-accessible">From September 2020 to June 2024</span></div></div></div></beautiful-timeline-item></div></div></div>
+                <div id="slot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main><div id="lists"></div><script>
+        ${oracleEntryLists}
+        window.saved = [];
+        window.refused = 0;
+        let n = 200;
+        const actions = document.getElementById('timeline-anchor');
+        const slot = document.getElementById('slot');
+        const forms = {
+          experience: () => text('Employer Name', 'employerName-' + n, 'employerName') + text('Job Title', 'jobTitle-' + n, 'jobTitle') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+          education: () => select('Degree', 'contentItemId-' + n, 'contentItemId') + select('Major', 'major-' + n, 'major') + select('School', 'educationalEstablishment-' + n, 'educationalEstablishment') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n),
+        };
+        // One form at a time: while one is open the actions bar is disabled.
+        const open = (kind) => {
+          if (actions.classList.contains('work-and-education-timeline__actions-container--disabled')) { window.refused++; return; }
+          n += 10;
+          actions.classList.add('work-and-education-timeline__actions-container--disabled');
+          const word = kind === 'education' ? 'Education' : 'Experience';
+          slot.innerHTML = '<div class="standard-apply-flow-timeline-form"><div class="timeline-form-content">' + forms[kind]() + '</div>'
+            + '<div class="timeline-form-footer"><div class="app-dialog__buttons-bar font-family-secondary text-color-primary">'
+            + '<button class="button app-dialog__footer-button cancel-btn"><span class="button__label">Cancel</span></button>'
+            + '<button class="button app-dialog__footer-button save-btn" data-qa="addTimelineItemDialogButton"><span class="button__label">Add ' + word + '</span></button></div></div></div>';
+          const form = slot.firstElementChild;
+          wireLists(form);
+          form.querySelector('.save-btn').addEventListener('click', () => {
+            const name = kind === 'education' ? picked(form, 'input[name="educationalEstablishment"]') : form.querySelector('input[name="employerName"]').value;
+            window.saved.push(kind + ': ' + name + ' | ' + entryDates(form));
+            setTimeout(() => {
+              slot.innerHTML = '';
+              document.getElementById('items').insertAdjacentHTML('beforeend', '<div class="timeline-item">' + name + '</div>');
+              actions.classList.remove('work-and-education-timeline__actions-container--disabled');
+            }, 400);
+          });
+        };
+        // The tile's actions are drawn only while the pointer is over it, a
+        // delete asks first, and the timeline is drawn again after it: every
+        // tile is a new element.
+        window.deleted = 0;
+        const hover = () => {
+          for (const tile of document.querySelectorAll('[data-profile-item-tile="true"]'))
+            tile.addEventListener('mouseover', () => {
+              if (tile.querySelector('.beautiful-timeline-item__delete-icon')) return;
+              tile.insertAdjacentHTML('beforeend', '<div class="beautiful-timeline-item__actions"><button type="button" class="beautiful-timeline-item__edit-icon" aria-label="Edit"></button><button type="button" class="beautiful-timeline-item__delete-icon" aria-label="Remove"></button></div>');
+              tile.querySelector('.beautiful-timeline-item__delete-icon').addEventListener('click', () => {
+                document.body.insertAdjacentHTML('beforeend', '<div role="dialog" id="ask"><p>Remove this item?</p><button>Cancel</button><button>Yes</button></div>');
+                document.querySelector('#ask button:last-child').addEventListener('click', () => {
+                  document.getElementById('ask').remove();
+                  setTimeout(() => {
+                    tile.closest('beautiful-timeline-item').remove();
+                    const column = document.querySelector('.beautiful-timeline__column');
+                    column.querySelectorAll('.beautiful-timeline-item__actions').forEach((actions) => actions.remove());
+                    column.innerHTML = column.innerHTML;
+                    window.deleted++;
+                    hover();
+                  }, 300);
+                });
+              });
+            });
+        };
+        hover();
+        document.getElementById('timeline-add-experience-button').addEventListener('click', () => open('experience'));
+        document.getElementById('timeline-add-education-button').addEventListener('click', () => open('education'));
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/3`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).deleted), { timeout: 90000 }).toBe(2);
+  await page.waitForTimeout(3000);
+  expect(await page.evaluate(() => (window as any).deleted)).toBe(2);
+  expect(await page.locator(".beautiful-timeline-item__title", { hasText: "Data Science" }).count()).toBe(1);
+  expect(await page.evaluate(() => (window as any).saved)).toEqual([]);
+});
 // (wingtip.fa.us2.oraclecloud.com): the timeline's
 // School list names the school with a note after it ("Pennsylvania State
 // University, University Park (Penn State)"). The rule pressed only an

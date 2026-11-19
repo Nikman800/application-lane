@@ -334,8 +334,15 @@ export function inspect(): Observation {
     `${lockKey(field)}:${field.kind}${field.kind === "checkbox" && field.question ? `:${normalize(field.question)}` : ""}`;
   const twins = new Map<string, number>();
   for (const field of fields) twins.set(twinKey(field), (twins.get(twinKey(field)) || 0) + 1);
+  // The applicant's name and today's date are one answer wherever they are
+  // asked: Jobvite's self-identification step signs its veteran and its
+  // disability form each with "Your Name" and "Today's Date", and both were
+  // held back.
+  const sameAnswer = (field: Field) =>
+    /^(text|date)$/.test(field.kind) &&
+    /^(your )?(full |legal )?name$|^(today s date|todays date|current date|date)$/.test(normalize(field.label));
   for (const field of fields)
-    if ((twins.get(twinKey(field)) || 0) > 1 && !positionedRadioGroups.has(field.id) && !sameList(field)) {
+    if ((twins.get(twinKey(field)) || 0) > 1 && !positionedRadioGroups.has(field.id) && !sameList(field) && !sameAnswer(field)) {
       field.protected = true;
       field.protectedReason ||= "another field has the same label";
     }

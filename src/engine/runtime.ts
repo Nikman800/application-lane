@@ -163,9 +163,10 @@ export function submittedOnPage(): boolean {
 // (background.ts): an employer's page around a framed form has no boxes of
 // its own, and its job text may thank applicants.
 // TikTok's: "Thanks for your interest in TikTok. We have received your
-// resume." on /resume/applied.
+// resume." on /resume/applied. Jobvite: "Application Sent!" on
+// /applyConfirmation.
 const confirmationWording =
-  /\b(your )?application (has been|was|is|has) (successfully |now )?(submitted|received|sent|been received)\b|\b(your )?application is in(?=\s*(?:[.!]|$))|\bthank you for (applying|your application|submitting)\b|\bapplication (submitted|received)\b|\byou(?: have|'ve) successfully applied\b|\bwe(?: have|'ve) received your (resume|application|submission)\b/i;
+  /\b(your )?application (has been|was|is|has) (successfully |now )?(submitted|received|sent|been received)\b|\b(your )?application is in(?=\s*(?:[.!]|$))|\bthank you for (applying|your application|submitting)\b|\bapplication (submitted|received|sent)\b|\byou(?: have|'ve) successfully applied\b|\bwe(?: have|'ve) received your (resume|application|submission)\b/i;
 export function confirmationInPlace(): boolean {
   const shown = (element: Element) =>
     (element as HTMLElement).getClientRects?.().length > 0 && !element.closest("[hidden],[aria-hidden='true']");

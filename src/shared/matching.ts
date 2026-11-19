@@ -1253,6 +1253,10 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
   // The disability form (CC-305) can ask only "Please check one of the boxes
   // below:"; then its options ask it, one having a disability and one not.
   const disabilityOptions = field.options.filter((option) => /\bdisabilit/i.test(option));
+  // So can the veteran form: Jobvite's "Choose One" whose options are "I
+  // identify as one or more of the classifications of protected veteran…" and
+  // "I am not a protected veteran".
+  const veteranOptions = field.options.filter((option) => /\bveterans?\b/i.test(option));
   const demographic =
     (
       [
@@ -1273,7 +1277,11 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
       disabilityOptions.some((option) => readOption("disabilityStatus", option) === answer),
     )
       ? "disabilityStatus"
-      : undefined);
+      : (["Yes", "No"].every((answer) =>
+          veteranOptions.some((option) => readOption("veteranStatus", option) === answer),
+        )
+        ? "veteranStatus"
+        : undefined));
   // A definition after a group's name ("Asian … A person having origins in …
   // the Indian Subcontinent") names other groups' places: only the name is
   // read.

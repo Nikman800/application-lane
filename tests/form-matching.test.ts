@@ -966,6 +966,15 @@ test("demographic choices come from the profile, matched to each portal's option
   const pageUp = [disability[0], "No, I don't have a disability", "I don't wish to answer"];
   for (const [disabilityStatus, index] of [["Yes", 0], ["No", 1], ["Decline", 2]] as const)
     assert.equal(pick(boxes, pageUp, { ...applicant, disabilityStatus }), pageUp[index], disabilityStatus);
+  // Jobvite's veteran form asks only "Choose One"; its options say what is
+  // being asked.
+  const chooseOne = [
+    "I IDENTIFY AS ONE OR MORE OF THE CLASSIFICATIONS OF PROTECTED VETERAN LISTED ABOVE.",
+    "I AM NOT A PROTECTED VETERAN",
+    "DECLINE SELF-IDENTIFICATION",
+  ];
+  for (const [veteranStatus, index] of [["Yes", 0], ["No", 1], ["Decline", 2]] as const)
+    assert.equal(pick("Choose One", chooseOne, { ...applicant, veteranStatus }), chooseOne[index], veteranStatus);
   // One option mentioning a disability does not make the question about it.
   assert.equal(pick(boxes, ["I have a disability", "I am a veteran", "None of these"]), undefined);
   // Declines find each portal's own decline wording.

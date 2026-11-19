@@ -175,7 +175,11 @@ export const markEngineWrite = (...elements: (Element | undefined)[]) => {
   cs.lastWritten = elements.find(Boolean) || cs.lastWritten;
   for (const element of elements) {
     if (!element) continue;
-    for (const control of controlsWithin(element))
+    // A click on a label's drawn box (Oracle's Graduated: a span inside the
+    // label) changes the checkbox the label names: that change is ours, not
+    // the applicant's edit to lock.
+    const named = element.closest("label")?.control;
+    for (const control of [...controlsWithin(element), ...(named ? controlsWithin(named) : [])])
       for (const member of radioGroup(control)) {
         const record = nodeRecords.get(member as HTMLElement);
         if (record) record.writePendingAt = performance.now();

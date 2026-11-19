@@ -1689,7 +1689,15 @@ async function removeDamagedTiles(
   globals: GlobalConfig,
   options: InterpreterOptions,
 ): Promise<Element[]> {
-  const label = (tile: Element) => (tile.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
+  // A timeline tile has no label: it is named by its title, subtitle and
+  // dates ("From August 2025 to May 2027"), all of which a duplicate repeats.
+  const timeline = (tile: Element) => tile.matches('[data-profile-item-tile="true"][class*="beautiful-timeline-item"]');
+  const label = (tile: Element) =>
+    (timeline(tile)
+      ? ["title", "subtitle"].map((part) => tile.querySelector(`.beautiful-timeline-item__${part}`)?.textContent || "")
+          .concat(tile.querySelector(".oj-helper-hidden-accessible")?.textContent || "").join(" | ")
+      : tile.getAttribute("aria-label") || ""
+    ).replace(/\s+/g, " ").trim();
   const seen = new Set<string>();
   const doomed = tiles.filter((tile) => {
     const name = label(tile);
@@ -1700,11 +1708,33 @@ async function removeDamagedTiles(
     seen.add(key);
     return false;
   });
-  for (const tile of doomed) {
-    const card = tile.closest("article, .apply-flow-profile-item-tile") || tile.parentElement || tile;
-    const remove = card.querySelector<HTMLElement>(
+  for (let tile of doomed) {
+    // Oracle draws its timeline again after each delete: a duplicate held
+    // from before is gone from the page, and its copy now is the last tile
+    // with its name.
+    if (timeline(tile) && !tile.isConnected) {
+      const name = label(tile);
+      const now = [...(tiles.find((other) => other.isConnected)?.ownerDocument ?? document).querySelectorAll('[data-profile-item-tile="true"][class*="beautiful-timeline-item"]')]
+        .filter((other) => label(other) === name);
+      if (now.length < 2) continue;
+      tile = now[now.length - 1];
+    }
+    const card = timeline(tile) ? tile : tile.closest("article, .apply-flow-profile-item-tile") || tile.parentElement || tile;
+    let remove = card.querySelector<HTMLElement>(
       'button.apply-flow-profile-item-tile__delete-icon[aria-label="Delete"]',
     );
+    // A timeline tile draws its actions only while the pointer is over it:
+    // button.beautiful-timeline-item__delete-icon, named Remove.
+    if (timeline(tile)) {
+      const named = () =>
+        [...tile.querySelectorAll<HTMLElement>('button, [role="button"]')].find((button) =>
+          /^(delete|remove)\b/i.test((button.getAttribute("aria-label") || button.getAttribute("title") || button.textContent || "").trim()),
+        ) || null;
+      for (const type of ["mouseover", "mouseenter"])
+        tile.dispatchEvent(new MouseEvent(type, { bubbles: type === "mouseover", view: tile.ownerDocument.defaultView }));
+      const now = () => options.now?.() ?? Date.now();
+      for (let deadline = now() + 2_000; !(remove = named()) && now() < deadline; ) await sleep(options.pollMs ?? 100, options.signal);
+    }
     if (!remove || options.isLocked?.(remove)) continue;
     const clicked = await (options.execute || defaultExecute)({ element: remove, globals, method: "click", signal: options.signal, values: [] });
     if (!clicked) continue;
@@ -2993,13 +3023,23 @@ async function fillRowChoice(
             // and hides every Add button while one is open: the Add waits for the form before it
             // to close, and a section that still has no Add button is
             // tried again once the other sections have saved theirs.
-            const findAdd = () =>
+            const addCandidates = () =>
               paths(selector.addButtonPath)
                 .flatMap((path) => queryXPathAll(root, path, context))
-                .find((candidate) => candidate.isConnected && !candidate.closest("[hidden]"));
+                .filter((candidate) => candidate.isConnected && !candidate.closest("[hidden]"));
+            // A disabled Add does nothing when clicked: Oracle keeps it
+            // disabled while it stores the entry just saved, the click was
+            // lost, and the next entry's form was waited for in vain.
+            const findAdd = () =>
+              addCandidates().find(
+                (candidate) =>
+                  !(candidate as HTMLButtonElement).disabled && candidate.getAttribute("aria-disabled") !== "true",
+              );
             let add = findAdd();
             for (
-              const deadline = (options.now?.() ?? Date.now()) + (retried.has(key) ? selector.time ?? 5_000 : 2_500);
+              const deadline =
+                (options.now?.() ?? Date.now()) +
+                (addCandidates().length ? 15_000 : retried.has(key) ? selector.time ?? 5_000 : 2_500);
               !add && (options.now?.() ?? Date.now()) < deadline;
             ) {
               await sleep(options.pollMs ?? 100, options.signal);
@@ -3100,6 +3140,12 @@ async function fillRowChoice(
         visitedScopes.add(scope);
         // Whose entry this form is, for the page-wide fill to read: it
         // wrote row 0's school and major into the form opened for row 1.
+        // A tag an earlier pass left on a box inside or around this form
+        // (Oracle's profile-item-content--form inside its profile-item-content)
+        // is cleared: the innermost tag wins, and a stale "education:1" on the
+        // inner box made the form holding row 0 read as row 1.
+        for (const stale of scope.querySelectorAll("[data-lane-entry]")) stale.removeAttribute("data-lane-entry");
+        scope.parentElement?.closest("[data-lane-entry]")?.removeAttribute("data-lane-entry");
         scope.setAttribute("data-lane-entry", `${collection}:${index}`);
         // The page-wide fill leaves the form alone while the row rule
         // writes it: both picked in Oracle's one shared list, and a

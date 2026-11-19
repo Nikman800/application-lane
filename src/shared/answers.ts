@@ -382,7 +382,7 @@ const declines = /\b(decline|prefer not|not disclosed|don t wish|do not wish|don
 // Words a decline option may repeat from its question without saying
 // anything else ("I decline to self-identify for protected veteran status").
 const questionWords = new Set(
-  "i to for or and the a my of this be not do don t dont wish want prefer rather say answer answers disclose identify self describe choose provide information voluntary question protected veteran status gender race ethnic ethnicity ethnicities origin disability hispanic latino latina latinx".split(" "),
+  "i to for or and the a my of this be not do don t dont wish want prefer rather say answer answers disclose identify identification self describe choose provide information voluntary question protected veteran status gender race ethnic ethnicity ethnicities origin disability hispanic latino latina latinx".split(" "),
 );
 
 // An option read as a choice for this field. A decline option that also
