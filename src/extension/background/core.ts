@@ -316,8 +316,13 @@ export function emptyFields(fields: Field[]): Field[] {
   const questionOf = (field: Field) => (field.kind === "checkbox" && field.question ? `${field.section || ""}|${field.index ?? 0}|${field.question}` : "");
   const answered = new Set(fields.filter((field) => field.value && questionOf(field)).map(questionOf));
   const listed = new Set<string>();
+  // A list's own search box (select2) is no question of its own: the list
+  // beside it, under the same label, holds the answer.
+  const place = (field: Field) => `${field.section || ""}|${field.index ?? 0}|${field.label}`;
+  const chosen = new Set(fields.filter((field) => field.value && field.kind !== "searchbox").map(place));
   return fields.flatMap((field) => {
     if (field.value) return [];
+    if (field.kind === "searchbox" && chosen.has(place(field))) return [];
     const question = questionOf(field);
     if (!question) return [field];
     if (answered.has(question) || listed.has(question)) return [];

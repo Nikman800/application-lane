@@ -12432,6 +12432,9 @@ test(`an Avature form whose page stops every click a script makes still gets its
  
   await expect.poll(() => page.locator('[id="967"] option:checked').allTextContents(), { timeout: 60000 }).toEqual(["Python", "SQL"]);
   expect(JSON.stringify((await state()).applications[0])).not.toMatch(/interacted with this application/);
+  // The emptied search box beside the chosen skills is no unanswered question.
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60000 }).toBe("awaiting-user");
+  expect((await state()).applications[0].missing).not.toContain("Optional unanswered: What skills do you have?");
 });
 
 test("each Avature job row gets its own start and end month, added rows too", async () => {
