@@ -17,6 +17,8 @@ export type CheckField = {
   options?: string[];
   // How many choices there really are, when `options` is cut short.
   optionCount?: number;
+  // The chosen option's text, when the value is its code (a select's "233").
+  valueText?: string;
   // The site marks the field invalid.
   invalid?: boolean;
   // What the extension itself noted on the field after filling it.
@@ -256,10 +258,13 @@ export function checkForm(fields: CheckField[], page: PageFacts): Violation[] {
     const shape = !empty ? shapeProblem(field) : undefined;
     if (shape) add("wrong-shape", field, `Asks for ${shape}, holds "${value.slice(0, 80)}".`);
     if (!empty && field.options?.length && !(field.optionCount && field.optionCount > field.options.length) && /^(select|radio|combobox|listbox|select-one|select-multiple)$/.test(field.kind)) {
-      const chosen = value.split(/\s*;\s*/).filter(Boolean);
+      // A list's value is often its option's code ("233"), and the
+      // observation gives the option's text beside it (Avature's selects).
+      const shown = field.valueText ? squash(field.valueText) : value;
+      const chosen = shown.split(/\s*;\s*/).filter(Boolean);
       const offered = field.options.filter((option) => !isEmpty(option));
       if (offered.length && chosen.some((choice) => !offered.some((option) => sameChoice(choice, option))))
-        add("not-an-option", field, `"${value.slice(0, 80)}" is not among ${offered.length} options.`);
+        add("not-an-option", field, `"${shown.slice(0, 80)}" is not among ${offered.length} options.`);
     }
     if (empty && field.lock) add("locked-empty", field, `Left empty: ${field.lock.slice(0, 120)}.`);
     const group = groups.get(field);
