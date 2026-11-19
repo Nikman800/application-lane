@@ -4,7 +4,7 @@ import { ourClick, tell, nativeActivationControl, lockKey, clip } from "../conte
 import { sectionFor, writable } from "../semantics";
 import { type Proposal } from "../../shared/model";
 import { cs } from "./state";
-import { addLock, documentId, fieldLabel, lockOrigins, lockedLabels, nodeRecords, records, trustedKeyEvents, userAttention } from "./tracking";
+import { addLock, documentId, fieldLabel, lockOrigins, lockedLabels, nodeRecords, ownClickEvent, records, trustedKeyEvents, userAttention } from "./tracking";
 import { Command, RecordEntry, ownKeysOn } from "./core";
 import { inspect } from "./inspect";
 import { clearPendingWrites, elementLockKeys, valueOf } from "./controls";
@@ -32,6 +32,8 @@ export function human(event: Event) {
     event.composedPath().includes(cs.trustedWrite)
   )
     return;
+  // The fill's own click on the control it is writing (clickBox), at its point.
+  if (cs.trustedWrite && ownClickEvent(event) && event.composedPath().includes(cs.trustedWrite)) return;
   if (
     cs.searchSettle &&
     performance.now() < cs.searchSettle.until &&

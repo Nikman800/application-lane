@@ -905,12 +905,19 @@ export async function clickBox(control: HTMLInputElement, checked: boolean, comm
     }
     if (box && box.width > 0 && box.height > 0) {
       cs.trustedWrite = wrapper;
+      // The click is the fill's own at this point, whoever last touched the
+      // page: an applicant's click moments before (or a text box of theirs
+      // still in use) made the guard read it, and the input and change it
+      // causes, as theirs, and paused the fill on its own click.
+      const point = { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) };
+      const click = (cs.ownClickAt = { ...point, target: wrapper, until: Infinity, missed: false });
+      expectOwnedActivation(control, "click");
       try {
-        await requestTrustedType(control, { applicationId: cs.applicationId, operation: cs.operation, documentId }, "", 0, undefined, () => valid(command), false, 0, false,
-          { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) });
+        await requestTrustedType(control, { applicationId: cs.applicationId, operation: cs.operation, documentId }, "", 0, undefined, () => valid(command), false, 0, false, point);
       } catch {
         // Falls back to a script's click below.
       } finally {
+        click.until = performance.now() + 400;
         cs.trustedWrite = undefined;
       }
       await pause(120);

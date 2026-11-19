@@ -4,7 +4,11 @@
     "*://*.avature.net/*"
   ],
   "urlsExcluded": [],
-  "embeddedPaths": [],
+  "embeddedPaths": [
+    [
+      "//form[contains(@class,'tpt_wizard')][.//input[@name='entityData']]"
+    ]
+  ],
   "pathsExcluded": [],
   "containerPath": [],
   "containerRequired": false,

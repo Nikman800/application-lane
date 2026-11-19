@@ -82,6 +82,8 @@ const jazzOrigin = "https://acme.applytojob.com";
 const jobviteOrigin = "https://jobs.jobvite.com";
 const microsoftOrigin = "https://apply.careers.microsoft.com";
 const avatureOrigin = "https://acme.avature.net";
+// An Avature form served from the employer's own careers domain.
+const avatureOwnDomainOrigin = "https://careers.contoso.com";
 const breezyOrigin = "https://acme.breezy.hr";
 const ripplingOrigin = "https://ats.rippling.com";
 const teslaOrigin = "https://www.tesla.com";
@@ -290,7 +292,7 @@ test.beforeEach(async () => {
       backendOrigin,
     ),
   );
-  manifest.host_permissions.push(...[...atsOrigins, oracleOrigin, microsoftOrigin, workableOrigin, sapsfOrigin, adpOrigin, talNetOrigin, amazonOrigin, paylocityOrigin, jazzOrigin, jobviteOrigin, avatureOrigin, breezyOrigin, ripplingOrigin, teslaOrigin, tiktokOrigin, smartRecruitersOrigin, "https://smartapply.indeed.com", "https://www.linkedin.com"].map((origin) => `${origin}/*`));
+  manifest.host_permissions.push(...[...atsOrigins, oracleOrigin, microsoftOrigin, workableOrigin, sapsfOrigin, adpOrigin, talNetOrigin, amazonOrigin, paylocityOrigin, jazzOrigin, jobviteOrigin, avatureOrigin, avatureOwnDomainOrigin, breezyOrigin, ripplingOrigin, teslaOrigin, tiktokOrigin, smartRecruitersOrigin, "https://smartapply.indeed.com", "https://www.linkedin.com"].map((origin) => `${origin}/*`));
   await writeFile(
     join(extensionPath, "manifest.json"),
     JSON.stringify(manifest),
@@ -12239,6 +12241,66 @@ test("an Avature work section titled by a paragraph gets a filled row for each j
   await expect(input("1354-2-1")).toHaveValue("Intern");
 });
 
+test("an Avature form on an employer's own careers domain is filled by the Avature rules", async () => {
+  // one employer's Avature Register page (fill capture): served from the
+  // employer's domain, not avature.net, so none of the Avature rules ran and
+  // every job's months were left empty.
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      work: [
+        { organization: "Example Labs", title: "Software Engineer", location: "Tucson, AZ", details: "Built services.", startDate: "2026-03-27", endDate: "" },
+        { organization: "Sample AI", title: "Intern", location: "Remote", details: "Built APIs.", startDate: "2023-07-03", endDate: "2023-09-08" },
+      ],
+    },
+  });
+  const spec = (row: string, n: number, kind: string, label: string, control: string) =>
+    `<div class="fieldSpec ${kind} isRequired fieldSpecPadder fieldSpec--in-dataset" id="fieldSpecContainer172-${n}-${row}"><label class="requiredField WizardFieldLabel tc_formLabel" for="172-${n}-${row}" id="172-${n}-${row}-label">${label}<span aria-hidden="true" class="labelRequiredIcon"> *</span></label>${control}</div>`;
+  const text = (row: string, n: number, label: string) =>
+    spec(row, n, "TextField", label, `<input type="text" id="172-${n}-${row}" name="172-${n}-${row}" class=" TextField WizardFieldInputContainer WizardFieldInput" aria-labelledby="172-${n}-${row}-label">`);
+  const month = (row: string, n: number, label: string) =>
+    `<div class="fieldSpec DateFormField isRequired fieldSpecPadder fieldSpec--in-dataset" id="fieldSpecContainer172-${n}-${row}"><div id="172-${n}-${row}-accessibleContainer"><label class="requiredField WizardFieldLabel tc_formLabel" for="172-${n}-${row}" id="172-${n}-${row}-label">${label}</label><input type="month" id="172-${n}-${row}" name="172-${n}-${row}" class=" DateFormField WizardFieldInputContainer WizardFieldInput" value="" aria-labelledby="172-${n}-${row}-label"></div></div>`;
+  const row = (id: string) =>
+    `<fieldset class="datasetField__row${id === "sample" ? " datasetField__row--sample" : ""}" id="datasetField__row--172${id === "sample" ? "-sample" : "_" + id}"${id === "sample" ? ' aria-hidden="true" hidden=""' : ""}>${text(id, 1, "Company")}${text(id, 2, "Position title")}${month(id, 4, "Start date")}${month(id, 5, "End date")}</fieldset>`;
+  await context.route(`${avatureOwnDomainOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Software Engineer</title><main><div class="article__content"><form class="form form--step1 clearfix tpt_wizard" autocomplete="off" method="post"><div id="wizard-id-6" class="wizard" data-id="6"><input type="hidden" name="jobId" value="1"><input type="hidden" name="entityData" value="x">
+        <fieldset class="Section Section2"><div class="Separator Separator2" id="fieldSpecContainer161"><legend class="WizardFieldLabel tc_formTitle" id="161">General Information</legend></div>
+          <div class="fieldSpec TextField fieldSpecPadder" id="fieldSpecContainer162"><label class="WizardFieldLabel tc_formLabel" for="162" id="162-label">First name</label><input type="text" id="162" name="162" class="TextField WizardFieldInput" aria-labelledby="162-label"></div>
+          <div class="Separator Separator4" id="fieldSpecContainer171"><legend class="WizardFieldLabel tc_formTitle" id="171">Work Experience</legend></div>
+          <div class="fieldSpec form__item--hidden-label MultipleDatasetEntryFormField--cols2 datasetField isRequired fieldSpecPadder" id="fieldSpecContainer172"><p class="requiredField WizardEmptyLabel WizardFieldLabel tc_formLabel" id="172-label"><span aria-hidden="true" class="labelRequiredIcon"> *</span></p>
+            <div class="datasetcontent tc_formField" id="172" role="group" aria-labelledby="172-label">${row("sample")}${row("0")}
+              <div class="datasetField__button datasetField__button--add"><a href="#" id="addRowFor_172" class="action action--add WizardFieldLink" role="button">add another</a></div>
+            </div>
+          </div>
+        </fieldset>
+      </div></form></div></main><script>
+        let rows = 1;
+        document.querySelector('#addRowFor_172').addEventListener('click', (event) => {
+          event.preventDefault();
+          const sample = document.querySelector('#datasetField__row--172-sample');
+          const html = sample.outerHTML.replaceAll('-sample', '-' + rows).replace('datasetField__row--172-' + rows, 'datasetField__row--172_' + rows).replace(' aria-hidden="true" hidden=""', '').replace(' datasetField__row--sample', '');
+          rows++;
+          event.target.parentElement.insertAdjacentHTML('beforebegin', html);
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${avatureOwnDomainOrigin}/en_US/careers/ApplicationMethods?jobId=1`);
+  await enqueue([page]);
+  await expect(page.locator('[id="162"]')).toHaveValue(profile.firstName, { timeout: 30000 });
+  const input = (id: string) => page.locator(`[id="${id}"]`);
+  await expect(input("172-4-0")).toHaveValue("2026-03", { timeout: 30000 });
+  await expect(input("172-1-1")).toHaveValue("Sample AI");
+  await expect(input("172-4-1")).toHaveValue("2023-07");
+  await expect(input("172-5-1")).toHaveValue("2023-09");
+});
+
 test("each Avature job row gets its own start and end month, added rows too", async () => {
   // one employer's Avature Register page (fill capture): the third
   // job, in a row the extension added, kept no end month and showed a start
@@ -14252,6 +14314,28 @@ test("a text box that validated on blur before its state caught up with the keys
   await expect(page.locator("#Contact_Information_q_zip")).not.toHaveAttribute("aria-invalid", "true");
   await expect(page.locator("#address-error")).not.toContainText("cannot be left blank");
   await expect(page.locator("#zip-error")).not.toContainText("cannot be left blank");
+});
+
+test("the fill's own click on a required acknowledgement box is not the applicant's, though a text box of theirs is in use", async () => {
+  // Microsoft's careers form: a required acknowledgement checkbox whose long
+  // label wraps it in a grid row. The applicant had clicked into a text box
+  // and left it empty, so the page held their attention; the fill's own real
+  // click on the checkbox, and the input and change it caused, were read as
+  // theirs and paused the fill.
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, acknowledgeTerms: true } });
+  await context.route(`${microsoftOrigin}/careers/apply**`, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html><form>
+    <div class="grid-row"><label for="notes_q">Anything else to add</label><input id="notes_q" data-test-id="notes_q" autocomplete="one-time-code"></div>
+    <div class="grid-row"><input type="checkbox" id="Acknowledgment_q_cust_disclaimer-1-0" name="Acknowledgment_q_cust_disclaimer" aria-required="true">
+    <label for="Acknowledgment_q_cust_disclaimer-1-0">As part of the online application process you were asked whether you possess certain things. I confirm my answers are accurate.</label></div>
+    <button type="submit">Submit</button></form>` }));
+  const page = await context.newPage();
+  await page.goto(`${microsoftOrigin}/careers/apply?pid=1`);
+  await page.locator("#notes_q").click();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 60000 }).toMatch(/^(ready|awaiting-user)$/);
+  await expect(page.locator("#Acknowledgment_q_cust_disclaimer-1-0")).toBeChecked();
+  const record = JSON.stringify((await state()).applications[0]);
+  expect(record).not.toMatch(/interacted with this application/);
 });
 
 test("an explicit location-address helper fills confirmed location without replacing a real applicant edit", async () => {
