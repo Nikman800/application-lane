@@ -21,7 +21,7 @@ export function currentRow(row: { current?: boolean; endDate?: string }): boolea
 }
 
 export type ValueContext = {
-  collection?: "education" | "experience" | "references" | "languages" | "websites";
+  collection?: "education" | "experience" | "references" | "languages" | "skills" | "websites";
   index?: number;
   // A website row's link, chosen with the page in view (the interpreter
   // leaves out a link the form asks for elsewhere).
@@ -228,6 +228,8 @@ export function canonicalValues(
   // pass that is handed one (content.ts), so a placeholder lets it start.
   if (key === "resume") return ["Resume"];
   if (key === "coverLetter") return ["Cover letter"];
+  // A row added for one skill (Oracle's Add Skill) takes that skill alone.
+  if (context.collection === "skills" && (key === "skill" || key === "skills")) return context.item ? [context.item] : [];
   if (key === "skill" || key === "skills") return unique(profile.skills);
   // Where the applicant hears of jobs. A person saved as a reference vouches
   // for them; that name is not how they found a posting.

@@ -2724,7 +2724,7 @@ async function fillRowChoice(
           : undefined;
     // Lists the profile keeps as plain values, one row each: languages,
     // and the links a form's Websites section takes (Workday).
-    const list = key === "language" ? "languages" : key === "websites" ? "websites" : undefined;
+    const list = key === "language" ? "languages" : key === "skills" ? "skills" : key === "websites" ? "websites" : undefined;
     if (list && selector.array && selector.inputSelectors) {
       // A link the page already holds (the site read it from the resume)
       // is not added again, and a row holding one is left as it is: one employer's
@@ -2758,7 +2758,9 @@ async function fillRowChoice(
       );
       const items = list === "languages"
         ? profileLanguages(profile.languages).map((row) => row.language)
-        : linksToShare(config, profile, root, context).filter((link) => !onPage.has(linkKey(link)) && (!linkedInOnly || isLinkedIn(link)));
+        : list === "skills"
+          ? [...new Set(profile.skills.map((skill) => skill.trim()).filter(Boolean))]
+          : linksToShare(config, profile, root, context).filter((link) => !onPage.has(linkKey(link)) && (!linkedInOnly || isLinkedIn(link)));
       let count = 0;
       // What a row's fill wants the applicant to look at (a closest pick).
       const cautions: string[] = [];
@@ -2767,13 +2769,13 @@ async function fillRowChoice(
       // States)", kept by an earlier fill) is not added again: its list no
       // longer offers that entry, and a second row sat open on the other
       // Englishes (Higher).
-      const savedLanguages = list === "languages"
+      const savedLanguages = list === "languages" || list === "skills"
         ? (await removeDamagedTiles(paths(selector.savedRowPath).flatMap((path) => queryXPathAll(root, path, context)), globals, options))
             .map((tile) => ` ${plainText(tile.textContent)} `)
         : [];
       const alreadySaved = (item: string) => Boolean(plainText(item)) && savedLanguages.some((tile) => tile.includes(` ${plainText(item)} `));
       for (let index = 0; index < Math.min(items.length, selector.limit ?? items.length); index++) {
-        if (list === "languages" && alreadySaved(items[index])) continue;
+        if ((list === "languages" || list === "skills") && alreadySaved(items[index])) continue;
         const substitute = (path: string) =>
           path.replaceAll("%INDEX0%", String(index)).replaceAll("%NUMBER0%", String(index + 1));
         const free = (row: Element) => !visited.has(row) && !(list === "websites" && held(row).length);

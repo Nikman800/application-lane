@@ -613,6 +613,53 @@
       ]
     ],
     [
+      "skills",
+      [
+        {
+          "array": true,
+          "limit": 15,
+          "addButtonPath": "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[@role='region'][starts-with(normalize-space(@aria-label),'Skill')]//button[contains(@class,'new-tile') or starts-with(@id,'profileItemsAddButton')][normalize-space(.)='Add Skill']",
+          "containerPath": "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[@role='region'][starts-with(normalize-space(@aria-label),'Skill')]//div[contains(@class,'profile-item-content')]",
+          "confirmAddedPath": [
+            "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[@role='region'][starts-with(normalize-space(@aria-label),'Skill')]//div[contains(@class,'profile-item-content')]"
+          ],
+          "savedRowPath": "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]//div[@role='region'][starts-with(normalize-space(@aria-label),'Skill')]//*[contains(@class,'apply-flow-profile-item-tile__summary')]",
+          "time": 5000,
+          "inputSelectors": [
+            [
+              "skill",
+              [
+                ".//input[@name='skills' or starts-with(@id,'skills-')]"
+              ]
+            ],
+            [
+              "save",
+              [
+                {
+                  "path": [
+                    ".//*[contains(@class,'app-dialog__footer') or contains(@class,'profile-item-footer')]//button[contains(@class,'save-btn') or contains(@class,'app-dialog__footer-button')][not(contains(@class,'cancel-btn'))]",
+                    "./following-sibling::*[contains(@class,'profile-item-footer')]//button[contains(@class,'save-btn')]"
+                  ],
+                  "valueRequired": false,
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": ".",
+                      "removed": true,
+                      "time": 5000,
+                      "allowFailure": true
+                    }
+                  ]
+                }
+              ]
+            ]
+          ]
+        }
+      ]
+    ],
+    [
       "gender",
       [
         {

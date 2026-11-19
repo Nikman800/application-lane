@@ -22183,3 +22183,58 @@ test("Oracle's section that shows only saved entry cards deletes the unnamed car
   expect(result.saved.filter((entry) => entry.startsWith("Experience")).join("|")).toMatch(/Fabrikam/);
   expect(result.saved.join("|")).not.toMatch(/Acme|Virginia Tech/);
 });
+
+test("Oracle's Skills block adds the profile's first 15 skills one at a time and skips the skills already saved as tiles", async () => {
+  const skills = ["Python", "SQL", "Docker", "Linux", "Bash", "Pandas", "NumPy", "Excel", "Tableau", "Java", "C++", "Rust", "Go", "Kotlin", "Swift", "Ruby", "Scala"];
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, skills } });
+  const tile = (n: number, title: string) =>
+    `<article class="apply-flow-profile-item-tile" id="tile-${n}" data-qa="profileItem134">
+      <div class="apply-flow-profile-item-tile__summary" data-profile-item-tile="true" role="group" tabindex="0" aria-label="${title} ">
+        <div class="apply-flow-profile-item-tile__summary-content"><div class="apply-flow-profile-item-tile__summary-title"><span>${title}</span></div></div>
+        <div class="apply-flow-profile-item-tile__actions-container"><button class="apply-flow-profile-item-tile__edit-item-icon" title="Edit" aria-label="Edit"></button><button class="apply-flow-profile-item-tile__delete-icon" title="Delete" aria-label="Delete"></button></div>
+      </div></article>`;
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Experience, Skills</title><main>
+        <form class="apply-flow__content apply-flow__content-form" method="post" onsubmit="window.submitted = true; return false"><div class="apply-flow-section" tabindex="-1" data-section-number="3"><ul class="apply-flow-page-list"><li><apply-flow-block><div class="apply-flow-block apply-flow-block--tile-profile-items">
+          <div class="apply-flow-block__header"><h2 class="apply-flow-block__title"><span>Skills</span></h2></div>
+          <div class="apply-flow-block__form-list" role="region" aria-label="Skills ">
+            <div class="profile-item-container"><div class="standard-apply-flow-profile-item standard-apply-flow-profile-item--small">
+              <div class="profile-item-list" role="group">${tile(1, "Python") + tile(2, "SQL")}</div>
+              <div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile" id="profileItemsAddButton-1" data-qa="add134"><span class="button__label">Add Skill</span></button></div>
+              <div class="slot"></div>
+            </div></div>
+          </div></div></apply-flow-block></li></ul></div></form>
+      </main><script>
+        window.saved = [];
+        window.submitted = false;
+        const tileHtml = ${JSON.stringify(tile(9, "NAME"))};
+        const add = document.querySelector('.apply-flow-profile-item-tile__new-tile');
+        const slot = document.querySelector('.slot');
+        add.addEventListener('click', () => {
+          add.parentElement.hidden = true;
+          slot.innerHTML = '<div class="profile-item-content"><div class="profile-item-content--form"><div class="input-row input-row--text"><label class="input-row__label" for="skills-82"><span class="input-row__linebreak">Skill</span></label><div class="input-row__control-container"><input class="input-row__control" id="skills-82" name="skills" aria-required="true"></div></div>'
+            + '<div class="datepicker-row input-row" aria-label="Date Achieved"><label class="input-row__label" for="dateAchieved-83">Date Achieved</label><input type="text" role="combobox" id="month-dateAchieved-83" name="dateAchieved"></div></div></div>'
+            + '<div class="profile-item-footer"><div class="app-dialog__buttons-bar"><button class="button app-dialog__footer-button cancel-btn"><span class="button__label">Cancel</span></button><button class="button app-dialog__footer-button save-btn"><span class="button__label">Add Skill</span></button></div></div>';
+          slot.querySelector('.save-btn').addEventListener('click', () => {
+            const name = slot.querySelector('input[name=skills]').value;
+            const date = slot.querySelector('input[name=dateAchieved]').value;
+            window.saved.push(name + (date ? ' @' + date : ''));
+            slot.innerHTML = '';
+            document.querySelector('.profile-item-list').insertAdjacentHTML('beforeend', tileHtml.split('NAME').join(name));
+            add.parentElement.hidden = false;
+          });
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/3`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  const result = await page.evaluate(() => ({ saved: (window as any).saved as string[], submitted: (window as any).submitted as boolean }));
+  expect(result.submitted).toBe(false);
+  // The first 15 in profile order, less the two tiles already saved; the date stays empty.
+  expect(result.saved).toEqual(skills.slice(2, 15));
+});
