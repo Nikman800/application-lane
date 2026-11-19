@@ -168,3 +168,12 @@ test("only an unattached document the lane makes is an upload defect", async () 
   assert.deepEqual(found.defects.map((defect) => [defect.kind, defect.field]), [["upload", "Resume"]]);
   assert.match(found.userActions.join(" "), /Photo/);
 });
+
+test("a list that holds an option's code is no wrong value when the option's text is among its options", () => {
+  // An Avature page's selects hold codes ("233") for options shown as text.
+  const found = findDefects({ id: "c2", frames: [{ observation: { fields: [
+    { label: "Country", kind: "select", value: "233", valueText: "United States", options: ["Mexico", "United States"] },
+    { label: "Region", kind: "select", value: "4802", valueText: "Atlantis", options: ["Ohio", "Texas"] },
+  ] } }] });
+  assert.deepEqual(found.defects.map((defect) => defect.field), ["Region"]);
+});

@@ -25,6 +25,7 @@ type SavedField = {
   kind: string;
   required?: boolean;
   value?: string;
+  valueText?: string;
   options?: string[];
   invalid?: boolean;
   fillWarning?: string;
@@ -101,6 +102,7 @@ export function findDefects(evidence: Evidence): Found {
       kind: field.kind,
       required: Boolean(field.required),
       value: field.value || "",
+      ...(field.valueText ? { valueText: field.valueText } : {}),
       ...(field.options ? { options: field.options } : {}),
       ...(field.invalid ? { invalid: true } : {}),
       ...(field.fillWarning ? { warning: field.fillWarning } : {}),
