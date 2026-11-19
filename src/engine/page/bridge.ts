@@ -29,6 +29,14 @@ export function authorizeMainWorld(
   );
 }
 
+// The elements the fill is acting on from outside this script right now,
+// and since when: moving focus to one commits a value left typed in another
+// (a trusted change there), which is the fill's doing, not the applicant's.
+const acting = new Map<Element, number>();
+export const actingSince = (): number | undefined =>
+  acting.size ? Math.min(...acting.values()) : undefined;
+export const actingOn = (path: EventTarget[]) => path.some((entry) => entry instanceof Element && acting.has(entry));
+
 // Both the MAIN world and the debugger act on the page from outside this
 // content script, so both claim the element through the same one-shot token:
 // the background can only write where `authorizeMainWorld` still agrees.
@@ -53,11 +61,13 @@ async function claimed<T>(
     if (element.getAttribute(marker) === token) element.removeAttribute(marker);
   };
   signal?.addEventListener("abort", revoke, { once: true });
+  acting.set(element, performance.now());
   try {
     const result = await send(token);
     signal?.throwIfAborted();
     return result;
   } finally {
+    acting.delete(element);
     signal?.removeEventListener("abort", revoke);
     revoke();
   }

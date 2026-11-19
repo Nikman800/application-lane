@@ -4,6 +4,7 @@ import { ourClick, tell, nativeActivationControl, lockKey, clip } from "../conte
 import { sectionFor, writable } from "../semantics";
 import { type Proposal } from "../../shared/model";
 import { cs } from "./state";
+import { actingOn, actingSince } from "../../engine/page/bridge";
 import { addLock, documentId, fieldLabel, lockOrigins, lockedLabels, nodeRecords, ownClickEvent, records, trustedKeyEvents, userAttention } from "./tracking";
 import { Command, RecordEntry, ownKeysOn } from "./core";
 import { inspect } from "./inspect";
@@ -34,6 +35,11 @@ export function human(event: Event) {
     return;
   // The fill's own click on the control it is writing (clickBox), at its point.
   if (cs.trustedWrite && ownClickEvent(event) && event.composedPath().includes(cs.trustedWrite)) return;
+  // The fill moving focus to the control it writes commits a value left typed
+  // in another (a select2 search box's "TypeScript"): the browser's change
+  // there is the fill's doing unless the applicant touched the page since.
+  const since = actingSince();
+  if (event.isTrusted && event.type === "change" && since !== undefined && cs.applicantGesture < since && !actingOn(event.composedPath())) return;
   if (
     cs.searchSettle &&
     performance.now() < cs.searchSettle.until &&

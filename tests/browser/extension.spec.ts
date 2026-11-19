@@ -12301,7 +12301,7 @@ test("an Avature form on an employer's own careers domain is filled by the Avatu
   await expect(input("172-5-1")).toHaveValue("2023-09");
 });
 
-test("an Avature form whose page stops every click a script makes still gets its added rows and its skills", async () => {
+test("an Avature form whose page stops every click a script makes still gets its added rows and its skills, though a text box holds a value typed before the fill", async () => {
   // one employer's Avature Register page (live): a page script stops every
   // untrusted click at the window, so the fill's click on "add another" never
   // reached the link, whose jQuery handler adds the row (only one job was
@@ -12410,6 +12410,11 @@ test("an Avature form whose page stops every click a script makes still gets its
   );
   const page = await context.newPage();
   await page.goto(`${avatureOwnDomainOrigin}/en_US/careers/ApplicationMethods?jobId=1`);
+  // Text typed earlier and left in a box: the fill moving focus to a job's
+  // Company commits it, and the browser's change there paused the fill as
+  // the applicant's edit (live, on the skills search box, 2026-11-19).
+  await page.locator('[id="162"]').pressSequentially(profile.firstName);
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
   await enqueue([page]);
   await expect(page.locator('[id="162"]')).toHaveValue(profile.firstName, { timeout: 30000 });
   const input = (id: string) => page.locator(`[id="${id}"]`);
@@ -12417,7 +12422,9 @@ test("an Avature form whose page stops every click a script makes still gets its
   await expect(input("172-1-1")).toHaveValue("Sample AI");
   await expect(input("172-4-1")).toHaveValue("2023-07");
   await expect(input("172-5-1")).toHaveValue("2023-09");
+ 
   await expect.poll(() => page.locator('[id="967"] option:checked').allTextContents(), { timeout: 60000 }).toEqual(["Python", "SQL"]);
+  expect(JSON.stringify((await state()).applications[0])).not.toMatch(/interacted with this application/);
 });
 
 test("each Avature job row gets its own start and end month, added rows too", async () => {
