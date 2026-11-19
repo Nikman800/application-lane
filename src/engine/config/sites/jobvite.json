@@ -14,6 +14,7 @@
       "kind": "file",
       "fieldPath": "//input[@id='file-input-0'][@type='file'][//*[@id='attachResume']//button[@jv-add-attachment]]",
       "label": "Resume",
+      "labelPath": "//*[@id='attachResume']//button[@jv-add-attachment]",
       "requiredPath": "//*[@id='attachResume']//button[@aria-required='true']",
       "fillActions": [
         { "path": "//*[@id='attachResume']//button[@jv-add-attachment]/i[contains(@class,'icon')]", "method": "click", "allowFailure": true },
@@ -24,6 +25,7 @@
       "kind": "file",
       "fieldPath": "//input[@id='file-input-1'][@type='file'][//button[@jv-add-attachment][@attachment-label='Cover Letter']]",
       "label": "Cover Letter",
+      "labelPath": "//button[@jv-add-attachment][@attachment-label='Cover Letter']",
       "fillActions": [
         { "path": "//button[@jv-add-attachment][@attachment-label='Cover Letter']", "method": "click", "allowFailure": true },
         { "method": "uploadFile" }
