@@ -74,6 +74,9 @@ function toggleQuestion(element: Element): Element | null {
 // option inside the smallest block holding the whole group; the text as
 // written is returned too, since "(required)" is often part of it.
 export function groupQuestion(element: Element): { text: string; raw: string } | undefined {
+  // An ARIA checkbox icon in the label of a native checkbox (Jobvite's) is
+  // that checkbox: the question is the one its group asks.
+  if (element.getAttribute("role") === "checkbox") element = iconRadioLabel(element)?.control || element;
   if (!(element instanceof HTMLInputElement) || !/^(radio|checkbox)$/.test(element.type) || !element.name) return;
   const root = element.form || (element.getRootNode() as Document | ShadowRoot);
   const members = [...root.querySelectorAll<HTMLInputElement>(`input[name="${CSS.escape(element.name)}"]`)].filter((input) => input.type === element.type);
@@ -703,10 +706,11 @@ function icimsCellQuestion(element: Control): string {
 // page keeps out of sight (Jobvite's <i role="radio"> in a label for its
 // input): the label's text is the option, the native input holds the state.
 export function iconRadioLabel(element: Element): HTMLLabelElement | undefined {
-  if (element instanceof HTMLInputElement || element.getAttribute("role") !== "radio") return undefined;
+  const role = element.getAttribute("role");
+  if (element instanceof HTMLInputElement || (role !== "radio" && role !== "checkbox")) return undefined;
   const label = element.closest("label");
   const control = label?.control;
-  return label && control instanceof HTMLInputElement && control.type === "radio" && !element.contains(control) ? label : undefined;
+  return label && control instanceof HTMLInputElement && control.type === role && !element.contains(control) ? label : undefined;
 }
 
 export function ownLabel(element: Control): string {
@@ -1143,6 +1147,27 @@ function pageSectionFor(element: Control): {
   return { section, index: Math.max(0, same.indexOf(row!)) };
 }
 
+// A radiogroup carries no aria-required; its question is a paragraph above it
+// whose trailing element draws the star (Rippling: an empty div whose ::after
+// is "*"), or whose text ends in one.
+function radiogroupQuestionStarred(group: Element): boolean {
+  const solo = (node: Element) => !node.matches('[role="radiogroup"],input,textarea,select') && !node.querySelector('[role="radiogroup"],input,textarea,select');
+  const marked = (paragraph: Element) => {
+    if (/[*✱]\s*$/.test((paragraph.textContent || "").trim())) return true;
+    const last = paragraph.lastElementChild;
+    return !!last && ["::after", "::before"].some((pseudo) => /["']\s*[*✱]\s*["']/.test(getComputedStyle(last, pseudo).content) || /[*✱]/.test(last.textContent || ""));
+  };
+  let node: Element | null = group;
+  for (let up = 0; node && up < 5; up++, node = node.parentElement) {
+    for (let before = node.previousElementSibling, n = 0; before && n < 3; before = before.previousElementSibling, n++) {
+      if (!solo(before)) break;
+      const paragraphs = [...before.querySelectorAll("p")].filter((p) => (p.textContent || "").trim() && !p.closest(".ATS_htmlPreview"));
+      if (paragraphs.length && marked(paragraphs[0])) return true;
+    }
+  }
+  return false;
+}
+
 export function isRequired(element: Control): boolean {
   if (
     (element as HTMLInputElement).required ||
@@ -1159,6 +1184,7 @@ export function isRequired(element: Control): boolean {
   if (element.getAttribute("role") === "radio") {
     const group = element.closest('[role="radiogroup"]') || element.assignedSlot?.closest('[role="radiogroup"]');
     if (group?.getAttribute("aria-required") === "true") return true;
+    if (group && radiogroupQuestionStarred(group)) return true;
   }
   if (element.getAttribute("role") === "combobox") {
     const shell = element.closest(".select__container");

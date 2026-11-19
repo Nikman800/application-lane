@@ -468,6 +468,9 @@ export type Observation = {
   // An empty resume slot on a site that rewrites the form from the resume
   // (its rule's resumeFirstPaths, SuccessFactors): uploaded before the fill.
   resumeSlotOpen?: boolean;
+  // Requests to the site's upload or parse endpoints that have finished (a
+  // resume parse that answers seconds after the upload, and then rewrites the form).
+  uploadRequests?: number;
   // The documents its site config's upload steps can put on this page
   // ("resume", "coverLetter"), file box or not (configUploadSlots).
   uploadSlots?: string[];
@@ -480,7 +483,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-19-gender-closed-combobox";
+export const CONTENT_VERSION = "2026-11-19-icon-checkbox-starred-radio";
 export type Proposal = {
   fieldId: string;
   value: string;

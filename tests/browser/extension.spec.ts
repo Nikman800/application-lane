@@ -7520,6 +7520,31 @@ test("Rippling's EEO dropdowns that read Select... are opened and answered", asy
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
+// Rippling's radio questions are role=radiogroup with no aria-required; the
+// question paragraph ends in an empty div whose ::after draws the "*". A
+// government-employment declaration left for the applicant was observed as
+// optional and missing from the needs list.
+test("Rippling's starred radio question left for the applicant is observed as required and listed as needed", async () => {
+  await context.route(`${ripplingOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Apply - Software Engineer</title><style>.css-18yxg8r::after{content:"*"}</style></head><body><form onsubmit="window.submissions++; return false">
+        <label>Email<input id="email" name="email" type="email"></label>
+        <div class="marginY--36"><div class="paddingX--16"><div class="marginBottom--4"><p class="css-i4dt0z edalr1o0" id="q">Do you currently, or have you in the last 5 years, worked for the US Government (e.g., Congressional staffer, member of the military, state, or federal agencies)? </p></div></div><div class="css-2a15f5 eun831x1" data-testid="field"><div class="css-1fttcpj eun831x6"><div class="css-1gnu4z7 e11ua0oe0" data-testid="customQuestions.gov" id="field-75" role="radiogroup"><div data-testid="radio-label-customQuestions.gov" data-value="Yes" role="radio" tabindex="-1" aria-labelledby="label-customQuestions.gov" aria-checked="false" class="css-1vig8y7 e7xpdgw1"><div class="css-svry21 e1eo6gzu1"><div data-indeterminate="false" class="css-13o0fxs e1eo6gzu2"><input data-testid="radio-customQuestions.gov" aria-hidden="true" tabindex="-1" class="css-eivff4 e1eo6gzu0" type="radio" value="Yes" name="customQuestions.gov"></div></div><div id="label-customQuestions.gov" class="css-1g1oew2 e7xpdgw7"><div class="css-zjik7 e7xpdgw6"><div class="css-vmlcjj e7xpdgw5"><p class="css-kbbjev">Yes</p></div></div></div></div><div data-testid="radio-label-customQuestions.gov" data-value="No" role="radio" tabindex="0" aria-labelledby="label-customQuestions.gov" aria-checked="false" class="css-1vig8y7 e7xpdgw1"><div class="css-svry21 e1eo6gzu1"><div data-indeterminate="false" class="css-19vnkin e1eo6gzu2"><input data-testid="radio-customQuestions.gov" aria-hidden="true" tabindex="-1" class="css-eivff4 e1eo6gzu0" type="radio" value="No" name="customQuestions.gov"></div></div><div id="label-customQuestions.gov" class="css-1g1oew2 e7xpdgw7"><div class="css-zjik7 e7xpdgw6"><div class="css-vmlcjj e7xpdgw5"><p class="css-kbbjev">No</p></div></div></div></div></div><div data-testid="screen-reader-only" id="form-field-tip-74" class="css-yrqkhi em1iw9y0"></div></div></div><div class="paddingX--16 css-fc738i e1c985fr0"><div class="css-h3rxqe"><button data-disabled="false" data-testid="Clear selection" type="button" class="css-t4iam1 epknpyv2"><span class="css-mmeyrh epknpyv3"><span class="css-tnjx2x">Clear selection</span></span></button></div></div></div>
+
+        <button type="submit">Submit application</button></form>
+        <script>window.submissions = 0; const star = document.createElement("div"); star.className = "css-18yxg8r"; document.getElementById("q").append(star);</script></body></html>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${ripplingOrigin}/acme/jobs/2ba326f7-9259-47df-9f54-bef4ce5c5fb5/apply?step=application`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect((await state()).applications[0].missing).toContainEqual(expect.stringMatching(/^Required: Do you currently, or have you in the last 5 years/));
+  expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+});
+
 // TikTok's careers form: the account's resume
 // from an earlier application stayed in the Resume slot ("Last updated:"), and the Work Authorization and Others questions, UD selects
 // whose search box is read-only and whose options carry no role, were never
@@ -8083,11 +8108,11 @@ test("a Jobvite prescreen fills each Employer group from a work row and each sch
   const text = (id: string, label: string) => `<div class="jv-form-field"><div class="jv-form-field-input"><label for="jv-field-${id}" class="jv-form-field-label">${label}</label><div class="jv-form-field-control"><input id="jv-field-${id}" type="text" aria-required="false"></div></div></div>`;
   const note = (words: string) => `<div class="jv-form-field"><div class="jv-form-field-p"><div class="jv-form-field-control"><p><span>${words}</span></p></div></div></div>`;
   const jobs = [1, 2, 3].map((n) => note(`Employer ${n}`) + note("Employer Information") + text(`f16_${(n - 1) * 3}`, "Name of Employer") + text(`f16_${(n - 1) * 3 + 1}`, "Dates of Employment") + text(`f16_${(n - 1) * 3 + 2}`, "Reason for Leaving")).join("");
-  const graduated = `<div class="jv-form-field"><div class="jv-form-field-checkbox"><div class="jv-form-field-control"><fieldset class="jv-input-group"><legend class="jv-form-field-legend">Graduated?</legend>${["Yes", "No"].map((answer, n) => `<label class="jv-input-group-row"><input id="jv-field-f22-${n}" name="f22" type="checkbox">${answer}</label>`).join("")}</fieldset></div></div></div>`;
+  const graduated = `<div class="jv-form-field"><div class="jv-form-field-checkbox"><div class="jv-form-field-control"><fieldset class="jv-input-group"><legend class="jv-form-field-legend">Graduated?</legend>${["Yes", "No"].map((answer, n) => `<label class="jv-input-group-row" tabindex="-1"><i class="icon icon-checkbox-blank" tabindex="0" role="checkbox" aria-checked=""></i><input id="jv-field-f22-${n}" name="f22" type="checkbox"> ${answer}</label>`).join("")}</fieldset></div></div></div>`;
   await context.route(`${jobviteOrigin}/**`, (route) =>
     route.fulfill({
       contentType: "text/html",
-      body: `<!doctype html><html><head><title>Analyst - Acme</title></head><body><form class="jv-form" onsubmit="return false">
+      body: `<!doctype html><html><head><title>Analyst - Acme</title><style>.jv-input-group-row input { width: 0; height: 0; padding: 0; margin: 0; border: 0; visibility: hidden; }</style></head><body><form class="jv-form" onsubmit="return false">
         ${element("table", jobs)}
         ${element("textentryfield", text("f20", "University"))}
         ${element("textentryfield", text("f21", "Degree"))}
@@ -8096,7 +8121,15 @@ test("a Jobvite prescreen fills each Employer group from a work row and each sch
         ${element("textentryfield", text("f24", "Graduate School"))}
         ${element("textentryfield", text("f25", "Degree"))}
         ${element("textentryfield", text("f26", "Years Attended"))}
-        </form></body></html>`,
+        </form><script>
+          document.addEventListener("change", () => {
+            for (const icon of document.querySelectorAll('[role="checkbox"]')) {
+              const on = icon.closest("label").control.checked;
+              icon.className = "icon " + (on ? "icon-checkbox-checked" : "icon-checkbox-blank");
+              icon.setAttribute("aria-checked", String(on));
+            }
+          });
+        </script></body></html>`,
     }),
   );
   const page = await context.newPage();
@@ -8114,6 +8147,7 @@ test("a Jobvite prescreen fills each Employer group from a work row and each sch
   await expect(page.locator("#jv-field-f23")).toHaveValue("4");
   await expect(page.locator("#jv-field-f22-0")).toBeChecked();
   await expect(page.locator("#jv-field-f22-1")).not.toBeChecked();
+  await expect(page.locator("#jv-field-f22-0").locator("xpath=preceding-sibling::i")).toHaveClass(/icon-checkbox-checked/);
   await expect(page.locator("#jv-field-f24")).toHaveValue("Penn State");
   await expect(page.locator("#jv-field-f25")).toHaveValue("Masters of Science");
   await expect(page.locator("#jv-field-f26")).toHaveValue("2025 - 2027");
@@ -13946,6 +13980,39 @@ test("answers a resume upload empties are answered again once the site settles",
   await page.goto(`${origin}/parsed-upload`);
   await enqueue([page]);
   await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 60000 }).toMatch(/^(ready|awaiting-user)$/);
+  expect(await page.evaluate(() => (window as any).cleared)).toBe(1);
+  await expect(page.locator("#Contact_Information_q_address")).toHaveValue("100 Test Way");
+  await expect(page.locator("#Contact_Information_q_zip")).toHaveValue("85001");
+});
+
+test("answers blanked when a slow resume parse answers long after the upload are answered again", async () => {
+  // Microsoft's careers form: resume_upload answered eleven seconds after the
+  // upload, and the page then blanked the typed Address and Postal Code/Zip,
+  // after the form had held still for longer than the watch's steady reads.
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, state: "Arizona", address: "100 Test Way", postalCode: "85001" } });
+  await context.route(`${origin}/api/resume_upload**`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 8000));
+    await route.fulfill({ contentType: "application/json", body: "{}" });
+  });
+  await context.route(`${origin}/slow-parse`, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html><form>
+    <label for="Contact_Information_q_address">Address</label><input id="Contact_Information_q_address" autocomplete="one-time-code" aria-required="true">
+    <label for="Contact_Information_q_zip">Postal Code/Zip</label><input id="Contact_Information_q_zip" autocomplete="one-time-code" aria-required="true">
+    <label>Upload your resume<input type="file" accept=".pdf,.doc,.docx,.txt,.rtf"></label>
+    <button type="submit">Submit</button></form><script>
+      window.cleared=0;
+      document.querySelector('input[type=file]').addEventListener('change', () => {
+        fetch('/api/resume_upload?domain=x').then(() => setTimeout(() => {
+          for (const id of ['Contact_Information_q_address','Contact_Information_q_zip']) {
+            const input = document.getElementById(id); input.value = ''; input.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          window.cleared++;
+        }, 150));
+      });
+    </script>` }));
+  const page = await context.newPage();
+  await page.goto(`${origin}/slow-parse`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 90000 }).toMatch(/^(ready|awaiting-user)$/);
   expect(await page.evaluate(() => (window as any).cleared)).toBe(1);
   await expect(page.locator("#Contact_Information_q_address")).toHaveValue("100 Test Way");
   await expect(page.locator("#Contact_Information_q_zip")).toHaveValue("85001");

@@ -48,6 +48,8 @@ export const valueOf = (element: Control): string => {
       ? ""
       : value;
   }
+  if (role === "checkbox" && iconRadioLabel(element))
+    return (iconRadioLabel(element)!.control as HTMLInputElement).checked ? "Yes" : "";
   if (
     ["checkbox", "radio"].includes(role || "") &&
     (!(element instanceof HTMLInputElement) ||

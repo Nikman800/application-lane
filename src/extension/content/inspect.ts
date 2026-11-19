@@ -433,6 +433,8 @@ export function inspect(): Observation {
       .map((label) => /cover\s*letter/i.test(label.textContent || "") ? "cover" : /\b(resume|cv)\b/i.test(label.textContent || "") ? "resume" : "")
       .filter(Boolean))]),
     ...(configEngineEnabled && resumeSlotOpen() ? { resumeSlotOpen: true } : {}),
+    uploadRequests: performance.getEntriesByType("resource").filter((entry) =>
+      /^(xmlhttprequest|fetch)$/.test((entry as PerformanceResourceTiming).initiatorType) && /upload|parse/i.test(entry.name.split("?")[0])).length,
     ...((slots) => (slots.length ? { uploadSlots: slots } : {}))(configEngineEnabled ? configUploadSlots() : []),
     ...((folded) => (folded ? { foldedSections: folded } : {}))(document.querySelectorAll('.rcmFormSection button.rcmFormSectionTopBar[aria-expanded="false"]').length),
     canAdvance: Boolean(next),

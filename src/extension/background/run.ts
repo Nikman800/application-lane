@@ -834,14 +834,25 @@ export async function run(app: Application, operation: number) {
       const emptied = (fields: Field[]) => fields.filter((f) => f.kind !== "file" && !f.value && resume.filledBeforeResume!.has(f.id) && !f.protected);
       let previous = "";
       let steady = 0;
-      for (let waited = 0; waited < 15 && steady < 2; waited++) {
+      // Not settled until the site's own upload request has answered (Microsoft's
+      // resume_upload took eleven seconds, and the form was blanked after the
+      // form had held still), or 20 seconds when none is seen.
+      const requestsBefore = frame.observation.uploadRequests || 0;
+      let answered = false;
+      for (let waited = 0; waited < 30 && steady < 2; waited++) {
         await new Promise((resolve) => setTimeout(resolve, 1000));
         if (!alive(app, operation)) return;
         const now: Observation | undefined = await frameCall(app, frame.frameId, { type: "INSPECT", documentId: frame.observation.documentId }).catch(() => undefined);
         if (!now) break;
         frame.observation = now;
+        if ((now.uploadRequests || 0) > requestsBefore && !answered) {
+          answered = true;
+          previous = "";
+          steady = 0;
+          waited = Math.max(waited, 2);
+        }
         const form = JSON.stringify(now.fields.map((field) => [field.id, field.value]));
-        steady = form === previous && waited >= 3 ? steady + 1 : 0;
+        steady = form === previous && waited >= 3 && (answered || waited >= 20) ? steady + 1 : 0;
         previous = form;
       }
       const lost = emptied(frame.observation.fields);
