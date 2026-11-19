@@ -12301,7 +12301,11 @@ test("an Avature form on an employer's own careers domain is filled by the Avatu
   await expect(input("172-5-1")).toHaveValue("2023-09");
 });
 
-test("an Avature form whose page stops every click a script makes still gets its added rows and its skills, though a text box holds a value typed before the fill", async () => {
+// The page stops the clicks at the window, or on the form, which leaves
+// the select2 list (appended to the body) outside it: clicked, its option
+// picks nothing, as select2 picks on mouseup (live, 2026-11-19).
+for (const stopper of ["window", "form"] as const)
+test(`an Avature form whose page stops every click a script makes still gets its added rows and its skills, though a text box holds a value typed before the fill${stopper === "form" ? ", the clicks stopped at the form" : ""}`, async () => {
   // one employer's Avature Register page (live): a page script stops every
   // untrusted click at the window, so the fill's click on "add another" never
   // reached the link, whose jQuery handler adds the row (only one job was
@@ -12348,7 +12352,7 @@ test("an Avature form whose page stops every click a script makes still gets its
           </div>
         </fieldset>
       </div></form></div></main><script>
-        window.addEventListener('click', (event) => { if (!event.isTrusted) event.stopPropagation(); }, true);
+        (${stopper === "form" ? "document.querySelector('form')" : "window"}).addEventListener('click', (event) => { if (!event.isTrusted) event.stopPropagation(); }, true);
         // As much of jQuery as the page uses: handlers kept by jQuery (on
         // an element, or delegated to its matching descendants) and run by
         // trigger(), which walks up from the element with no DOM event.

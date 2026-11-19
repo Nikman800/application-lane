@@ -546,25 +546,32 @@ export function applyMainWorld(
       };
       // A link whose click the page stopped still follows its href ("#" there):
       // that navigation read as the applicant's and paused the fill. A stopped
-      // click is seen by the other listeners on the node that stopped it.
+      // click is seen by the other listeners on the node that stopped it,
+      // wherever on the way down that is (the window, or the form).
       const link = element.closest("a[href]");
       const stopped = (event: Event) => {
         if (link && event.type === "click" && event.cancelBubble && event.composedPath().includes(link)) event.preventDefault();
       };
-      window.addEventListener("click", stopped, true);
-      document.addEventListener("click", stopped, true);
+      const ancestors: EventTarget[] = [window];
+      for (let node: Node | null = element.parentNode; node; node = node.parentNode instanceof ShadowRoot ? node.parentNode.host : node.parentNode) ancestors.push(node);
+      for (const node of ancestors) node.addEventListener("click", stopped, true);
       element.addEventListener("click", arrived);
       element.click();
       element.removeEventListener("click", arrived);
-      window.removeEventListener("click", stopped, true);
-      document.removeEventListener("click", stopped, true);
+      for (const node of ancestors) node.removeEventListener("click", stopped, true);
       // A page that stops every click a script makes before it reaches its
       // target (one Avature careers site, at the window): the element's own
       // jQuery handlers are run through jQuery, which needs no DOM event. Its
       // "add another" link added no job or school row otherwise, and its
       // select2 skills list, which picks an option on mouseup, no skill.
+      // A select2 option is picked on mouseup only, so a click that reached
+      // it picked nothing (the same page, where its list sits outside the
+      // form that stops the clicks).
       const jquery = (window as any).jQuery;
-      if (!reached && typeof jquery === "function") jquery(element).trigger("mouseup").trigger("click");
+      if (typeof jquery === "function") {
+        if (!reached) jquery(element).trigger("mouseup").trigger("click");
+        else if (element.matches(".select2-results__option")) jquery(element).trigger("mouseup");
+      }
       // A SuccessFactors picklist loads its list only once focused as well:
       // clicked alone it reads as open and stays empty.
       if (element.matches('input.rcmpaginatedselectinput[role="combobox"]')) element.focus({ preventScroll: true });
