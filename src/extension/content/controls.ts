@@ -11,6 +11,10 @@ import { RecordEntry, calendarBox, legacyReactSelect } from "./core";
 
 export const valueOf = (element: Control): string => {
   if (element.matches('.ashby-application-form-input-autocomplete[role="combobox"][aria-expanded="true"]')) return "";
+  // A select2 search box holds a query, never a pick (the picks are its
+  // select's): a skill an earlier fill typed and left there read as an
+  // existing answer and kept Avature's skills from being chosen.
+  if (element instanceof HTMLInputElement && element.classList.contains("select2-search__field")) return "";
   // Our own autocomplete query is not a selected application answer.
   if (element instanceof HTMLInputElement &&
     ownedAutocompleteSearches.has(element) &&

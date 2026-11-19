@@ -12415,6 +12415,9 @@ test("an Avature form whose page stops every click a script makes still gets its
   // the applicant's edit (live, on the skills search box, 2026-11-19).
   await page.locator('[id="162"]').pressSequentially(profile.firstName);
   await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  // A skill an earlier fill typed and left in the search box (live): text
+  // there is a search, not a pick, and is no answer to keep.
+  await page.evaluate(() => { (document.getElementById("967-search__field") as HTMLInputElement).value = "TypeScript"; });
   await enqueue([page]);
   await expect(page.locator('[id="162"]')).toHaveValue(profile.firstName, { timeout: 30000 });
   const input = (id: string) => page.locator(`[id="${id}"]`);
