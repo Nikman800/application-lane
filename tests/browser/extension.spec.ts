@@ -12301,6 +12301,125 @@ test("an Avature form on an employer's own careers domain is filled by the Avatu
   await expect(input("172-5-1")).toHaveValue("2023-09");
 });
 
+test("an Avature form whose page stops every click a script makes still gets its added rows and its skills", async () => {
+  // one employer's Avature Register page (live): a page script stops every
+  // untrusted click at the window, so the fill's click on "add another" never
+  // reached the link, whose jQuery handler adds the row (only one job was
+  // filled), nor a skill in the select2 list, which jQuery picks on mouseup.
+  // The stopped link click still went to "#", which paused the fill.
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      skills: ["Python", "SQL"],
+      work: [
+        { organization: "Example Labs", title: "Software Engineer", location: "Tucson, AZ", details: "Built services.", startDate: "2026-03-27", endDate: "" },
+        { organization: "Sample AI", title: "Intern", location: "Remote", details: "Built APIs.", startDate: "2023-07-03", endDate: "2023-09-08" },
+      ],
+    },
+  });
+  const spec = (row: string, n: number, kind: string, label: string, control: string) =>
+    `<div class="fieldSpec ${kind} isRequired fieldSpecPadder fieldSpec--in-dataset" id="fieldSpecContainer172-${n}-${row}"><label class="requiredField WizardFieldLabel tc_formLabel" for="172-${n}-${row}" id="172-${n}-${row}-label">${label}<span aria-hidden="true" class="labelRequiredIcon"> *</span></label>${control}</div>`;
+  const text = (row: string, n: number, label: string) =>
+    spec(row, n, "TextField", label, `<input type="text" id="172-${n}-${row}" name="172-${n}-${row}" class=" TextField WizardFieldInputContainer WizardFieldInput" aria-labelledby="172-${n}-${row}-label">`);
+  const month = (row: string, n: number, label: string) =>
+    `<div class="fieldSpec DateFormField isRequired fieldSpecPadder fieldSpec--in-dataset" id="fieldSpecContainer172-${n}-${row}"><div id="172-${n}-${row}-accessibleContainer"><label class="requiredField WizardFieldLabel tc_formLabel" for="172-${n}-${row}" id="172-${n}-${row}-label">${label}</label><input type="month" id="172-${n}-${row}" name="172-${n}-${row}" class=" DateFormField WizardFieldInputContainer WizardFieldInput" value="" aria-labelledby="172-${n}-${row}-label"></div></div>`;
+  const row = (id: string) =>
+    `<fieldset class="datasetField__row${id === "sample" ? " datasetField__row--sample" : ""}" id="datasetField__row--172${id === "sample" ? "-sample" : "_" + id}"${id === "sample" ? ' aria-hidden="true" hidden=""' : ""}>${text(id, 1, "Company")}${text(id, 2, "Position title")}${month(id, 4, "Start date")}${month(id, 5, "End date")}</fieldset>`;
+  await context.route(`${avatureOwnDomainOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Software Engineer</title><main><div class="article__content"><form class="form form--step1 clearfix tpt_wizard" autocomplete="off" method="post"><div id="wizard-id-6" class="wizard" data-id="6"><input type="hidden" name="jobId" value="1"><input type="hidden" name="entityData" value="x">
+        <fieldset class="Section Section2"><div class="Separator Separator2" id="fieldSpecContainer161"><legend class="WizardFieldLabel tc_formTitle" id="161">General Information</legend></div>
+          <div class="fieldSpec TextField fieldSpecPadder" id="fieldSpecContainer162"><label class="WizardFieldLabel tc_formLabel" for="162" id="162-label">First name</label><input type="text" id="162" name="162" class="TextField WizardFieldInput" aria-labelledby="162-label"></div>
+          <div class="Separator Separator4" id="fieldSpecContainer171"><legend class="WizardFieldLabel tc_formTitle" id="171">Work Experience</legend></div>
+          <div class="fieldSpec form__item--hidden-label MultipleDatasetEntryFormField--cols2 datasetField isRequired fieldSpecPadder" id="fieldSpecContainer172"><p class="requiredField WizardEmptyLabel WizardFieldLabel tc_formLabel" id="172-label"><span aria-hidden="true" class="labelRequiredIcon"> *</span></p>
+            <div class="datasetcontent tc_formField" id="172" role="group" aria-labelledby="172-label">${row("sample")}${row("0")}
+              <div class="datasetField__button datasetField__button--add"><a href="#" id="addRowFor_172" class="action action--add WizardFieldLink" role="button">add another</a></div>
+            </div>
+          </div>
+        </fieldset>
+        <fieldset class="Section Section3"><div class="Separator Separator3"><legend class="WizardFieldLabel tc_formTitle">Skills</legend></div>
+          <div class="fieldSpec MultipleSelectFormField AutoCompleteField fieldSpecPadder" id="fieldSpecContainer967"><label class="WizardFieldLabel tc_formLabel" for="967" id="967-label">What skills do you have?</label>
+            <select name="967[]" id="967" multiple class="select2-hidden-accessible" aria-hidden="true" tabindex="-1" style="display:none"></select>
+            <span class="select2 select2-container"><span class="selection"><span class="select2-selection select2-selection--multiple" role="combobox" aria-expanded="false"><ul class="select2-selection__rendered" role="group"><li class="select2-search select2-search--inline" role="none"><input id="967-search__field" class="select2-search__field" type="search" role="searchbox" autocomplete="off" placeholder="Select an option"></li></ul></span></span></span>
+          </div>
+        </fieldset>
+      </div></form></div></main><script>
+        window.addEventListener('click', (event) => { if (!event.isTrusted) event.stopPropagation(); }, true);
+        // As much of jQuery as the page uses: handlers kept by jQuery (on
+        // an element, or delegated to its matching descendants) and run by
+        // trigger(), which walks up from the element with no DOM event.
+        const bound = [];
+        window.jQuery = (element) => {
+          const api = {
+            on(type, selector, handler) {
+              if (typeof selector === 'function') { handler = selector; selector = null; }
+              bound.push({ element, type, selector, handler });
+              element.addEventListener(type, (event) => {
+                const target = selector ? event.target.closest(selector) : element;
+                if (target && element.contains(target) && handler.call(target, event) === false) event.preventDefault();
+              });
+              return api;
+            },
+            click(handler) { return api.on('click', handler); },
+            trigger(type) {
+              for (let node = element; node; node = node.parentNode)
+                for (const entry of bound)
+                  if (entry.element === node && entry.type === type) {
+                    const target = entry.selector ? element.closest(entry.selector) : node;
+                    if (target && node.contains(target)) entry.handler.call(target, { type, target: element, preventDefault() {} });
+                  }
+              return api;
+            },
+          };
+          return api;
+        };
+        let rows = 1;
+        window.jQuery(document.querySelector('#addRowFor_172')).click(() => {
+          const sample = document.querySelector('#datasetField__row--172-sample');
+          const html = sample.outerHTML.replaceAll('-sample', '-' + rows).replace('datasetField__row--172-' + rows, 'datasetField__row--172_' + rows).replace(' aria-hidden="true" hidden=""', '').replace(' datasetField__row--sample', '');
+          rows++;
+          document.querySelector('#addRowFor_172').parentElement.insertAdjacentHTML('beforebegin', html);
+          return false;
+        });
+        const all = [["4316", "Python"], ["4317", "Python Scripting"], ["5001", "SQL"], ["5002", "SQL Server"]];
+        const search = document.querySelector('[id="967-search__field"]');
+        const select = document.querySelector('[id="967"]');
+        let menu;
+        const close = () => { menu?.remove(); menu = undefined; };
+        search.addEventListener("input", () => {
+          close();
+          const text = search.value.trim().toLowerCase();
+          if (!text) return;
+          menu = document.createElement("span");
+          menu.className = "select2-container select2-container--open";
+          menu.innerHTML = '<span class="select2-dropdown"><span class="select2-results"><ul class="select2-results__options" role="listbox">' +
+            all.filter(([, name]) => name.toLowerCase().includes(text)).map(([id, name]) => '<li class="select2-results__option" role="option" data-id="' + id + '">' + name + '</li>').join("") + '</ul></span></span>';
+          document.body.append(menu);
+          window.jQuery(menu).on("mouseup", "li[data-id]", function () {
+            if (![...select.options].some((o) => o.value === this.dataset.id)) select.insertAdjacentHTML("beforeend", '<option value="' + this.dataset.id + '" selected>' + this.textContent + '</option>');
+            search.value = "";
+          });
+        });
+        document.addEventListener("mousedown", (event) => { if (!event.target.closest(".select2-dropdown, .select2")) close(); });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${avatureOwnDomainOrigin}/en_US/careers/ApplicationMethods?jobId=1`);
+  await enqueue([page]);
+  await expect(page.locator('[id="162"]')).toHaveValue(profile.firstName, { timeout: 30000 });
+  const input = (id: string) => page.locator(`[id="${id}"]`);
+  await expect(input("172-4-0")).toHaveValue("2026-03", { timeout: 30000 });
+  await expect(input("172-1-1")).toHaveValue("Sample AI");
+  await expect(input("172-4-1")).toHaveValue("2023-07");
+  await expect(input("172-5-1")).toHaveValue("2023-09");
+  await expect.poll(() => page.locator('[id="967"] option:checked').allTextContents(), { timeout: 60000 }).toEqual(["Python", "SQL"]);
+});
+
 test("each Avature job row gets its own start and end month, added rows too", async () => {
   // one employer's Avature Register page (fill capture): the third
   // job, in a row the extension added, kept no end month and showed a start
