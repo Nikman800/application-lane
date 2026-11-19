@@ -80,6 +80,7 @@ const amazonOrigin = "https://account.amazon.jobs";
 const paylocityOrigin = "https://recruiting.paylocity.com";
 const jazzOrigin = "https://acme.applytojob.com";
 const jobviteOrigin = "https://jobs.jobvite.com";
+const microsoftOrigin = "https://apply.careers.microsoft.com";
 const avatureOrigin = "https://acme.avature.net";
 const breezyOrigin = "https://acme.breezy.hr";
 const ripplingOrigin = "https://ats.rippling.com";
@@ -289,7 +290,7 @@ test.beforeEach(async () => {
       backendOrigin,
     ),
   );
-  manifest.host_permissions.push(...[...atsOrigins, oracleOrigin, workableOrigin, sapsfOrigin, adpOrigin, talNetOrigin, amazonOrigin, paylocityOrigin, jazzOrigin, jobviteOrigin, avatureOrigin, breezyOrigin, ripplingOrigin, teslaOrigin, tiktokOrigin, smartRecruitersOrigin, "https://smartapply.indeed.com", "https://www.linkedin.com"].map((origin) => `${origin}/*`));
+  manifest.host_permissions.push(...[...atsOrigins, oracleOrigin, microsoftOrigin, workableOrigin, sapsfOrigin, adpOrigin, talNetOrigin, amazonOrigin, paylocityOrigin, jazzOrigin, jobviteOrigin, avatureOrigin, breezyOrigin, ripplingOrigin, teslaOrigin, tiktokOrigin, smartRecruitersOrigin, "https://smartapply.indeed.com", "https://www.linkedin.com"].map((origin) => `${origin}/*`));
   await writeFile(
     join(extensionPath, "manifest.json"),
     JSON.stringify(manifest),
@@ -14069,6 +14070,38 @@ test("answers blanked when a slow resume parse answers long after the upload are
   expect(await page.evaluate(() => (window as any).cleared)).toBe(1);
   await expect(page.locator("#Contact_Information_q_address")).toHaveValue("100 Test Way");
   await expect(page.locator("#Contact_Information_q_zip")).toHaveValue("85001");
+});
+
+test("a text box that validated on blur before its state caught up with the keys is revalidated", async () => {
+  // Microsoft's careers form: its state follows the input a moment late, and
+  // the blur that ends the typing validated it while still blank, so
+  // "Address cannot be left blank." showed over the typed address.
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, state: "Arizona", address: "100 Test Way", postalCode: "24060" } });
+  await context.route(`${microsoftOrigin}/careers/apply**`, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html><form>
+    <label for="Contact_Information_q_address">Address</label><input id="Contact_Information_q_address" data-test-id="Contact_Information_q_address" autocomplete="one-time-code" aria-required="true" aria-describedby="address-error"><div id="address-error"></div>
+    <label for="Contact_Information_q_zip">Postal Code/Zip</label><input id="Contact_Information_q_zip" data-test-id="Contact_Information_q_zip" autocomplete="one-time-code" aria-required="true" aria-describedby="zip-error"><div id="zip-error"></div>
+    <button type="submit">Submit</button></form><script>
+      for (const [id, name, errorId] of [['Contact_Information_q_address', 'Address', 'address-error'], ['Contact_Information_q_zip', 'Postal Code/Zip', 'zip-error']]) {
+        const input = document.getElementById(id);
+        let state = '';
+        input.addEventListener('input', () => setTimeout(() => { state = input.value; }, 200));
+        input.addEventListener('blur', () => {
+          const bad = !state;
+          if (bad) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
+          document.getElementById(errorId).textContent = bad ? 'Error: ' + name + ' cannot be left blank.' : '';
+        });
+      }
+    </script>` }));
+  const page = await context.newPage();
+  await page.goto(`${microsoftOrigin}/careers/apply?pid=1`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 60000 }).toMatch(/^(ready|awaiting-user)$/);
+  await expect(page.locator("#Contact_Information_q_address")).toHaveValue("100 Test Way");
+  await expect(page.locator("#Contact_Information_q_zip")).toHaveValue("24060");
+  await expect(page.locator("#Contact_Information_q_address")).not.toHaveAttribute("aria-invalid", "true");
+  await expect(page.locator("#Contact_Information_q_zip")).not.toHaveAttribute("aria-invalid", "true");
+  await expect(page.locator("#address-error")).not.toContainText("cannot be left blank");
+  await expect(page.locator("#zip-error")).not.toContainText("cannot be left blank");
 });
 
 test("an explicit location-address helper fills confirmed location without replacing a real applicant edit", async () => {

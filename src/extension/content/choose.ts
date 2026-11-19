@@ -1185,6 +1185,24 @@ export async function typeTrusted(
   // again is what the check before typing sees.
   if (cs.misdirected)
     return retry && typeTrusted(command, element, text, safe, signal, false, enter, choose);
+  // A site whose state follows the keys a moment late validated the box on
+  // that blur while its state was still blank, and shows "cannot be left
+  // blank" over the value (Microsoft's Address and Postal Code). Entered
+  // and left once more, it validates the state it now holds.
+  if (!enter && !choose && element instanceof HTMLInputElement && !element.matches('input[role="spinbutton"]') && !userAttention()) {
+    await pause(300);
+    if (element.getAttribute("aria-invalid") === "true" && element.value && safe() && !userAttention() &&
+        (element.getRootNode() as Document | ShadowRoot).activeElement !== element) {
+      cs.trustedWrite = element;
+      try {
+        element.focus();
+        await pause(50);
+        if (focused()) element.blur();
+      } finally {
+        cs.trustedWrite = undefined;
+      }
+    }
+  }
   return true;
 }
 
