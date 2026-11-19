@@ -131,6 +131,12 @@ test("refills need a reason, and stop after refills that change nothing", () => 
   for (let n = 0; n < NO_PROGRESS_LIMIT; n++) repair = recordAttempt(repair, { reason: "page", capture: `c${n}`, found: found(city) }, 10 + n);
   assert.match(repair.blocker || "", /changed nothing/);
   assert.equal(mayRetry(repair, "profile").ok, false);
+  // A check after a fix that resolves a defect lifts the block.
+  const town = defect("lost-value", "Town");
+  const twice = recordAttempt(repair, { reason: "repair", capture: "c8", found: found(city, town) }, 20);
+  const fixed = recordAttempt(twice, { reason: "repair", capture: "c9", found: found(town) }, 21);
+  assert.equal(fixed.blocker, undefined);
+  assert.equal(mayRetry(fixed, "repair").ok, true);
   // Given back with its defect open, saying why: the record keeps it open.
   const back = release(repair, 100, "The site refuses the city list; the applicant picks it.");
   assert.equal(section(back), undefined);

@@ -220,7 +220,9 @@ export function recordAttempt(repair: Repair, outcome: { reason: Attempt["reason
     attempts,
     refill: undefined,
     userActions: [...new Set([...repair.userActions, ...outcome.found.userActions])].slice(0, 50),
-    blocker: stuck ? `${NO_PROGRESS_LIMIT} refills changed nothing; still open: ${attempt.remaining.slice(0, 4).join(", ")}` : repair.blocker,
+    // A later check that resolves something is progress again: the block
+    // named defects that are no longer all open.
+    blocker: stuck ? `${NO_PROGRESS_LIMIT} refills changed nothing; still open: ${attempt.remaining.slice(0, 4).join(", ")}` : attempt.progress ? undefined : repair.blocker,
     updatedAt: now,
   };
 }
