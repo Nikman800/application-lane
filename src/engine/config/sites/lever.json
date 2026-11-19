@@ -55,7 +55,7 @@
             {
               "path": "//div[contains(@class,'dropdown-results')]//div[contains(@class,'dropdown-location')][1]",
               "event": "mousedown",
-              "time": 4000,
+              "time": 15000,
               "allowFailure": true,
               "pickRequired": true
             },

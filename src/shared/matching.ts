@@ -687,9 +687,17 @@ export function profileAnswer(
   // their profile. Signatures and initials stay theirs, a box that states a
   // refusal is not an acknowledgement, and opting in to messages or marketing
   // is a preference, not one either.
+  // One box of a question's options ("<question>: <option>", Lever's
+  // multiple-select): the question's wording is on every box, so a "No" or
+  // "No, I have remaining coursework" option is a refusal, not the
+  // acknowledgement, and is left clear (report 55bf383a ticked both boxes).
+  const ownOption = field.kind === "checkbox" && field.question && field.label.includes(": ")
+    ? normalize(field.label.slice(field.label.lastIndexOf(": ") + 2))
+    : "";
   if (
     field.kind === "checkbox" &&
     profile.acknowledgeTerms &&
+    !/^no\b/.test(ownOption) &&
     /\b(agree\w*|acknowledg\w*|consent\w*|certif\w*|accept\w*|i (understand|confirm|attest|have read|authorize|hereby)|privacy (policy|notice|statement)|terms (and|of) )/.test(label) &&
     !/\bsign(ature|ing|ed)?\b|\binitials?\b|\b(do not|don t|not|decline to) (agree|consent|accept|authorize|wish)\b|\b(sms|text messages?|texts?|whatsapp|marketing|newsletter|promotional|job alerts?|talent (community|network|pool)|future (job |career |employment )?(opportunit\w*|openings?|roles?|positions?)|contact me about|keep me (informed|updated|posted))\b/.test(label)
   )

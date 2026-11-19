@@ -885,9 +885,26 @@ export async function clickBox(control: HTMLInputElement, checked: boolean, comm
     const target = (control.getClientRects().length ? control : control.labels?.[0]) as HTMLElement | undefined;
     target?.scrollIntoView({ block: "nearest" });
     await pause(80);
-    const box = target?.getBoundingClientRect();
+    let box = target?.getBoundingClientRect();
+    const wrapper = control.closest(".checkbox__wrapper,label,li,div") || control;
+    // A sticky header or a cookie banner over the box's centre (Lever's)
+    // would take the real click: its pointer events, outside the fill's
+    // own write, read as the applicant's and paused the fill. The box is
+    // scrolled toward the middle of the view and tested once more; still
+    // covered, the real click is skipped for a script's.
+    const covered = (rect: DOMRect) => {
+      const root = control.getRootNode() as Document | ShadowRoot;
+      const hit = (root || document).elementFromPoint(Math.round(rect.left + rect.width / 2), Math.round(rect.top + rect.height / 2));
+      return !(hit && (hit === control || control.contains(hit) || control.labels?.[0]?.contains(hit) || wrapper.contains(hit)));
+    };
+    if (target && box && box.width > 0 && box.height > 0 && covered(box)) {
+      target.scrollIntoView({ block: "center" });
+      await pause(80);
+      box = target.getBoundingClientRect();
+      if (box.width > 0 && box.height > 0 && covered(box)) box = undefined;
+    }
     if (box && box.width > 0 && box.height > 0) {
-      cs.trustedWrite = control.closest(".checkbox__wrapper,label,li,div") || control;
+      cs.trustedWrite = wrapper;
       try {
         await requestTrustedType(control, { applicationId: cs.applicationId, operation: cs.operation, documentId }, "", 0, undefined, () => valid(command), false, 0, false,
           { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) });

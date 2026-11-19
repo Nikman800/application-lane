@@ -2861,3 +2861,15 @@ test("an availability or notice period question takes a saved Immediately", () =
   const weeks = profileSchema.parse({ ...rivera, answers: [{ question: "When can you start?", answer: "Two weeks' notice" }] });
   assert.equal(valueOf("What is your availability or notice period?", {}, weeks), undefined);
 });
+
+// A Lever questionnaire: a multiple-select question draws one box per option,
+// each observed as "<question>: <option>". The acknowledgement rule
+// ticked every box (report 55bf383a); only the box naming it is ticked.
+test("an acknowledgement question drawn as one box per option ticks only the box naming it", () => {
+  const question = "I confirm that I have read the full job description for this position.";
+  const applicant = profileSchema.parse({ ...profile, acknowledgeTerms: true });
+  const ticks = (options: string[]) =>
+    options.map((option) => proposals([field(`${question}: ${option}`, { kind: "checkbox", question })], applicant)[0]?.value);
+  assert.deepEqual(ticks(["Yes", "No"]), ["Yes", undefined]);
+  assert.deepEqual(ticks(["Yes, I confirm the above", "No, I have remaining coursework that will make it difficult"]), ["Yes", undefined]);
+});

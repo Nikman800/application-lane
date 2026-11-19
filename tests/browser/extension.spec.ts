@@ -7315,6 +7315,85 @@ test("Lever's location is picked from its search and still picked when the fill 
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
+// Lever's location search took 13 s to answer (report 55bf383a) while the rule
+// waited 4 s for the first result, so the location was left unpicked.
+test("Lever's location is picked when its search answers only after several seconds", async () => {
+  await context.route("https://jobs.lever.co/**", (route) => route.fulfill({ contentType: "text/html", body: leverLocationPage.replace("}, 250);", "}, 6000);") }));
+  const page = await context.newPage();
+  await page.goto("https://jobs.lever.co/acme/00000000-0000-4000-8000-000000000011/apply");
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.waitForTimeout(1500);
+  const picked = await page.locator("#selected-location").inputValue();
+  const timeline = await page.evaluate(() => (window as any).timeline);
+  expect({ box: await page.locator("#location-input").inputValue(), picked }, timeline.join("\n")).toMatchObject({ box: `${profile.city}, AZ, USA`, picked: JSON.stringify({ name: `${profile.city}, AZ, USA`, id: "first" }) });
+});
+
+// A Lever multiple-select question draws one checkbox per option. The
+// acknowledgement rule ticked every box naming "I confirm" (report 55bf383a):
+// the "No" box and "No, I have remaining coursework…" were ticked beside Yes.
+const leverConfirmBoxes = (question: string, options: string[], before = "") => `<!doctype html><html><head><title>Acme - Frontend Engineer</title></head><body>
+<form id="application-form" onsubmit="return false"><ul>
+<li class="application-question"><label><div class="application-label">Full name <span class="required">✱</span></div><div class="application-field"><input type="text" name="name" required></div></label></li>
+</ul>${before}<ul><li class="application-question custom-question"><div><div class="application-label full-width multiple-select"><div class="text">${question}<span class="required">✱</span></div></div><div class="application-field full-width required-field"><ul data-qa="checkboxes">${options
+  .map((option) => `<li><label><input type="checkbox" name="cards[6f92624e-788b-48dc-9aab-026a286e3d3d][field7]" value="${option}"><span class="application-answer-alternative">${option}</span></label></li>`)
+  .join("")}</ul></div></div></li></ul></form></body></html>`;
+
+test("a Lever multiple-select question with Yes and No boxes has only the Yes box ticked", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, acknowledgeTerms: true } });
+  const question = "I confirm that I have read the full job description for this position and the notice regarding the use of artificial intelligence in our application screening process.";
+  await context.route("https://jobs.lever.co/**", (route) => route.fulfill({ contentType: "text/html", body: leverConfirmBoxes(question, ["Yes", "No"]) }));
+  const page = await context.newPage();
+  await page.goto("https://jobs.lever.co/acme/00000000-0000-4000-8000-000000000012/apply");
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator('input[value="Yes"]')).toBeChecked({ timeout: 30000 });
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.waitForTimeout(1500);
+  await expect(page.locator('input[value="No"]')).not.toBeChecked();
+});
+
+test("a Lever multiple-select question worded in sentences has only the confirming box ticked", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, acknowledgeTerms: true } });
+  const question = "I confirm that I have completed all coursework required for my degree.";
+  const yes = "Yes, I confirm the above";
+  const no = "No, I have remaining coursework that will make it difficult";
+  await context.route("https://jobs.lever.co/**", (route) => route.fulfill({ contentType: "text/html", body: leverConfirmBoxes(question, [yes, no]) }));
+  const page = await context.newPage();
+  await page.goto("https://jobs.lever.co/acme/00000000-0000-4000-8000-000000000013/apply");
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator(`input[value="${yes}"]`)).toBeChecked({ timeout: 30000 });
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.waitForTimeout(1500);
+  await expect(page.locator(`input[value="${no}"]`)).not.toBeChecked();
+});
+
+// Lever's sticky header and cookie banner sit over a box the fill scrolled
+// to the edge of the view: the real click landed on the banner, outside the
+// fill's own write, and was read as the applicant's (report 4f9f30e3), pausing the fill.
+test("a Lever box covered by a fixed banner is ticked without a click on the banner pausing the fill", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, acknowledgeTerms: true } });
+  const question = "I confirm that I have read the full job description for this position.";
+  const banner = `<div class="message message-inverse" style="position:fixed;left:0;right:0;bottom:0;height:45vh;background:#222;z-index:9999">Cookies</div>
+    <div style="height:2500px"></div>
+    <script>
+      window.bannerPointers = 0;
+      for (const type of ["pointerdown", "mousedown", "click"])
+        document.querySelector(".message-inverse").addEventListener(type, (event) => { if (event.isTrusted) window.bannerPointers++; }, true);
+    </script>`;
+  await context.route("https://jobs.lever.co/**", (route) => route.fulfill({ contentType: "text/html", body: leverConfirmBoxes(question, ["Yes", "No"], banner) }));
+  const page = await context.newPage();
+  await page.goto("https://jobs.lever.co/acme/00000000-0000-4000-8000-000000000014/apply");
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator('input[value="Yes"]')).toBeChecked({ timeout: 30000 });
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => (window as any).bannerPointers)).toBe(0);
+  expect((await state()).applications[0].status).not.toBe("paused");
+});
+
 // Reports on two Ashby forms: a box of a checkbox question was
 // read as a question of its own. "Veteran" (one of several communities) was
 // ticked for an applicant who is not one, and both degree boxes were ticked.
