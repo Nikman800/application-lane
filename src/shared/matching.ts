@@ -611,6 +611,21 @@ export function profileAnswer(
   // remain available through deterministicAnswer.
   // "…submit verification of both your identity and authorization to work"
   // asks for documents too.
+  // A U.S. citizen or permanent resident has that proof by their status (the
+  // documents the hiring forms accept): "If hired, will you be able to
+  // provide proof of your legal right to work in the United States?" was
+  // left empty with no reason for a citizen (one employer's Jobvite).
+  const proofAsked = normalize(askedPart(field.label));
+  if (
+    /^(if hired )?(will|would|can|could) you (be able to )?(provide|furnish|submit|present|produce) (proof|documentation|evidence|documents)\b/.test(proofAsked) &&
+    /\b(right|authori[sz]ation|eligibility|eligible) to work\b|\bemployment eligibility\b/.test(proofAsked) &&
+    !/\b(temporary|visa|permit type|sponsor\w*)\b/.test(proofAsked)
+  ) {
+    const entry = authorizationEntry(profile, askedPart(field.label));
+    const aboutUS = (askedCountry(askedPart(field.label)) || jobCountry(profile) || entry?.country || "") === "US";
+    if (aboutUS && entry?.country === "US" && (entry.status === "citizen" || entry.status === "permanent-resident"))
+      return { value: "Yes" };
+  }
   if (/\b(proof|document\w*|verification|temporary|permit type)\b/.test(normalize(askedPart(field.label))) &&
       /authori[sz]|right to work|visa/.test(label)) return;
   // "Do you currently have an active immigration case (ex H-1B extension,

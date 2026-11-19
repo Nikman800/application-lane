@@ -1348,6 +1348,21 @@ test("confirmed authorization answers an explicit OR with proof without claiming
 });
 
 
+// One employer's Jobvite: "If hired, will you be able to provide proof of
+// your legal right to work in the United States?" was left empty, with no
+// reason, for a U.S. citizen, who has that proof by their status.
+test("a U.S. citizen or permanent resident can provide proof of their right to work in the United States", () => {
+  const label = "If hired, will you be able to provide proof of your legal right to work in the United States?";
+  const question = field(label, { kind: "radio", options: ["Yes", "No", "Current Contoso team member"] });
+  const status = (value: string) =>
+    profileSchema.parse({ ...profile, citizenships: [], workAuthorization: [{ country: "US", status: value, needsSponsorship: value === "visa" }] });
+  assert.equal(proposals([question], status("citizen"))[0]?.value, "Yes");
+  assert.equal(proposals([question], status("permanent-resident"))[0]?.value, "Yes");
+  assert.deepEqual(proposals([question], status("visa")), []);
+  // A bare Yes to authorization still says nothing about documents.
+  assert.deepEqual(proposals([question], us(profile, "Yes")), []);
+});
+
 test("relocation assistance in a permanent-address request does not infer an address", () => {
   const label = "Please provide your permanent address (city, state, zip code). We use this information to determine eligibility for relocation assistance for the internship. A permanent address is your long-term, stable address.";
   const p = { ...profile, willingToRelocate: "Yes", answers: [{ question: "Are you willing to relocate?", answer: "Yes" }] };
