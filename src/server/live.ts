@@ -15,7 +15,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import type { Config } from "./store";
 
 type Role = "extension" | "cli";
-type Peer = { socket: WebSocket; role: Role };
+type Peer = { socket: WebSocket; role: Role; applications?: Set<string>; queueAt?: number };
 
 const sameToken = (actual: string, expected: string) =>
   actual.length === expected.length && timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
@@ -26,6 +26,16 @@ export function attachLive(server: Server, config: Config) {
   // The command a command-line client is waiting to hear back about.
   const waiting = new Map<string, Peer>();
   let latestQueue: unknown;
+  // Two browsers can hold the paired extension (an applying profile and the
+  // everyday one): a command goes to the one whose queue lists its
+  // application, else to the one that sent its queue last. The first one
+  // connected took every command, and after the applying profile's
+  // extension reloaded, "No such application" came back for all of them.
+  const commandTarget = (applicationId?: string) => {
+    const open = [...peers].filter((other) => other.role === "extension" && other.socket.readyState === other.socket.OPEN);
+    const recent = [...open].sort((a, b) => (b.applications?.size ? 1 : 0) - (a.applications?.size ? 1 : 0) || (b.queueAt ?? 0) - (a.queueAt ?? 0));
+    return (applicationId && open.find((other) => other.applications?.has(applicationId))) || recent[0];
+  };
   const send = (peer: Peer, message: unknown) => {
     if (peer.socket.readyState === peer.socket.OPEN) peer.socket.send(JSON.stringify(message));
   };
@@ -71,6 +81,9 @@ export function attachLive(server: Server, config: Config) {
           // Its queue, for every command line watching.
           if (message.type === "queue") {
             latestQueue = message.snapshot;
+            const listed = (message.snapshot as { applications?: { id?: unknown }[] } | undefined)?.applications;
+            peer.applications = new Set((Array.isArray(listed) ? listed : []).flatMap((app) => (typeof app?.id === "string" ? [app.id] : [])));
+            peer.queueAt = Date.now();
             for (const other of peers) if (other.role === "cli") send(other, message);
           }
           // How a command went, for the command line that sent it.
@@ -83,7 +96,7 @@ export function attachLive(server: Server, config: Config) {
         }
         // From the command line: a command for the extension.
         if (message.type === "command" && typeof message.id === "string" && message.id.length <= 100) {
-          const extension = [...peers].find((other) => other.role === "extension" && other.socket.readyState === other.socket.OPEN);
+          const extension = commandTarget(typeof message.applicationId === "string" ? message.applicationId : undefined);
           if (!extension)
             return send(peer, { type: "result", id: message.id, ok: false, error: "The extension is not connected. Open Chrome with Application Lane paired." });
           waiting.set(message.id, peer);

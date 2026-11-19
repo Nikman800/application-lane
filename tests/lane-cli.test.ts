@@ -153,6 +153,24 @@ test("fill and switch go to the extension over the live line, and come back with
     })).json();
     assert.equal(queued.now, true);
     await until(() => extension.messages.some((message) => message.type === "command" && message.action === "pick-up"));
+    // A second browser holding the extension (the applicant's everyday
+    // one) joins later with the application: its commands go there, not
+    // to the first one joined, which does not have it.
+    extension.socket.send(JSON.stringify({ type: "queue", snapshot: { at: Date.now(), applications: [] } }));
+    const applying = join_(`chrome-extension://${"a".repeat(32)}`);
+    await applying.opened;
+    applying.socket.on("message", (data) => {
+      const message = JSON.parse(String(data));
+      if (message.type === "command")
+        applying.socket.send(JSON.stringify({ type: "result", id: message.id, ok: true, detail: `applying profile did ${message.action}` }));
+    });
+    applying.socket.send(JSON.stringify({ type: "queue", snapshot: { at: Date.now(), applications: [{ id: "f00dcafe-0000-4000-8000-000000000000" }] } }));
+    await new Promise((r) => setTimeout(r, 100));
+    const refreshed = await lane("refresh", "acme");
+    applying.socket.close();
+    await applying.closed;
+    if (!/applying profile did refresh/.test(refreshed)) (extension.socket.close(), watcher.socket.close());
+    assert.match(refreshed, /applying profile did refresh/);
     // With the extension gone, a command says so at once.
     extension.socket.close();
     await extension.closed;
