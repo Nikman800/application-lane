@@ -2902,3 +2902,42 @@ test("a gender identity combobox listing Man and Woman takes Male and Female fro
   assert.deepEqual(closed("Male"), ["Man"]);
   assert.deepEqual(closed("Female"), ["Woman"]);
 });
+
+// Ashby lists graduation as combined seasons and the degree program under
+// way as a radio group; Greenhouse asks the state of residence in a
+// searchable list with no options captured.
+const riveraProfile = (education: Array<Record<string, unknown>>) =>
+  profileSchema.parse({ ...profile, firstName: "Alex", lastName: "Rivera", state: "Ohio", postalCode: "24060", education });
+
+test("an expected graduation date as combined seasons picks the option holding the end date", () => {
+  const options = ["Spring/Summer 2099", "Fall/Winter 2099", "Spring/Summer 2100", "Winter 2101 or later"];
+  const pick = (end: string, list = options) =>
+    proposals([field("When is your expected graduation date (month and year)?", { kind: "radio", options: list })], riveraProfile([{ organization: "Penn State", title: "Masters of Science", startDate: "2025-08-21", endDate: end }]))[0]?.value;
+  assert.equal(pick("2099-12-13"), "Fall/Winter 2099");
+  assert.equal(pick("2099-05-10"), "Spring/Summer 2099");
+  assert.equal(pick("2102-03-01"), "Winter 2101 or later");
+  assert.equal(pick("2098-05-10"), undefined);
+  // A text box keeps the month and year.
+  assert.equal(proposals([field("When is your expected graduation date (month and year)?")], riveraProfile([{ organization: "Penn State", title: "Masters of Science", startDate: "2025-08", endDate: "2099-12-13" }]))[0]?.value, "December 2099");
+});
+
+test("the degree program a student is enrolled in names the level of the program under way", () => {
+  const options = ["Undergraduate (B.S./B.A)", "Master's (M.S./M.A.)", "Ph.D.", "Non-Degree/Bootcamp/Certificate", "Not Currently Enrolled"];
+  const pick = (education: Array<Record<string, unknown>>) =>
+    proposals([field("What degree program are you actively enrolled in?", { kind: "radio", options })], riveraProfile(education))[0]?.value;
+  const past = { organization: "Virginia Tech", title: "Bachelors of Science", startDate: "2020-09", endDate: "2024-06-15" };
+  assert.equal(pick([{ organization: "Penn State", title: "Masters of Science", startDate: "2025-08", endDate: "2099-12-13", current: true }, past]), "Master's (M.S./M.A.)");
+  assert.equal(pick([{ organization: "Penn State", title: "Doctor of Philosophy", startDate: "2025-08", endDate: "2099-12-13", current: true }, past]), "Ph.D.");
+  assert.equal(pick([{ organization: "Virginia Tech", title: "Bachelors of Science", startDate: "2025-08", endDate: "2099-05", current: true }]), "Undergraduate (B.S./B.A)");
+  assert.equal(pick([past]), "Not Currently Enrolled");
+});
+
+test("the state a person resides in is the profile's state, not other state questions", () => {
+  const person = riveraProfile([]);
+  const ask = (label: string) => proposals([field(label, { kind: "combobox", options: [] })], person)[0]?.value;
+  assert.equal(ask("Please list the state that you permanently reside in"), "Ohio");
+  assert.equal(ask("What state do you live in?"), "Ohio");
+  assert.equal(ask("Which state do you currently reside in?"), "Ohio");
+  assert.notEqual(ask("Please state your reason"), "Ohio");
+  assert.notEqual(ask("Do you reside in the United States?"), "Ohio");
+});

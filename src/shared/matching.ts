@@ -290,6 +290,9 @@ export function deterministicAnswer(
     [/^where (do you( currently)? live|are you( currently)? (located|based))$|^(what|which) city do you( currently)? live in$/, "city"],
     // "State / District", "State / Province / Region".
     [stateLabel, "state"],
+    // "Please list the state that you permanently reside in", "What state do
+    // you live in?" (not "the United States": no state named before the verb).
+    [/^(please )?((list|enter|provide|select|tell us|indicate) )?(what|which|the) state (do |that |in which )?you (currently |permanently |presently )*(reside|live)( in)?$/, "state"],
     [countryLabel, "country"],
     [/^county( of residence)?$/, "county"],
     [/^(street |mailing |home )?address( line 1)?$/, "address"],
@@ -776,6 +779,49 @@ export function profileAnswer(
     if (!field.options.length) return month === 12 ? undefined : { value: named[0] };
     const offered = field.options.filter((option) => named.some((name) => normalize(name) === normalize(option)));
     return offered.length === 1 ? { value: offered[0] } : undefined;
+  }
+  // "When is your expected graduation date (month and year)?" as a list of
+  // combined seasons ("Spring/Summer 2027", "Fall/Winter 2027", "Winter 2029
+  // or later"): the option holding the coming end date's season and year.
+  if (/\b(anticipated|expected|projected)\b.*\bgraduat/.test(label) && field.options.length) {
+    const read = field.options.map((option) => ({
+      option,
+      seasons: [...normalize(option).matchAll(/\b(spring|summer|fall|autumn|winter)\b/g)].map((m) => (m[1] === "autumn" ? "fall" : m[1])),
+      year: Number(normalize(option).match(/\b((?:20|21)\d{2})\b/)?.[1]),
+      later: /\bor later\b|\band (beyond|after)\b/.test(normalize(option)),
+    }));
+    if (read.every((entry) => entry.seasons.length && entry.year) && read.some((entry) => entry.seasons.length > 1)) {
+      const thisMonth = currentMonth();
+      const coming = profile.education
+        .map((row) => row.endDate)
+        .filter((date) => /^\d{4}-\d{2}/.test(date) && date.slice(0, 7) >= thisMonth)
+        .sort()
+        .at(-1);
+      if (!coming) return;
+      const [year, month] = coming.split("-").map(Number);
+      const seasons = month >= 3 && month <= 6 ? ["spring"] : month <= 2 ? ["winter"] : month <= 8 ? ["summer"] : month <= 11 ? ["fall"] : ["fall", "winter"];
+      const exact = read.filter((entry) => !entry.later && entry.year === year && entry.seasons.some((season) => seasons.includes(season)));
+      if (exact.length === 1) return { value: exact[0].option };
+      if (exact.length) return;
+      const later = read.filter((entry) => entry.later && (year > entry.year || (year === entry.year && entry.seasons.some((season) => seasons.includes(season)))));
+      return later.length === 1 ? { value: later[0].option } : undefined;
+    }
+  }
+  // "What degree program are you actively enrolled in?": the level of the
+  // program under way, or "Not Currently Enrolled" with none.
+  if (/^what (degree|degree program|program) are you (actively |currently )*(enrolled|pursuing)( in)?$/.test(label) && field.options.length) {
+    const row = latestRow(profile.education);
+    const underway = row && studying(row) === true ? row : undefined;
+    const level = underway ? degreeLevel(`${underway.title} ${underway.fieldOfStudy || ""}`) : "";
+    const pattern = !underway
+      ? /\bnot (currently )?enrolled\b|\bnone\b/
+      : level === "master" || level === "mba" ? /\bmaster(s|\b)/
+      : level === "doctorate" ? /\bph ?d\b|\bdoctor/
+      : level === "bachelor" ? /\bundergrad|\bbachelor/
+      : level === "associate" ? /\bassociate/
+      : undefined;
+    const matched = pattern && field.options.filter((text) => pattern.test(normalize(text)));
+    return matched && matched.length === 1 ? { value: matched[0] } : undefined;
   }
   // "Please indicate your current year of study in college": counted from
   // the start of the program still under way (an employer: an M.S.
