@@ -199,3 +199,25 @@ export function terminalTheme(args: string[], env: Record<string, string | undef
 
 // Text as the terminal shows it, colour codes taken out.
 export const visible = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, "");
+
+// Links already an application (any but a cancelled one, a submitted one
+// too) are not queued again: the extension drops them without a word, and
+// three submitted openings queued again from a search seemed lost.
+export function splitTracked<T extends { url: string; sourceUrl?: string; status: string; stage?: string; company?: string; title?: string }>(
+  urls: string[],
+  applications: T[],
+  same: (a: string, b: string) => boolean,
+): { fresh: string[]; known: { url: string; app: T }[] } {
+  const fresh: string[] = [];
+  const known: { url: string; app: T }[] = [];
+  for (const url of urls) {
+    const app = applications.find((item) => item.status !== "cancelled" && [item.url, item.sourceUrl].some((at) => at && same(at, url)));
+    if (app) known.push({ url, app });
+    else fresh.push(url);
+  }
+  return { fresh, known };
+}
+export function trackedNote(known: { app: { company?: string; title?: string; stage?: string } }[]): string {
+  if (!known.length) return "";
+  return ` Already tracked, not queued again: ${known.map(({ app }) => `${app.company || "?"} — ${app.title || "?"}${app.stage ? ` (${app.stage})` : ""}`).join("; ")}.`;
+}

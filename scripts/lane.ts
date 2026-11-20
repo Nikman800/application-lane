@@ -26,7 +26,8 @@ import { dataDirectory } from "../src/server/store";
 import type { QueueSnapshot, QueueSummaryItem, StepCheck, SubmissionRecord } from "../src/shared/model";
 import { themes } from "../src/shared/theme";
 import { computeProgress, DEFAULT_DAILY_GOAL } from "../src/shared/progress";
-import { colorDepth, createPalette, openingLine, styled, tabStrip, terminalTheme, visible } from "./lane-view";
+import { colorDepth, createPalette, openingLine, splitTracked, styled, tabStrip, terminalTheme, trackedNote, visible } from "./lane-view";
+import { sameOpening } from "../src/shared/matching";
 import { liveLine } from "./lane-live";
 import { repairCommands, type RepairContext } from "./lane-repairs";
 import { section, type Repair } from "../src/shared/repairs";
@@ -279,9 +280,9 @@ async function search() {
     if (!latest) throw new Error("Search first: npm run lane -- search");
     const picked = words.slice(1).map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= latest.listings.length);
     if (!picked.length) throw new Error(`Give the numbers of openings to queue, 1 to ${latest.listings.length}.`);
-    const urls = picked.map((n) => latest.listings[n - 1].url);
-    const result = await api<{ added: number; waiting: number; now?: boolean }>("/v1/inbox", "POST", { urls });
-    return console.log(`Queued ${result.added} opening${result.added === 1 ? "" : "s"}. ${result.now ? "The extension is tracking them now." : "The extension tracks them within a minute."}`);
+    const { fresh, known } = splitTracked(picked.map((n) => latest.listings[n - 1].url), (await snapshot().catch(() => undefined))?.applications || [], sameOpening);
+    const result = fresh.length ? await api<{ added: number; waiting: number; now?: boolean }>("/v1/inbox", "POST", { urls: fresh }) : { added: 0, now: false };
+    return console.log(`Queued ${result.added} opening${result.added === 1 ? "" : "s"}.${fresh.length ? ` ${result.now ? "The extension is tracking them now." : "The extension tracks them within a minute."}` : ""}${trackedNote(known)}`);
   }
   const values = (flag: string) => words.flatMap((word, index) => (words[index - 1] === flag ? word.split(",").map((item) => item.trim()).filter(Boolean) : []));
   const overrides: Record<string, unknown> = {};
@@ -497,8 +498,9 @@ async function ui() {
     process.exit(0);
   };
   const queueLinks = async (urls: string[]) => {
-    const result = await api<{ added: number; waiting: number; now?: boolean }>("/v1/inbox", "POST", { urls });
-    return `Queued ${result.added} link${result.added === 1 ? "" : "s"}. ${result.now ? "The extension is tracking it now." : "The extension tracks them within a minute."}`;
+    const { fresh, known } = splitTracked(urls, queue.applications, sameOpening);
+    const result = fresh.length ? await api<{ added: number; waiting: number; now?: boolean }>("/v1/inbox", "POST", { urls: fresh }) : { added: 0, now: false };
+    return `Queued ${result.added} link${result.added === 1 ? "" : "s"}.${fresh.length ? ` ${result.now ? "The extension is tracking it now." : "The extension tracks them within a minute."}` : ""}${trackedNote(known)}`;
   };
   // Its own code changing (the fixer's new section, a new key) restarts the
   // view in place, so a view left open never shows the old groups: a view

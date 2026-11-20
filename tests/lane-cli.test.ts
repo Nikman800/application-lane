@@ -371,3 +371,15 @@ test("the full-screen view's live line opens again after the backend drops it", 
     server.close();
   }
 });
+
+test("links already tracked, submitted ones too, are named and not queued again", async () => {
+  const { splitTracked, trackedNote } = await import("../scripts/lane-view");
+  const { sameOpening } = await import("../src/shared/matching");
+  const apps = [
+    { url: "https://job-boards.greenhouse.io/acme/jobs/1/confirmation", sourceUrl: "https://job-boards.greenhouse.io/acme/jobs/1", status: "paused", stage: "submitted", company: "Acme", title: "Software Engineer Intern" },
+    { url: "https://jobs.lever.co/contoso/2", status: "cancelled", stage: "abandoned", company: "Contoso", title: "Data Intern" },
+  ];
+  const { fresh, known } = splitTracked(["https://job-boards.greenhouse.io/acme/jobs/1", "https://jobs.lever.co/contoso/2", "https://jobs.lever.co/contoso/3"], apps, sameOpening);
+  assert.deepEqual(fresh, ["https://jobs.lever.co/contoso/2", "https://jobs.lever.co/contoso/3"]);
+  assert.equal(trackedNote(known), " Already tracked, not queued again: Acme — Software Engineer Intern (submitted).");
+});
