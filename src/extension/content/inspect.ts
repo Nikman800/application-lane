@@ -32,7 +32,7 @@ export function inspect(): Observation {
         ? "file"
         : isToggleChoice(element)
         ? "radio"
-        : element.matches(`button[aria-haspopup="listbox"],${legacyReactSelect}`) || element.closest(".pcty-input-select__input")
+        : element.matches(`button[aria-haspopup="listbox"],button.fab-SelectToggle[data-menu-id],${legacyReactSelect}`) || element.closest(".pcty-input-select__input")
         ? "combobox"
         // A text box that opens a calendar (react-datepicker; Ashby's
         // "ashby-application-form-input-date") takes only a date: on

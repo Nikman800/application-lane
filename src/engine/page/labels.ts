@@ -13,6 +13,8 @@ export const cleanLabel = (text: string) =>
     .replace(/[\u200b-\u200d\u2060\ufeff]/g, "")
     .replace(/\s+/g, " ")
     .trim()
+    // A question typed with its mark twice ("…on-site location??").
+    .replace(/([?!])\1+/g, "$1")
     .replace(/(\s*[*✱✳✴:])+\s*$/, "")
     .replace(/\s*\(required\)\s*$/i, "")
     .trim()

@@ -55,4 +55,4 @@ export const awaitSiteSave = async (before: number) => {
     await pause(40);
 };
 export const trackedControlSelector =
-  'input,textarea,select,button[aria-haspopup="listbox"],button[aria-pressed],[role="checkbox"],[role="radio"],[role="combobox"]';
+  'input,textarea,select,button[aria-haspopup="listbox"],button.fab-SelectToggle[data-menu-id],button[aria-pressed],[role="checkbox"],[role="radio"],[role="combobox"]';

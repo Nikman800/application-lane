@@ -285,6 +285,22 @@ export const ashbyToggle = (element: Element): HTMLButtonElement | undefined => 
   return buttons.length === 1 && !buttons[0].form && !buttons[0].closest("a,form") ? buttons[0] : undefined;
 };
 
+// BambooHR's "fabric" selects: a button (aria-haspopup="true", no listbox
+// role) that opens a menu drawn elsewhere in the page under the id its
+// data-menu-id names; the select beside it is hidden, empty and unusable.
+export const fabricToggle = (element: Element): element is HTMLButtonElement =>
+  element instanceof HTMLButtonElement && element.matches("button.fab-SelectToggle[data-menu-id]");
+export const fabricMenu = (element: Element): HTMLElement | null => {
+  const id = element.getAttribute("data-menu-id") || "";
+  return id ? (element.getRootNode() as Document | ShadowRoot).querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`) : null;
+};
+// The menu's choices: its option rows, else its option or menuitem roles.
+export function fabricOptions(menu: ParentNode | null): HTMLElement[] {
+  if (!menu) return [];
+  const rows = [...menu.querySelectorAll<HTMLElement>(".fab-MenuOption")];
+  return rows.length ? rows : [...menu.querySelectorAll<HTMLElement>('[role="option"],[role="menuitem"],[role="menuitemradio"]')];
+}
+
 // Rippling's dropdowns (a div, or a search input) open on a click and close
 // on a press anywhere outside them; neither chooses anything.
 export const ripplingSelect = (element: Element) =>

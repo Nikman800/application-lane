@@ -2955,6 +2955,31 @@ test("an Oracle degree question, pursued or completed, is the highest degree, an
   assert.equal(proposals([field(discipline, { kind: "combobox", required: true, options: ["Biology", "Data Science", "History"] })], who)[0]?.value, "Data Science");
 });
 
+test("an Oracle graduation month is the month name before its list is read, a data program is never put down as a neighbouring discipline, and a phone prefix list reads '+1 (United States)'", () => {
+  const who = riveraProfile([{ organization: "Penn State", title: "Masters of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2099-12", current: true }]);
+  const monthLabel = "What is your anticipated graduation month?";
+  // An unopened cx-select: no options read, and the month alone is asked.
+  assert.equal(proposals([field(monthLabel, { kind: "combobox", required: true })], who)[0]?.value, "December");
+  assert.equal(proposals([field(monthLabel, { kind: "combobox", options: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] })], who)[0]?.value, "December");
+  assert.equal(proposals([field("What is your anticipated graduation year?", { kind: "combobox", required: true })], who)[0]?.value, "2099");
+  const discipline = "I am working towards a degree in the following discipline: Choose all that apply";
+  const found = proposals([field(discipline, { kind: "combobox", required: true })], who)[0];
+  assert.equal(found?.value, "Data Science");
+  // Never a neighbouring discipline the applicant does not study.
+  assert.ok(!found?.choices?.includes("Computer Science"));
+  const code = proposals([field("Country code", { kind: "combobox" })], profileSchema.parse({ ...who, phone: "+1 614 555 0100", country: "United States" }))[0];
+  assert.ok(code?.choices?.includes("+1 (United States)"), JSON.stringify(code));
+});
+
+test("an Oracle previous internship, co-op or relevant work experience question is yes when the profile has work entries", () => {
+  const label = "Do you have previous internship, co-op, and/or directly relevant work experience?";
+  const options = ["No", "Yes- other company"];
+  const work = [{ organization: "Acme", title: "Intern", startDate: "2023-06", endDate: "2023-08" }];
+  const answered = proposals([field(label, { kind: "radio", options })], profileSchema.parse({ ...profile, work }))[0];
+  assert.equal(answered?.value, "Yes- other company");
+  assert.deepEqual(proposals([field(label, { kind: "radio", options })], profileSchema.parse({ ...profile, work: [] })), []);
+});
+
 test("the state a person resides in is the profile's state, not other state questions", () => {
   const person = riveraProfile([]);
   const ask = (label: string) => proposals([field(label, { kind: "combobox", options: [] })], person)[0]?.value;
@@ -2963,4 +2988,26 @@ test("the state a person resides in is the profile's state, not other state ques
   assert.equal(ask("Which state do you currently reside in?"), "Ohio");
   assert.notEqual(ask("Please state your reason"), "Ohio");
   assert.notEqual(ask("Do you reside in the United States?"), "Ohio");
+});
+
+// BambooHR asks "Are you willing and able to commute to this job's on-site
+// location??" (a doubled mark) as Yes or No. The profile answers it only where
+// it says so: living in the job's city, or willing to relocate.
+test("a commute question to the job's on-site location is answered from the job's city or a willingness to relocate, and left otherwise", () => {
+  const asked = (who: Record<string, unknown>, location?: string, label = "Are you willing and able to commute to this job's on-site location?") =>
+    proposals([field(label, { kind: "radio", options: ["Yes", "No"] })], { ...profileSchema.parse({ ...profile, city: "Columbus", state: "Ohio", ...who }), ...(location ? { applyingTo: { location } } : {}) })[0]?.value;
+  // Where the applicant lives, from the posting's place.
+  assert.equal(asked({}, "Columbus, OH, United States"), "Yes");
+  assert.equal(asked({}, "Columbus, Ohio"), "Yes");
+  assert.equal(asked({}), undefined);
+  assert.equal(asked({}, "Cleveland, OH, United States"), undefined);
+  // The same city name in another state is another place.
+  assert.equal(asked({}, "Columbus, GA, United States"), undefined);
+  // Willing to relocate is willing to be there; unwilling says nothing of commuting.
+  assert.equal(asked({ willingToRelocate: "Yes" }), "Yes");
+  assert.equal(asked({ willingToRelocate: "No" }, "Cleveland, OH"), undefined);
+  // A saved answer to the same question counts.
+  assert.equal(asked({ answers: [{ question: "Are you able to commute to the office?", answer: "Yes" }] }), "Yes");
+  // The doubled question mark does not stop the match.
+  assert.equal(asked({ willingToRelocate: "Yes" }, undefined, "Are you willing and able to commute to this job's on-site location??"), "Yes");
 });

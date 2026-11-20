@@ -1,7 +1,7 @@
 import type { Field, Profile, Proposal } from "./model";
 import { normalize } from "./model";
 import globals from "../engine/config/globals.json" with { type: "json" };
-import { countriesNamed, countryCode, type Geography } from "./geography";
+import { countriesNamed, countryCode, findRegion, type Geography } from "./geography";
 import { askedCountry, citizenOf, jobCountry, usCitizen, usPerson, workAuthorizations } from "./authorization";
 import { parseSalary, salaryAnswer } from "./salary";
 import { localDate, writtenDate, MONTH_NAMES } from "./dates";
@@ -17,6 +17,7 @@ const geography = globals as Geography;
 export type Topic =
   | "relocate"
   | "workThere"
+  | "commute"
   | "onsite"
   | "salary"
   | "start"
@@ -33,6 +34,21 @@ export type Topic =
   | "military"
   | "interviewed"
   | "enrolled";
+
+// What lets a commute to the job's on-site location be answered Yes: the
+// applicant lives where the posting puts the job (its city, and its state when
+// both name one), or is willing to relocate. Nothing else says so, and a No
+// to relocating is no No to commuting.
+function commuteBasis(profile: Pick<Profile, "city" | "state" | "country" | "willingToRelocate"> & { applyingTo?: Profile["applyingTo"] }): string {
+  if (/^\s*yes\b/i.test(profile.willingToRelocate || "")) return "Yes";
+  const parts = (profile.applyingTo?.location || "").split(/[,;]/).map((part) => part.trim()).filter(Boolean);
+  const city = normalize(profile.city || "");
+  if (!city || !parts.some((part) => normalize(part) === city)) return "";
+  // Its state or province, when the place names one, is the applicant's.
+  const home = findRegion(geography, profile.state, profile.country || undefined);
+  const named = parts.map((part) => findRegion(geography, part, profile.country || undefined)).filter((region) => region !== undefined);
+  return !home || !named.length || named.some((region) => region!.country === home.country && region!.code === home.code) ? "Yes" : "";
+}
 
 // A standing answer is about where the applicant lives or the job is; a
 // question about another country (or about the EU, abroad) is another
@@ -60,6 +76,10 @@ const topics: [Topic, RegExp][] = [
   // ("Are you able to commit to working from one of our offices on Anchor
   // Days each week?", an employer. Commuting to a named office is
   // another question: it depends on where that office is.)
+  // ("Are you willing and able to commute to this job's on-site location?":
+  // answered from where the job is and where the applicant lives, or from
+  // their being willing to relocate.)
+  ["commute", /\b(willing|able|can you|comfortable|ready|prepared)\b.*\bcommut\w*\b/],
   [
     "onsite",
     /\b(willing|able|comfortable|open|okay|ok|can you|commit|available)\b.*\b(on ?site|in (the |our )?office|in person|hybrid|work(ing)? (from|at|in) (one of )?(our|the) offices?)\b|\b(on ?site|in (the |our )?office|in person|hybrid)\b.*\b(willing|able|comfortable|open|okay|ok|can you|commit|meet this requirement)\b/,
@@ -414,6 +434,8 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
     savedFor(topic) ||
     (topic === "workThere"
       ? savedFor("relocate") || profile.willingToRelocate
+      : topic === "commute"
+      ? savedFor("commute") || commuteBasis(profile)
       : topic === "relocate"
       ? profile.willingToRelocate
       : topic === "usPerson" && person !== undefined

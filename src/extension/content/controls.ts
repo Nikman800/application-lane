@@ -43,6 +43,12 @@ export const valueOf = (element: Control): string => {
     );
     return selected ? ownLabel(selected) : "";
   }
+  // BambooHR's fabric select shows its choice in the toggle; until one is
+  // made the toggle shows its placeholder ("–Select–") in a box of its own.
+  if (element.matches("button.fab-SelectToggle[data-menu-id]")) {
+    if (element.querySelector(".fab-SelectToggle__placeholder")) return "";
+    return clip(element.querySelector(".fab-SelectToggle__guts")?.textContent || element.textContent || "");
+  }
   if (element.matches('button[aria-haspopup="listbox"]')) {
     const chosen = selectedCustomValue(element);
     if (chosen !== undefined && element.matches('[role="combobox"]') && element.getRootNode() instanceof ShadowRoot &&

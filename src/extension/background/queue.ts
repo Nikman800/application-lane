@@ -197,7 +197,7 @@ export function forApplication(profile: Profile, app: Application): Profile {
   // homepageCareers…" while its tab said "Internship, Software Engineer…".
   const named = [app.posting?.title, app.title, ...app.tabs.map((tab) => tab.title)].filter(Boolean).join(" | ");
   // What the fill may agree to and sign comes from Settings.
-  return { ...withPermissions(forRole(profile, named), bg.state.settings), applyingTo: { ...(country ? { country } : {}), ...(app.company ? { company: app.company } : {}), ...(title ? { title } : {}) } };
+  return { ...withPermissions(forRole(profile, named), bg.state.settings), applyingTo: { ...(country ? { country } : {}), ...(app.posting?.location ? { location: app.posting.location } : {}), ...(app.company ? { company: app.company } : {}), ...(title ? { title } : {}) } };
 }
 // An automatic carry-on (after the site filled the form from the resume, or
 // after the posting's Apply button) that could not start: said on the card,

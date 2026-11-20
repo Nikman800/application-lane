@@ -26,7 +26,7 @@ export function fieldWordLimit(element: Element, label: string): number | undefi
 export type Control =
   HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLElement;
 const controlSelector =
-  'input:not([type="hidden"]), textarea, select, button[aria-haspopup="listbox"], [role="checkbox"], [role="radio"], [role="combobox"]';
+  'input:not([type="hidden"]), textarea, select, button[aria-haspopup="listbox"], button.fab-SelectToggle[data-menu-id], [role="checkbox"], [role="radio"], [role="combobox"]';
 
 
 export function questionLabel(element: Element): string {
@@ -121,6 +121,11 @@ export function groupQuestion(element: Element): { text: string; raw: string } |
 // in. Without it a box reads as a question of its own.
 export function checkboxEntryTitle(element: Element): string {
   if (!(element instanceof HTMLInputElement) || element.type !== "checkbox") return "";
+  // An Oracle Cloud Recruiting checkbox question ("Select the races you
+  // identify with."): a row whose label names it, its boxes unnamed.
+  const row = element.closest(".input-row");
+  const rowLabel = row?.querySelector(":scope > form-element-label label .input-row__linebreak, :scope > label .input-row__linebreak");
+  if (row && rowLabel && row.querySelectorAll('input[type="checkbox"]').length > 1) return cleanLabel(labelText(rowLabel));
   const entry = element.closest('.ashby-application-form-field-entry,fieldset[class*="_fieldEntry_"]');
   const title = entry?.querySelector(":scope > .ashby-application-form-question-title, :scope > legend");
   return entry && title && entry.querySelectorAll('input[type="checkbox"]').length > 1 ? cleanLabel(labelText(title)) : "";
@@ -377,6 +382,13 @@ export function legacyLabels(element: Control): string[] {
 
 function associatedLabel(element: Control): string {
   const root = element.getRootNode() as Document | ShadowRoot;
+  // BambooHR's fabric select: its label is for the hidden select drawn
+  // beside the toggle, and the toggle's own name is "State –Select–".
+  if (element.matches("button.fab-SelectToggle[data-menu-id]")) {
+    const hidden = element.closest(".fab-Select")?.querySelector("select[id]");
+    const named = hidden?.id ? labelText(root.querySelector(`label[for="${CSS.escape(hidden.id)}"]`)) : "";
+    if (named) return named;
+  }
   if (element.matches('button[aria-haspopup="listbox"]')) {
     const workdayField = element.closest(
       '[data-automation-id^="formField-"]',
@@ -473,6 +485,18 @@ export function fileQuestion(element: Control): { kind: DocumentKind; text: stri
     ].join(" "),
   );
   if (direct) return direct;
+  // BambooHR's upload names itself only "file-input": its heading is the
+  // paragraph just before the upload ("Resume*"), and the hidden input that
+  // keeps the uploaded file's id beside it is named for it ("resumeFileId").
+  const fabric = element.closest('[data-fabric-component="FileUpload"]');
+  if (fabric) {
+    const before = fabric.previousElementSibling;
+    const heading = before?.matches('[data-fabric-component="BodyText"]') ? labelText(before) : "";
+    const hiddenNames = [...(fabric.parentElement?.querySelectorAll<HTMLInputElement>('input[type="hidden"][name]') || [])]
+      .map((input) => input.name.replace(/([a-z])([A-Z])/g, "$1 $2"));
+    const found = named(heading) || named(hiddenNames.join(" "));
+    if (found) return found;
+  }
   // Bounded, single-file containers only. Never infer one file's purpose from
   // a neighboring uploader or the document title.
   let parent = element.parentElement;
@@ -1186,6 +1210,8 @@ export function isRequired(element: Control): boolean {
     if (group?.getAttribute("aria-required") === "true") return true;
     if (group && radiogroupQuestionStarred(group)) return true;
   }
+  // BambooHR's fabric select: required on the hidden select beside it.
+  if (element.matches("button.fab-SelectToggle[data-menu-id]") && element.closest(".fab-Select")?.querySelector("select[required]")) return true;
   if (element.getAttribute("role") === "combobox") {
     const shell = element.closest(".select__container");
     if (shell?.querySelector('input[required][aria-hidden="true"]'))
@@ -1195,6 +1221,12 @@ export function isRequired(element: Control): boolean {
   if (isToggleChoice(element))
     return /required/i.test(String(toggleQuestion(element)?.className || ""));
   if (element.closest(".required-field")) return true;
+  // An Oracle Cloud Recruiting question (a row of a knockout form): its label
+  // carries the star span and the --required class, whatever the control
+  // (a cx-select, a pills radiogroup, a plain input). Required questions,
+  // legal ones included, were listed as optional.
+  const oracleRow = element.closest(".input-row");
+  if (oracleRow?.querySelector(":scope label.input-row__label--required, :scope label > .input-row__label--required-star")) return true;
   // Workday's question dropdowns: the button's own name ends "Required"
   // (" Select One Required"), and the question's legend carries the
   // asterisk. one employer's OPT questions were listed as optional.

@@ -3,7 +3,7 @@
 import { requestMainWorld } from "../../engine/page/bridge";
 import { nameVariants } from "../../shared/matching";
 import { type Proposal, normalize } from "../../shared/model";
-import { controlledList, ashbyToggle, successFactorsPicklist, ripplingSelect, shadowedOptions, deepOption, pressOutside, splChosen, picksOf, closeSuccessFactorsList, menuEntries } from "../content-dom";
+import { controlledList, fabricToggle, fabricMenu, fabricOptions, ashbyToggle, successFactorsPicklist, ripplingSelect, shadowedOptions, deepOption, pressOutside, splChosen, picksOf, closeSuccessFactorsList, menuEntries } from "../content-dom";
 import { writable, rendered } from "../semantics";
 import { pickOption } from "../../shared/answers";
 import { searchSiteList } from "../../engine/runtime";
@@ -430,7 +430,9 @@ export async function selectCustom(
         ? document.getElementById(`${element.id}_ctnr`)?.querySelector<HTMLElement>('[role="listbox"]') || null
         : null;
       const list =
-        listId && !/\s/.test(listId)
+        fabricToggle(element)
+          ? fabricMenu(element)
+          : listId && !/\s/.test(listId)
           ? root.querySelector(`#${CSS.escape(listId)}`) || controlledList(element)
           : listButton(element) && openLists().length === 1 ? openLists()[0] : icimsList();
       if (
@@ -442,9 +444,9 @@ export async function selectCustom(
         // Oracle's lists are grids of one cell per choice (one employer's
         // graduation date).
         const grid = list.matches('[role="grid"]') || element.getAttribute("aria-haspopup") === "grid";
-        const roled = [
-          ...list.querySelectorAll<HTMLElement>(grid ? '[role="option"],[role="gridcell"]' : '[role="option"]'),
-        ];
+        const roled = fabricToggle(element)
+          ? fabricOptions(list)
+          : [...list.querySelectorAll<HTMLElement>(grid ? '[role="option"],[role="gridcell"]' : '[role="option"]')];
         const shadowed = roled.length ? [] : shadowedOptions(list);
         const options = (roled.length ? roled : shadowed).filter(
           (o) => rendered(o) && o.getAttribute("aria-disabled") !== "true" && (!shadowed.length || deepOption(o)?.getAttribute("aria-disabled") !== "true"),

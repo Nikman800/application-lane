@@ -370,7 +370,7 @@ export const profileSchema = z.preprocess(migrateProfile, profileObject);
 export type Reference = z.infer<typeof referenceSchema>;
 // The job a fill is for, set on the profile it is given (never saved): its
 // country (ISO code) and employer, when known.
-export type ApplyingTo = { country?: string; company?: string; title?: string };
+export type ApplyingTo = { country?: string; company?: string; title?: string; location?: string };
 // The override a job's title selects: the first whose words it holds, each
 // as a whole word ("intern" is in "Software Engineer Intern", not in
 // "International").
@@ -491,7 +491,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-19-ashby-radio-question-required";
+export const CONTENT_VERSION = "2026-11-20-bamboohr-and-oracle-required-star";
 export type Proposal = {
   fieldId: string;
   value: string;

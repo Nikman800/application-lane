@@ -85,6 +85,7 @@ const avatureOrigin = "https://acme.avature.net";
 // An Avature form served from the employer's own careers domain.
 const avatureOwnDomainOrigin = "https://careers.contoso.com";
 const breezyOrigin = "https://acme.breezy.hr";
+const bambooOrigin = "https://acme.bamboohr.com";
 const ripplingOrigin = "https://ats.rippling.com";
 const teslaOrigin = "https://www.tesla.com";
 const tiktokOrigin = "https://lifeattiktok.com";
@@ -292,7 +293,7 @@ test.beforeEach(async () => {
       backendOrigin,
     ),
   );
-  manifest.host_permissions.push(...[...atsOrigins, oracleOrigin, microsoftOrigin, workableOrigin, sapsfOrigin, adpOrigin, talNetOrigin, amazonOrigin, paylocityOrigin, jazzOrigin, jobviteOrigin, avatureOrigin, avatureOwnDomainOrigin, breezyOrigin, ripplingOrigin, teslaOrigin, tiktokOrigin, smartRecruitersOrigin, "https://smartapply.indeed.com", "https://www.linkedin.com"].map((origin) => `${origin}/*`));
+  manifest.host_permissions.push(...[...atsOrigins, oracleOrigin, microsoftOrigin, workableOrigin, sapsfOrigin, adpOrigin, talNetOrigin, amazonOrigin, paylocityOrigin, jazzOrigin, jobviteOrigin, avatureOrigin, avatureOwnDomainOrigin, breezyOrigin, bambooOrigin, ripplingOrigin, teslaOrigin, tiktokOrigin, smartRecruitersOrigin, "https://smartapply.indeed.com", "https://www.linkedin.com"].map((origin) => `${origin}/*`));
   await writeFile(
     join(extensionPath, "manifest.json"),
     JSON.stringify(manifest),
@@ -8385,6 +8386,60 @@ test("Oracle's graduation date in three lists is filled in a page out of view", 
   await expect(page.locator("#Month")).toHaveValue("December", { timeout: 30000 });
   await expect(page.locator("#Day")).toHaveValue("13");
   await expect(page.locator("#Year")).toHaveValue("2099");
+  await page.close();
+});
+
+test("an Oracle application-questions page: starred questions are required, pills and race boxes are named once, and the month and work experience are answered", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile,
+    work: [{ organization: "Acme", title: "Intern", startDate: "2023-06", endDate: "2023-08", location: "", details: "" }],
+    education: [{ organization: "Penn State", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2099-12-13", location: "", details: "" }] } });
+  const label = (text: string, required: boolean, tag = "label") => `<form-element-label><${tag} class="input-row__label${required ? " input-row__label--required" : ""}"${tag === "label" ? ` for="x-${text.length}"` : ""}>
+    <span class="input-row__linebreak">${text}</span>${required ? '<span class="input-row__label--required-star" aria-hidden="true"></span>' : ""}</${tag}></form-element-label>`;
+  const pills = (text: string, options: string[]) => `<div class="input-row">${label(text, true)}<div class="input-row__control-container"><ul role="radiogroup" aria-label="${text}" class="cx-select-pills-container">${
+    options.map((o) => `<li role="presentation"><button type="button" role="radio" aria-checked="false" tabindex="-1" class="cx-select-pill-section"><span class="cx-select-pill-name"> ${o}</span></button></li>`).join("")}</ul></div></div>`;
+  const races = ["Asian", "White", "Two or More Races"].map((r, i) => `<div class="input-row__control-item"><input type="checkbox" class="input-row__hidden-control" id="dq-option-${i}" value="${i}"><label class="apply-flow-input-checkbox" for="dq-option-${i}"><span class="apply-flow-input-checkbox__label">${r}</span></label></div>`).join("");
+  await context.route(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/1/apply/section/4`, (route) => route.fulfill({ contentType: "text/html",
+    body: `<!doctype html><title>Application Questions</title><main>
+      <div class="input-row">${label("What is your anticipated graduation month?", true)}<div class="input-row__control-container"><div class="cx-select-container"><div class="input-field-container"><div class="input-field-container__left">
+        <input id="month" name="month" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="month-list" aria-expanded="false" aria-required="true" class="cx-select-input" autocomplete="none"></div>
+        <div class="input-field-container__right"><button type="button" class="icon-dropdown-arrow" tabindex="-1" aria-controls="month-list" aria-label="Open the drop-down list for What is your anticipated graduation month?."></button></div></div></div>
+        <div id="month-list" role="grid" hidden></div></div></div>
+      <div class="input-row">${label("I am working towards a degree in the following discipline: Choose all that apply", true)}<div class="input-row__control-container input-row--multiselect"><div class="cx-multi-select-container"><div class="input-field-container"><div class="input-field-container__left">
+        <input id="discipline" name="discipline" type="text" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-required="true" class="cx-multi-select-input" autocomplete="none"></div></div></div></div></div>
+      ${pills("Are you currently, or were you previously an employee of the company?", ["Yes", "No"])}
+      ${pills("Do you have previous internship, co-op, and/or directly relevant work experience?", ["No", "Yes- other company"])}
+      <div class="input-row">${label("Optional note", false)}<div class="input-row__control-container"><input id="note" class="input-row__control"></div></div>
+      <div class="input-row input-row--radiogroup" role="group">${label("Select the races you identify with.", false, "label")}<div class="input-row__control-container">${races}</div></div>
+      </main><div id="lists"></div><script>
+      const month = document.getElementById('month');
+      const list = document.getElementById('month-list');
+      month.parentElement.parentElement.querySelector('button').addEventListener('click', () => setTimeout(() => {
+        month.focus();
+        list.innerHTML = ['January', 'June', 'December'].map((m, i) => '<div role="row"><div role="gridcell" id="month-listitem-' + i + '" class="cx-select__list-item">' + m + '</div></div>').join('');
+        list.hidden = false;
+        month.setAttribute('aria-expanded', 'true');
+      }, 30));
+      list.addEventListener('click', (event) => { month.value = event.target.textContent; list.hidden = true; month.setAttribute('aria-expanded', 'false'); });
+      for (const pill of document.querySelectorAll('.cx-select-pill-section')) pill.addEventListener('click', () => {
+        for (const other of pill.closest('ul').querySelectorAll('button')) other.setAttribute('aria-checked', String(other === pill));
+      });
+      </script>` }));
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/1/apply/section/4`);
+  const read = async () => (await content(page, { type: "INSPECT" })).data.fields as Array<{ label: string; required: boolean; question?: string; kind: string }>;
+  const before = await read();
+  const named = (fields: typeof before, text: string) => fields.find((f) => f.label === text);
+  for (const text of ["What is your anticipated graduation month?", "I am working towards a degree in the following discipline: Choose all that apply", "Are you currently, or were you previously an employee of the company?", "Do you have previous internship, co-op, and/or directly relevant work experience?"])
+    expect(named(before, text)?.required, text).toBe(true);
+  expect(named(before, "Optional note")?.required).toBe(false);
+  for (const race of ["Asian", "White", "Two or More Races"])
+    expect(named(before, race)).toMatchObject({ kind: "checkbox", question: "Select the races you identify with." });
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator("#month")).toHaveValue("December", { timeout: 30000 });
+  await expect(page.locator('button[role="radio"][aria-checked="true"]')).toHaveText(/Yes- other company/);
+  // The legal question is the applicant's.
+  await expect(page.locator('ul[aria-label^="Are you currently"] button[aria-checked="true"]')).toHaveCount(0);
   await page.close();
 });
 
@@ -22957,4 +23012,95 @@ test("Oracle's Skills block adds the profile's first 15 skills one at a time and
   expect(result.submitted).toBe(false);
   // The first 15 in profile order, less the two tiles already saved; the date stays empty.
   expect(result.saved).toEqual(skills.slice(2, 15));
+});
+
+// BambooHR's careers form (fill report): MUI / "fabric" components. Its State
+// is a button that opens a menu (aria-haspopup="true", data-menu-id naming the
+// menu's id) beside an empty hidden select, so the extension never saw it; its
+// upload is an input whose only name is aria-label="file-input", under a
+// "Resume*" paragraph and beside a hidden resumeFileId; and its commute
+// question is a radiogroup fieldset typed with a doubled question mark.
+const bambooForm = (menu = "fab-menu54") => `<!doctype html><html><head><title>BambooHR</title></head><body><form onsubmit="window.submissions++; return false">
+  <div class="MuiFormControl-root fabric-ivrykt-SelectField-root-root css-1qk38wv" data-fabric-component="SelectField InputWrapper">
+    <div class="fabric-1nxauls-SelectField-label-labelWrapper"><label class="MuiFormLabel-root MuiInputLabel-root Mui-required css-1d73w0j" data-shrink="false" for="fab-select85">State<span aria-hidden="true" class="MuiFormLabel-asterisk MuiInputLabel-asterisk css-1rm2pe1"> *</span></label></div>
+    <div class="fabric-1vlsppk-root MuiBox-root css-fv3lde"><div class="fab-Select" data-fabric-component="Select"><div style="display: inline-block;"><div class="fab-SelectToggle__container">
+      <button data-menu-id="${menu}" aria-expanded="false" aria-haspopup="true" aria-label="State –Select–" tabindex="0" aria-disabled="false" class="fab-SelectToggle fab-SelectToggle--width4 fab-SelectToggle--sizeMedium" type="button"><div class="fab-SelectToggle__outerFacade"><div class="fab-SelectToggle__innerFacade fab-SelectToggle__innerFacade--form"></div></div><div class="fab-SelectToggle__guts fab-SelectToggle__guts--form"><div class="fab-SelectToggle__placeholder">–Select–</div></div></button>
+    </div></div><select aria-hidden="true" class="chzn-ignore" id="fab-select85" name="state.value" readonly="" required="" tabindex="-1" style="border: none; height: 0px; opacity: 0; overflow: hidden; position: absolute; width: 0px;"><option value="" selected=""></option></select></div></div>
+  </div>
+  <hr data-fabric-component="Divider">
+  <div><div data-fabric-component="Flex"><p class="fabric-9ncwmp-root" data-fabric-component="BodyText">Resume*</p><div data-fabric-component="FileUpload"><div data-fabric-component="FileUploadInput"><div data-fabric-component="FileUploadToggle"><button tabindex="0" type="button" data-fabric-component="Button"><span>Choose File*</span></button><p data-fabric-component="BodyText">No file selected</p></div><input accept=".pdf,.doc,.docx,.txt,.rtf" aria-invalid="false" aria-label="file-input" class="fabric-bc1bde-input" required="" tabindex="-1" type="file"></div></div><input name="resumeFileId" type="hidden"></div></div>
+  <hr data-fabric-component="Divider">
+  <div data-fabric-component="Flex"><fieldset aria-invalid="false" aria-required="false" data-fabric-component="RadioGroup" role="radiogroup"><legend id="radio-group-40-legend"><div data-fabric-component="Label"><label class="MuiFormLabel-root">Are you willing and able to commute to this job's on-site location??</label></div></legend><div><div class="MuiFormGroup-root MuiRadioGroup-root">
+    <span data-fabric-component="Radio"><label class="MuiFormControlLabel-root"><span><input name="customQuestionAnswers.yes_no_232" type="radio" value="1"><span></span></span><span class="MuiTypography-root">Yes</span></label></span>
+    <span data-fabric-component="Radio"><label class="MuiFormControlLabel-root"><span><input name="customQuestionAnswers.yes_no_232" type="radio" value="0"><span></span></span><span class="MuiTypography-root">No</span></label></span>
+  </div></div></fieldset></div>
+  <button type="submit">Submit Application</button></form><script>
+    window.submissions = 0;
+    const toggle = document.querySelector('.fab-SelectToggle');
+    toggle.addEventListener('click', () => {
+      if (document.getElementById('${menu}')) return;
+      toggle.setAttribute('aria-expanded', 'true');
+      const vessel = document.createElement('div');
+      vessel.id = '${menu}';
+      vessel.className = 'fab-MenuVessel fab-MenuVessel--width4';
+      vessel.innerHTML = '<ul class="fab-MenuList"><div class="fab-MenuList__scrollContainer">' + ['Alabama', 'Ohio', 'Oregon'].map((name) => '<li class="fab-MenuOption" tabindex="-1"><div class="fab-MenuOption__content">' + name + '</div></li>').join('') + '</div></ul>';
+      for (const option of vessel.querySelectorAll('.fab-MenuOption'))
+        option.addEventListener('click', () => {
+          const name = option.textContent;
+          toggle.querySelector('.fab-SelectToggle__guts').innerHTML = '<div class="fab-SelectToggle__value">' + name + '</div>';
+          toggle.setAttribute('aria-label', 'State ' + name);
+          toggle.setAttribute('aria-expanded', 'false');
+          document.getElementById('fab-select85').innerHTML = '<option value="' + name + '" selected>' + name + '</option>';
+          vessel.remove();
+        });
+      document.body.append(vessel);
+    });
+  </script></body></html>`;
+async function bambooPage(profileChanges: Record<string, unknown> = {}) {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, state: "Ohio", ...profileChanges } });
+  await context.route(`${bambooOrigin}/**`, (route) => route.fulfill({ contentType: "text/html", body: bambooForm() }));
+  const page = await context.newPage();
+  await page.goto(`${bambooOrigin}/careers/134`);
+  await panel.bringToFront();
+  await background(page);
+  return page;
+}
+
+test("a BambooHR fabric State select is read as a required list labelled State and its menu's Ohio is picked", async () => {
+  const page = await bambooPage();
+  await enqueue([page]);
+  await expect(page.locator(".fab-SelectToggle__guts")).toContainText("Ohio", { timeout: 45_000 });
+  await expect(page.locator("#fab-select85")).toHaveValue("Ohio");
+  const observation = (await content(page, { type: "INSPECT" })).data;
+  expect(observation.fields.find((field: { label: string }) => field.label === "State")).toMatchObject({ kind: "combobox", required: true, value: "Ohio" });
+  expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+});
+
+test("a BambooHR upload named only file-input is the resume, from its Resume heading, and gets the profile's resume", async () => {
+  const page = await bambooPage();
+  await enqueue([page]);
+  await expect.poll(() => page.locator('input[type="file"]').evaluate((input) => (input as HTMLInputElement).files?.length), { timeout: 45_000 }).toBe(1);
+  const observation = (await content(page, { type: "INSPECT" })).data;
+  const files = observation.fields.filter((field: { kind: string }) => field.kind === "file");
+  expect(files).toHaveLength(1);
+  expect(files[0]).toMatchObject({ label: "Resume", required: true });
+  expect(observation.fields.some((field: { label: string }) => field.label === "file-input")).toBe(false);
+  expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+});
+
+test("a BambooHR commute question typed with a doubled question mark is answered Yes for an applicant willing to relocate", async () => {
+  const page = await bambooPage({ willingToRelocate: "Yes" });
+  await enqueue([page]);
+  await expect(page.locator('input[name="customQuestionAnswers.yes_no_232"][value="1"]')).toBeChecked({ timeout: 45_000 });
+  await expect(page.locator('input[name="customQuestionAnswers.yes_no_232"][value="0"]')).not.toBeChecked();
+  const observation = (await content(page, { type: "INSPECT" })).data;
+  expect(observation.fields.find((field: { label: string }) => /commute/i.test(field.label))?.label).toBe("Are you willing and able to commute to this job's on-site location?");
+  expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+});
+
+test("a BambooHR commute question is left for the applicant when the profile cannot answer it", async () => {
+  const page = await bambooPage({ willingToRelocate: "" });
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 45_000 }).toMatch(/^(awaiting-user|ready)$/);
+  await expect(page.locator('input[name="customQuestionAnswers.yes_no_232"]:checked')).toHaveCount(0);
 });

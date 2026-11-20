@@ -269,3 +269,31 @@ test("an iCIMS form's later step reads the job's posting page", async () => {
   assert.equal(posting?.company, "Contoso Mission Systems, Inc");
   assert.match(posting!.description, /payments platform/);
 });
+
+// https://<company>.bamboohr.com/careers/<id> is a form built by script; its
+// "View Job Description" posting is the public JSON at /careers/<id>/detail.
+test("a BambooHR application's posting is read from its careers detail JSON", () => {
+  const endpoint = postingEndpoint("https://acme.bamboohr.com/careers/134");
+  assert.equal(endpoint?.api, "https://acme.bamboohr.com/careers/134/detail");
+  assert.equal(postingEndpoint("https://acme.bamboohr.com/careers/134/")?.api, "https://acme.bamboohr.com/careers/134/detail");
+  const posting = endpoint!.read({
+    result: {
+      jobOpening: {
+        jobOpeningName: "Software Engineering Intern",
+        location: { city: "Columbus", state: "Ohio" },
+        description: "<p>Build <strong>tools</strong> for our team.</p><ul><li>Python</li></ul>",
+      },
+    },
+  });
+  assert.equal(posting?.source, "BambooHR");
+  assert.equal(posting?.title, "Software Engineering Intern");
+  assert.equal(posting?.company, "acme");
+  assert.equal(posting?.location, "Columbus, Ohio");
+  assert.match(posting!.description, /Build tools for our team\./);
+  assert.match(posting!.description, /• Python/);
+  // Only a job's own page, on a company subdomain.
+  assert.equal(postingEndpoint("https://acme.bamboohr.com/careers")?.api, undefined);
+  assert.equal(postingEndpoint("https://acme.bamboohr.com/jobs/134")?.api, undefined);
+  assert.equal(postingEndpoint("https://www.bamboohr.com.example.test/careers/134")?.api, undefined);
+  assert.equal(endpoint!.read({ result: {} }), undefined);
+});

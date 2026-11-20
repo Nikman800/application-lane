@@ -12,7 +12,7 @@ export type Posting = {
   location?: string;
   description: string;
   // "Posting page": a page the applicant linked; "Pasted": text they pasted.
-  source: "Greenhouse" | "Lever" | "Ashby" | "Workday" | "Oracle" | "Workable" | "SmartRecruiters" | "iCIMS" | "Posting page" | "Pasted";
+  source: "Greenhouse" | "Lever" | "Ashby" | "Workday" | "Oracle" | "Workable" | "SmartRecruiters" | "iCIMS" | "BambooHR" | "Posting page" | "Pasted";
 };
 
 import { fetchPublic, publicURL, type Lookup } from "./public-url";
@@ -154,6 +154,32 @@ export function postingEndpoint(raw: string): Endpoint | undefined {
                   sections[key]?.text ? [sections[key].title, htmlText(sections[key].text)].filter(Boolean).join("\n") : undefined,
                 ),
               ),
+            }
+          : undefined;
+      },
+    };
+  }
+
+  // https://<company>.bamboohr.com/careers/<id>: the page is a form built by
+  // script (its "View Job Description" button opens the posting), which
+  // reads /careers/<id>/detail, a public JSON answer holding the title,
+  // the location and the description as HTML.
+  const bamboo = host.match(/^([a-z0-9][\w-]*)\.bamboohr\.com$/);
+  if (bamboo && parts[0] === "careers" && /^\d+$/.test(parts[1] || "")) {
+    return {
+      source: "BambooHR",
+      api: `https://${host}/careers/${parts[1]}/detail`,
+      read: (body) => {
+        const job = body?.result?.jobOpening;
+        const place = (value: { city?: unknown; state?: unknown; province?: unknown; country?: unknown } | undefined) =>
+          [value?.city, value?.state || value?.province, value?.country].filter((part): part is string => typeof part === "string" && Boolean(part.trim())).join(", ");
+        return job?.jobOpeningName
+          ? {
+              source: "BambooHR",
+              title: String(job.jobOpeningName),
+              company: bamboo[1],
+              location: place(job.location) || place(job.atsLocation) || undefined,
+              description: htmlText(String(job.description || "")),
             }
           : undefined;
       },

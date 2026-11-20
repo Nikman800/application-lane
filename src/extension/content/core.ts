@@ -31,7 +31,9 @@ export const requestTrustedType: typeof sendTrustedKeys = async (...args) => {
 // beside it (a calendar).
 export const pickerBox = (element: Element) =>
   element instanceof HTMLInputElement && element.readOnly && Boolean(element.parentElement?.querySelector('button[type="button"]'));
-export const listButton = (element: Element) => element.matches('button[type="button"][aria-haspopup="listbox"]');
+// (BambooHR's fabric select toggle is one too: content-dom.ts' fabricToggle.)
+export const listButton = (element: Element) =>
+  element.matches('button[type="button"][aria-haspopup="listbox"],button[type="button"].fab-SelectToggle[data-menu-id]');
 export const legacyReactSelect ='input[id^="react-select-"][aria-autocomplete="list"],.dropdown-autocomplete input[aria-autocomplete="list"]';
 // A text box that calls itself a combobox for the calendar it opens (Amazon's
 // "YYYY-MM-DD"): it is typed into, not picked from.

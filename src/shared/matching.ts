@@ -728,7 +728,9 @@ export function profileAnswer(
   // An address requested to assess relocation assistance is not a willingness
   // question. A current address does not confirm a separate permanent one.
   if (/^(please )?(provide|enter)\b.*\bpermanent address\b/.test(label)) return;
-  if (/\bable to commute\b|\bwilling and able\b.*\bon site\b/.test(label)) return;
+  // (A commute to the job's own location is answered from where the job is
+  // and where the applicant lives: standing.ts' "commute".)
+  if (/\bable to commute\b|\bwilling and able\b.*\bon site\b/.test(label)) return questionTopic(field.label) === "commute" ? standingAnswer(field, profile) : undefined;
   // "What is your preferred geographic location?" as a box to type in: where
   // the applicant would work, not how. A model wrote "I prefer onsite work and
   // am also comfortable with hybrid or remote roles" (Woodgrove's Workday). An applicant willing to relocate is open to any location.
@@ -917,10 +919,11 @@ function educationAndPlaceAnswer({ field, profile, label, asked, educationRow }:
     // one; Pinpoint's "- Day" beside its Month and Year).
     if (part === "day") return day ? { value: String(Number(day)), choices: [day] } : /\bfirst of the month\b/i.test(field.label) || field.options.length ? { value: "1", choices: ["01"] } : undefined;
     // A question for the month alone ("Please select your Graduation
-    // Month", its year asked apart), or a list of only months, takes the
+    // Month", its year asked apart; Oracle's cx-select shows no options until
+    // opened and got "December 2027" against months), or a list of only months, takes the
     // month: "December 2027" matched none of one employer's twelve.
     const monthsOnly = field.options.length >= 12 && field.options.every((option) => months.some((name) => normalize(option) === normalize(name) || normalize(option) === normalize(name.slice(0, 3))));
-    if (monthsOnly || (field.options.length > 0 && /\bmonth\b/.test(label) && !/\byear\b/.test(label) && !/\bdate\b/.test(label)))
+    if (monthsOnly || ((field.options.length > 0 || field.kind === "combobox") && /\bmonth\b/.test(label) && !/\byear\b/.test(label) && !/\bdate\b/.test(label)))
       return { value: month, choices: [month.slice(0, 3), monthNumber, String(Number(monthNumber))] };
     const span = monthSpan(field.options, year, Number(monthNumber));
     if (span) return { value: span };
@@ -1217,6 +1220,9 @@ function studyAndPayAnswer({ field, profile, label, saved, asked, educationRow }
   // all that apply" (Oracle).
   if (/^what (area|field|subject) (was|is) your major( in)?$|^what (was|is) your major$|^i am working towards a degree in the following discipline( choose all that apply)?$/.test(label)) {
     const current = profile.education.filter((row) => row.fieldOfStudy && /^\d{4}-\d{2}/.test(row.endDate)).sort((a, b) => a.endDate.localeCompare(b.endDate)).at(-1);
+    // A list without the program (Oracle's has Computer Science and no Data
+    // Science) is left for the applicant: a neighbouring discipline would
+    // misstate the degree.
     return current?.fieldOfStudy ? { value: current.fieldOfStudy, choices: nameVariants(current.fieldOfStudy).slice(0, 1) } : undefined;
   }
   const leveled = label.match(/^(?:name of (?:the |your )?)?(school|university|college|institution|field of study(?: major)?|major)(?: name)? (?:for )?(?:your )?(undergraduate|bachelor s?|graduate(?: mba)?(?: phd)?|master s?) degree$/);
@@ -1294,6 +1300,11 @@ function studyAndPayAnswer({ field, profile, label, saved, asked, educationRow }
   // The scale itself, when asked: "GPA scale", "out of".
   if (/\b(c?gpa|grade point average)\b/.test(label) && /\b(scale|out of|maximum|max)\b/.test(label) && gpaRow?.gpaScale && gpaRow.gpaScale !== "other" && gpa)
     return { value: gpaRow.gpaScale, choices: [`${gpaRow.gpaScale}.0`], numeric: Number(gpaRow.gpaScale) };
+  // "Do you have previous internship, co-op, and/or directly relevant work
+  // experience?" (Oracle's pills: "No" / "Yes- other company"): yes when the
+  // profile holds work entries.
+  if (/^do you have (any )?(previous|prior) internship co ?op (and or )?(directly )?relevant work experience$/.test(label) && profile.work.length)
+    return { value: "Yes", choices: ["Yes- other company", "Yes - other company"] };
   if (
     (/\bhow many\b.*\b(internships?|co ?ops?)\b/.test(label) ||
       /^(number of )?(prior |previous )?(internships?|co ?ops?)( completed)?$/.test(label)) &&
@@ -1958,6 +1969,14 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
             ? schoolChoices(profile.education[field.index || 0] || { organization: answer.value, location: "" })
             : nameVariants(answer.value),
       };
+    // Oracle's phone prefix list reads "+1 (United States)": no option is the
+    // country alone, and the typed country left the number's prefix invalid.
+    if (!special && /combobox|select/.test(field.kind) && /^(phone |mobile |telephone )?(country|dial(l?ing)?|calling) code$|^(phone|mobile|telephone) (country|prefix)( code)?$/.test(normalize(field.label))) {
+      const phone = phoneParts(profile);
+      const residence = countryCode(geography, profile.country);
+      const code = phone.code || ((dialCountry(phone.code, residence) || residence) ? dialCodes[dialCountry(phone.code, residence) || residence!] : undefined);
+      if (code) answer = { ...answer, choices: [`${code} (${answer.value})`, code] };
+    }
     // Oracle's Address Line 1 is a search box listing whole addresses
     // ("100 EAST MILL WAY, FLAGSTAFF, ARIZONA"): the street with the city
     // and state beside it picks the listing, the street alone any listing.

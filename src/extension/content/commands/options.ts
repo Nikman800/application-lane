@@ -5,7 +5,7 @@ import { documentId, records } from "../tracking";
 import { type QuestionnaireAnswers, loadQuestionnaires, questionnaireUrls } from "../../../engine/config/workday-questionnaire";
 import { listButton, pause, Command } from "../core";
 import { fillClick } from "../../../engine/page/click-gate";
-import { controlledList, drawnOptions, pressOutside, picksOf, ashbyToggle, ripplingSelect } from "../../content-dom";
+import { controlledList, fabricToggle, fabricMenu, fabricOptions, drawnOptions, pressOutside, picksOf, ashbyToggle, ripplingSelect } from "../../content-dom";
 import { valueOf } from "../controls";
 import { requestMainWorld } from "../../../engine/page/bridge";
 import { reactSelectInput } from "../choose";
@@ -49,8 +49,8 @@ for (const id of (command.fieldIds || []).slice(0, 40)) {
       for (let attempt = 0; attempt < 40 && steady < 2 && current(); attempt++) {
         await pause(50);
         const listId = (button.getAttribute("aria-controls") || "").split(/\s+/)[0];
-        const list = listId ? document.getElementById(listId) : null;
-        const shown = [...(list?.querySelectorAll<HTMLElement>('[role="option"]') || [])]
+        const list = fabricToggle(button) ? fabricMenu(button) : listId ? document.getElementById(listId) : null;
+        const shown = (fabricToggle(button) ? fabricOptions(list) : [...(list?.querySelectorAll<HTMLElement>('[role="option"]') || [])])
           .filter((option) => option.getAttribute("aria-disabled") !== "true")
           .map((option) => (option.textContent || "").replace(/\s+/g, " ").trim())
           .filter((option) => option && !/^select one$/i.test(option));
