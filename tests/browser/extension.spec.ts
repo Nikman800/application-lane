@@ -8389,6 +8389,46 @@ test("Oracle's graduation date in three lists is filled in a page out of view", 
   await page.close();
 });
 
+// An Oracle contact page (live): the phone number already on the page was
+// checked before its Country code was +1, and stayed "Enter a valid
+// number." once the fill chose +1; the site checks the number again only
+// when the number is edited.
+test("an Oracle phone number already on the page is checked again once the fill chooses its country code", async () => {
+  await context.route(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/2/apply/section/1`, (route) => route.fulfill({ contentType: "text/html",
+    body: `<!doctype html><html><head><title>Apply - Engineer</title></head><body><form onsubmit="window.submissions++; return false">
+      <div class="input-row"><label class="input-row__label" for="email-22">Email Address</label><input id="email-22" name="email" type="email"></div>
+      <div class="input-row"><label class="input-row__label"><span>Phone Number</span></label><div class="phone-row">
+        <div class="cx-select-container"><div class="input-field-container"><div class="input-field-container__left">
+          <input id="country-codes-dropdownphoneNumber" name="phoneNumber" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="country-codes-dropdownphoneNumber-listbox" aria-expanded="false" aria-label="Country code" class="cx-select-input" autocomplete="none"></div>
+          <div class="input-field-container__right"><button type="button" class="icon-dropdown-arrow" tabindex="-1" aria-controls="country-codes-dropdownphoneNumber-listbox" aria-label="Open the drop-down list for Country code"></button></div></div>
+          <div id="country-codes-dropdownphoneNumber-listbox" role="grid" hidden></div></div>
+        <input type="tel" aria-label="Phone Number" aria-describedby="phoneNumber-23-error" aria-invalid="true" value="6145550100">
+        <div id="phoneNumber-23-error">Enter a valid number.</div></div></div>
+      <button type="submit">Submit</button></form><script>
+      window.submissions = 0;
+      const code = document.getElementById('country-codes-dropdownphoneNumber');
+      const list = document.getElementById('country-codes-dropdownphoneNumber-listbox');
+      const tel = document.querySelector('input[type="tel"]');
+      const check = () => { const ok = code.value === '+1' && tel.value.replace(/\\D/g, '').length >= 10; tel.setAttribute('aria-invalid', String(!ok)); document.getElementById('phoneNumber-23-error').textContent = ok ? '' : 'Enter a valid number.'; };
+      for (const type of ['input', 'change', 'focusout']) tel.addEventListener(type, check);
+      code.parentElement.parentElement.querySelector('button').addEventListener('click', () => setTimeout(() => {
+        code.focus();
+        list.innerHTML = ['+1 (Canada)', '+1 (United States)', '+44 (United Kingdom)'].map((m, i) => '<div role="row"><div role="gridcell" id="cc-listitem-' + i + '" class="cx-select__list-item">' + m + '</div></div>').join('');
+        list.hidden = false;
+        code.setAttribute('aria-expanded', 'true');
+      }));
+      list.addEventListener('click', (event) => { code.value = event.target.textContent.split(' ')[0]; list.hidden = true; code.setAttribute('aria-expanded', 'false'); });
+      </script></body></html>` }));
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, phone: "+1 614 555 0100", country: "United States" } });
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/2/apply/section/1`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator("#country-codes-dropdownphoneNumber")).toHaveValue("+1", { timeout: 45_000 });
+  await expect(page.locator('input[type="tel"]')).toHaveAttribute("aria-invalid", "false", { timeout: 15_000 });
+  expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+});
+
 test("an Oracle application-questions page: starred questions are required, pills and race boxes are named once, and the month and work experience are answered", async () => {
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile,
     work: [{ organization: "Acme", title: "Intern", startDate: "2023-06", endDate: "2023-08", location: "", details: "" }],
@@ -23037,13 +23077,17 @@ const bambooForm = (menu = "fab-menu54") => `<!doctype html><html><head><title>B
   <button type="submit">Submit Application</button></form><script>
     window.submissions = 0;
     const toggle = document.querySelector('.fab-SelectToggle');
+    // As live: the menu opens only on a whole press (a mousedown before the
+    // click); a click alone leaves it shut.
+    let pressed = false;
+    toggle.addEventListener('mousedown', () => { pressed = true; });
     toggle.addEventListener('click', () => {
-      if (document.getElementById('${menu}')) return;
+      if (!pressed || document.getElementById('${menu}')) return;
+      pressed = false;
       toggle.setAttribute('aria-expanded', 'true');
       const vessel = document.createElement('div');
-      vessel.id = '${menu}';
-      vessel.className = 'fab-MenuVessel fab-MenuVessel--width4';
-      vessel.innerHTML = '<ul class="fab-MenuList"><div class="fab-MenuList__scrollContainer">' + ['Alabama', 'Ohio', 'Oregon'].map((name) => '<li class="fab-MenuOption" tabindex="-1"><div class="fab-MenuOption__content">' + name + '</div></li>').join('') + '</div></ul>';
+      vessel.className = 'fab-MenuVessel fab-MenuVessel--bottom';
+      vessel.innerHTML = '<div class="fab-MenuVessel__list"><div id="${menu}" role="menu" tabindex="-1" class="fab-MenuList"><div class="fab-MenuList__scrollContainer">' + ['Alabama', 'Ohio', 'Oregon'].map((name, index) => '<div class="fab-MenuOption fab-MenuOption--sizeMedium MuiBox-root" id="' + (index + 1) + '" role="menuitem" tabindex="-1"><div class="fab-MenuOption__content"><div class="fab-MenuOption__row"><div>' + name + '</div></div></div></div>').join('') + '</div></div></div>';
       for (const option of vessel.querySelectorAll('.fab-MenuOption'))
         option.addEventListener('click', () => {
           const name = option.textContent;

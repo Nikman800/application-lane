@@ -3,7 +3,7 @@
 import { requestMainWorld } from "../../engine/page/bridge";
 import { nameVariants } from "../../shared/matching";
 import { type Proposal, normalize } from "../../shared/model";
-import { controlledList, fabricToggle, fabricMenu, fabricOptions, ashbyToggle, successFactorsPicklist, ripplingSelect, shadowedOptions, deepOption, pressOutside, splChosen, picksOf, closeSuccessFactorsList, menuEntries } from "../content-dom";
+import { controlledList, fabricToggle, fabricMenu, fabricOptions, pressFabric, ashbyToggle, successFactorsPicklist, ripplingSelect, shadowedOptions, deepOption, pressOutside, splChosen, picksOf, closeSuccessFactorsList, menuEntries } from "../content-dom";
 import { writable, rendered } from "../semantics";
 import { pickOption } from "../../shared/answers";
 import { searchSiteList } from "../../engine/runtime";
@@ -269,7 +269,10 @@ export async function selectCustom(
               view: window,
             }),
           );
-        else fillClick(element);
+        else {
+          if (fabricToggle(element)) pressFabric(element);
+          fillClick(element);
+        }
         // The opening handler can focus asynchronously. The scoped focus
         // listener attributes that focus only while this command and field
         // remain unchanged and no trusted pointer/key/touch has occurred.

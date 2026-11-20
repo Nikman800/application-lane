@@ -96,6 +96,7 @@ export async function apply(command: Command) {
       }
       if ((element.getAttribute("role") === "combobox" && !(element instanceof HTMLSelectElement) && !calendarBox(element)) || element.closest(".pcty-input-select__input") || element.matches(legacyReactSelect) || listButton(element)) {
         await selectCustom(command, proposal, record);
+        recheckPhoneBeside(element, record.label);
         await awaitSiteSave(savesBefore);
         record.fillWarning = undefined;
         results.push({ id: proposal.fieldId, ok: true });
@@ -361,4 +362,22 @@ export async function apply(command: Command) {
       if (result) Object.assign(result, { ok: false, reason: "The site set this box back after it was changed. Check it." });
     }
   return { results, observation: inspect() };
+}
+
+// A phone number already on the page is checked against the country code
+// only when it is edited: Oracle kept "Enter a valid number." under a number
+// it had checked before the code was +1, once the fill had chosen +1. After
+// a code is chosen, the number beside it is checked again.
+function recheckPhoneBeside(element: Element, label: string | undefined) {
+  if (!/\b(country|dial|calling)( phone)? code\b|\bphone (prefix|country)\b/i.test(`${label || ""} ${element.getAttribute("aria-label") || ""} ${element.id}`.replace(/-/g, " "))) return;
+  let box: Element | null = element.parentElement;
+  for (let level = 0; box && level < 6; level++, box = box.parentElement) {
+    const phone = [...box.querySelectorAll<HTMLInputElement>('input[type="tel"]')].find((input) => input !== element && input.value.trim());
+    if (!phone) continue;
+    phone.dispatchEvent(new Event("input", { bubbles: true }));
+    phone.dispatchEvent(new Event("change", { bubbles: true }));
+    phone.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    phone.dispatchEvent(new FocusEvent("blur"));
+    return;
+  }
 }

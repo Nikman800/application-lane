@@ -290,6 +290,15 @@ export const ashbyToggle = (element: Element): HTMLButtonElement | undefined => 
 // data-menu-id names; the select beside it is hidden, empty and unusable.
 export const fabricToggle = (element: Element): element is HTMLButtonElement =>
   element instanceof HTMLButtonElement && element.matches("button.fab-SelectToggle[data-menu-id]");
+// Opened only by a whole press (live, a BambooHR State list): a click
+// alone, or a focus and click, leaves it shut.
+export function pressFabric(element: HTMLElement) {
+  const init = { bubbles: true, cancelable: true, composed: true, view: window, detail: 1, button: 0 };
+  element.dispatchEvent(new PointerEvent("pointerdown", init));
+  element.dispatchEvent(new MouseEvent("mousedown", init));
+  element.dispatchEvent(new PointerEvent("pointerup", init));
+  element.dispatchEvent(new MouseEvent("mouseup", init));
+}
 export const fabricMenu = (element: Element): HTMLElement | null => {
   const id = element.getAttribute("data-menu-id") || "";
   return id ? (element.getRootNode() as Document | ShadowRoot).querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`) : null;

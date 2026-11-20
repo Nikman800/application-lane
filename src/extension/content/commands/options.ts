@@ -5,7 +5,7 @@ import { documentId, records } from "../tracking";
 import { type QuestionnaireAnswers, loadQuestionnaires, questionnaireUrls } from "../../../engine/config/workday-questionnaire";
 import { listButton, pause, Command } from "../core";
 import { fillClick } from "../../../engine/page/click-gate";
-import { controlledList, fabricToggle, fabricMenu, fabricOptions, drawnOptions, pressOutside, picksOf, ashbyToggle, ripplingSelect } from "../../content-dom";
+import { controlledList, fabricToggle, fabricMenu, fabricOptions, pressFabric, drawnOptions, pressOutside, picksOf, ashbyToggle, ripplingSelect } from "../../content-dom";
 import { valueOf } from "../controls";
 import { requestMainWorld } from "../../../engine/page/bridge";
 import { reactSelectInput } from "../choose";
@@ -43,6 +43,7 @@ for (const id of (command.fieldIds || []).slice(0, 40)) {
     }
     cs.writing = true;
     try {
+      if (fabricToggle(button)) pressFabric(button);
       fillClick(button);
       let options: string[] = [];
       let steady = 0;
