@@ -2932,6 +2932,29 @@ test("the degree program a student is enrolled in names the level of the program
   assert.equal(pick([past]), "Not Currently Enrolled");
 });
 
+test("an Oracle authorization question listing the statuses that count, temporary residents among them, is Yes for a citizen and unanswered without a US entry", () => {
+  const label = "Are you currently lawfully authorized to work in the U.S. for any employer, as a (i) U.S. citizen or national; (ii) permanent resident; (iii) lawful temporary resident; (iv) foreign national admitted as a refugee; or (v) foreign national for whom asylum has been granted?";
+  const answer = (who: typeof profile) => proposals([field(label, yesNo)], who)[0]?.value;
+  const citizen = profileSchema.parse({ ...riveraProfile([]), workAuthorization: [{ country: "US", status: "citizen", needsSponsorship: false }], citizenships: ["US"] });
+  assert.equal(answer(citizen), "Yes");
+  assert.equal(answer(profileSchema.parse({ ...citizen, workAuthorization: [{ country: "CA", status: "citizen", needsSponsorship: false }], citizenships: ["CA"] })), undefined);
+  assert.equal(answer(profileSchema.parse({ ...citizen, workAuthorization: [], citizenships: [] })), undefined);
+  // A question that asks about a temporary permit is still left alone.
+  assert.equal(proposals([field("Please provide your temporary work authorization documents", yesNo)], citizen)[0]?.value, undefined);
+});
+
+test("an Oracle degree question, pursued or completed, is the highest degree, and the discipline being studied is the current program's field", () => {
+  const options = ["High School Diploma/GED", "Technical Diploma", "Associate's Degree/College Diploma", "Non-Degree Program", "Bachelor's Degree", "Master's Degree", "Doctorate Degree", "Higher Degree"];
+  const who = riveraProfile([
+    { organization: "Penn State", title: "Masters of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2099-12", current: true },
+    { organization: "Virginia Tech", title: "Bachelors of Science", fieldOfStudy: "Information Technology", startDate: "2020-08", endDate: "2024-05" },
+  ]);
+  assert.equal(proposals([field("Degree you are currently pursuing or have completed", { kind: "radio", options })], who)[0]?.value, "Master's Degree");
+  const discipline = "I am working towards a degree in the following discipline: Choose all that apply";
+  assert.equal(proposals([field(discipline, { kind: "combobox", required: true })], who)[0]?.value, "Data Science");
+  assert.equal(proposals([field(discipline, { kind: "combobox", required: true, options: ["Biology", "Data Science", "History"] })], who)[0]?.value, "Data Science");
+});
+
 test("the state a person resides in is the profile's state, not other state questions", () => {
   const person = riveraProfile([]);
   const ask = (label: string) => proposals([field(label, { kind: "combobox", options: [] })], person)[0]?.value;

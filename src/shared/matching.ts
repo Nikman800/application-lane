@@ -629,7 +629,11 @@ export function profileAnswer(
     if (aboutUS && entry?.country === "US" && (entry.status === "citizen" || entry.status === "permanent-resident"))
       return { value: "Yes" };
   }
-  if (/\b(proof|document\w*|verification|temporary|permit type)\b/.test(normalize(askedPart(field.label))) &&
+  // (A "lawful temporary resident" listed among the statuses that count as
+  // authorized, in "Are you authorized to work… as a (i) citizen; (ii)
+  // permanent resident; (iii) lawful temporary resident…?", is a status in a
+  // list, not a temporary permit asked about (Oracle).)
+  if (/\b(proof|document\w*|verification|temporary|permit type)\b/.test(normalize(askedPart(field.label)).replace(/\blawful temporary resident\b/, "")) &&
       /authori[sz]|right to work|visa/.test(label)) return;
   // "Do you currently have an active immigration case (ex H-1B extension,
   // green card)?" (Ashby, an employer): a U.S. citizen has none in the
@@ -1104,7 +1108,10 @@ function educationAndPlaceAnswer({ field, profile, label, asked, educationRow }:
   // received?".
   const lastAsk = normalize(field.label.match(/([^.?!]*\?)\s*$/)?.[1] || "");
   const highestPattern = /^(?:what is )?(?:the |your )?highest (?:level of )?(?:degree|education)(?: (?:that )?you (?:have|ve))?((?: (?:earned|obtained|completed|attained|received|pursuing|in progress))*)$/;
-  const highest = label.match(highestPattern) || (lastAsk ? lastAsk.match(highestPattern) : null);
+  // "Degree you are currently pursuing or have completed" (Oracle): the same
+  // highest degree, held or under way.
+  const pursuedOrHeld = /^(?:the |your )?degree you are (?:currently )?pursuing or have completed$/;
+  const highest = label.match(highestPattern) || label.match(pursuedOrHeld) || (lastAsk ? lastAsk.match(highestPattern) : null);
   if (highest) {
     const row = rowAtLevel(profile, "highest", !highest[1] || /pursuing|in progress/.test(highest[1]));
     return row ? { value: row.title, choices: degreeAliases(row.title) } : undefined;
@@ -1206,7 +1213,9 @@ function studyAndPayAnswer({ field, profile, label, saved, asked, educationRow }
   }
   // "What area was your major in?": the program being studied now,
   // the one ending last. The model answered with the finished degree's.
-  if (/^what (area|field|subject) (was|is) your major( in)?$|^what (was|is) your major$/.test(label)) {
+  // So is "I am working towards a degree in the following discipline: Choose
+  // all that apply" (Oracle).
+  if (/^what (area|field|subject) (was|is) your major( in)?$|^what (was|is) your major$|^i am working towards a degree in the following discipline( choose all that apply)?$/.test(label)) {
     const current = profile.education.filter((row) => row.fieldOfStudy && /^\d{4}-\d{2}/.test(row.endDate)).sort((a, b) => a.endDate.localeCompare(b.endDate)).at(-1);
     return current?.fieldOfStudy ? { value: current.fieldOfStudy, choices: nameVariants(current.fieldOfStudy).slice(0, 1) } : undefined;
   }
