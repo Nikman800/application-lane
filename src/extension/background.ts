@@ -273,12 +273,20 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       // yet (the site's page after Submit is a new document).
       const shown = bg.state.applications.find((a) => a.tabId === sender.tab!.id && a.status !== "cancelled");
       if (shown && message.generic === true && !(shown.formFrames || []).includes(sender.frameId ?? -1)) return;
-      // A list of sent applications (Oracle's My Applications) counts only
-      // when it holds this application's own job.
-      if (shown && Array.isArray(message.applied)) {
+      // A list of sent applications (Oracle's My Applications) is the site's
+      // own record: every application on that site whose job it lists as
+      // active went in, the tab's or not (two sent before this was read had
+      // their tabs closed and stayed in "needs you"). One not listed is not
+      // marked.
+      if (Array.isArray(message.applied)) {
         const jobOf = (url: string | undefined) => url?.match(/\/job\/(\d+)(?:[/?#]|$)/)?.[1];
-        const own = [shown.url, shown.sourceUrl, shown.postingUrl].map(jobOf).filter(Boolean);
-        if (!own.length || !message.applied.some((link: unknown) => typeof link === "string" && own.includes(jobOf(link)))) return;
+        const hostOf = (url: string | undefined) => { try { return url ? new URL(url).host : ""; } catch { return ""; } };
+        const listed = new Set(message.applied.filter((link: unknown): link is string => typeof link === "string").map((link: string) => `${hostOf(link)}|${jobOf(link)}`));
+        for (const app of bg.state.applications) {
+          if (app.status === "cancelled") continue;
+          if ([app.url, app.sourceUrl, app.postingUrl].some((url) => jobOf(url) && listed.has(`${hostOf(url)}|${jobOf(url)}`))) await siteSubmitted(app);
+        }
+        return;
       }
       if (shown) await siteSubmitted(shown);
       return;

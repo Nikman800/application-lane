@@ -8297,6 +8297,20 @@ for (const listed of ["own", "other"] as const)
       await page.waitForTimeout(4000);
       expect((await state()).applications[0].workflowStage).not.toBe("submitted");
     }
+    // Another application of the site, its tab closed, whose job the list
+    // shows as active went in too (live: two sent stayed in "needs you").
+    if (listed === "other") {
+      const second = await context.newPage();
+      await second.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/4102/apply/section/1`);
+      await panel.bringToFront();
+      await enqueue([second]);
+      await expect.poll(async () => (await state()).applications.length, { timeout: 30000 }).toBe(2);
+      await expect.poll(async () => (await state()).applications.find((app) => /\/job\/4102\//.test(app.url))?.status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+      await second.close();
+      await page.reload();
+      await expect.poll(async () => (await state()).applications.find((app) => /4102/.test(`${app.url} ${app.sourceUrl || ""}`))?.workflowStage, { timeout: 20000 }).toBe("submitted");
+      expect((await state()).applications.find((app) => /4101/.test(`${app.url} ${app.sourceUrl || ""}`))?.workflowStage).not.toBe("submitted");
+    }
     expect(await page.evaluate(() => (window as any).submissions ?? 0)).toBe(0);
   });
 
