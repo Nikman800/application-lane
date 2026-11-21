@@ -361,7 +361,21 @@ export async function apply(command: Command) {
       const result = results.find((entry) => entry.id === box.fieldId);
       if (result) Object.assign(result, { ok: false, reason: "The site set this box back after it was changed. Check it." });
     }
+  // A phone number the site still calls invalid, its country code already
+  // right and so never written, is checked again once the batch is done
+  // (an Oracle form: "Enter a valid number." under a good number).
+  if (results.some((entry) => entry.ok) && valid(command)) recheckInvalidPhones();
   return { results, observation: inspect() };
+}
+
+function recheckInvalidPhones() {
+  for (const phone of document.querySelectorAll<HTMLInputElement>('input[type="tel"][aria-invalid="true"]')) {
+    if (!phone.value.trim()) continue;
+    phone.dispatchEvent(new Event("input", { bubbles: true }));
+    phone.dispatchEvent(new Event("change", { bubbles: true }));
+    phone.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    phone.dispatchEvent(new FocusEvent("blur"));
+  }
 }
 
 // A phone number already on the page is checked against the country code

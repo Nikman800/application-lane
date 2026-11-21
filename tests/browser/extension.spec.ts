@@ -8393,13 +8393,13 @@ test("Oracle's graduation date in three lists is filled in a page out of view", 
 // checked before its Country code was +1, and stayed "Enter a valid
 // number." once the fill chose +1; the site checks the number again only
 // when the number is edited.
-test("an Oracle phone number already on the page is checked again once the fill chooses its country code", async () => {
+for (const codeSet of [false, true]) test(`an Oracle phone number already on the page is checked again once the fill ${codeSet ? "has written the rest, its country code already +1" : "chooses its country code"}`, async () => {
   await context.route(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/2/apply/section/1`, (route) => route.fulfill({ contentType: "text/html",
     body: `<!doctype html><html><head><title>Apply - Engineer</title></head><body><form onsubmit="window.submissions++; return false">
       <div class="input-row"><label class="input-row__label" for="email-22">Email Address</label><input id="email-22" name="email" type="email"></div>
       <div class="input-row"><label class="input-row__label"><span>Phone Number</span></label><div class="phone-row">
         <div class="cx-select-container"><div class="input-field-container"><div class="input-field-container__left">
-          <input id="country-codes-dropdownphoneNumber" name="phoneNumber" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="country-codes-dropdownphoneNumber-listbox" aria-expanded="false" aria-label="Country code" class="cx-select-input" autocomplete="none"></div>
+          <input id="country-codes-dropdownphoneNumber" name="phoneNumber" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="country-codes-dropdownphoneNumber-listbox" aria-expanded="false" aria-label="Country code" class="cx-select-input" autocomplete="none" value="${codeSet ? "+1" : ""}"></div>
           <div class="input-field-container__right"><button type="button" class="icon-dropdown-arrow" tabindex="-1" aria-controls="country-codes-dropdownphoneNumber-listbox" aria-label="Open the drop-down list for Country code"></button></div></div>
           <div id="country-codes-dropdownphoneNumber-listbox" role="grid" hidden></div></div>
         <input type="tel" aria-label="Phone Number" aria-describedby="phoneNumber-23-error" aria-invalid="true" value="6145550100">
@@ -8419,7 +8419,7 @@ test("an Oracle phone number already on the page is checked again once the fill 
       }));
       list.addEventListener('click', (event) => { code.value = event.target.textContent.split(' ')[0]; list.hidden = true; code.setAttribute('aria-expanded', 'false'); });
       </script></body></html>` }));
-  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, phone: "+1 614 555 0100", country: "United States" } });
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, phone: codeSet ? "6145550100" : "+1 614 555 0100", country: "United States" } });
   const page = await context.newPage();
   await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/2/apply/section/1`);
   await panel.bringToFront();
