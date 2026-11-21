@@ -194,12 +194,26 @@ export const picksOf = (element: Element) => {
   const pills = element.matches('input[class*="select-module_select-input"]')
     ? [...(element.closest('[class*="select-module_select-wrapper"]')?.querySelectorAll('[class*="select-module_multi-select-pill"] [class*="pills-module_label"]') || [])]
     : [];
+  // Oracle's cx-multi-select shows each pick as a pill in a list beside its
+  // box (ul.cx-multi-select-pill__values, outside .cx-multi-select-container),
+  // and the box itself stays empty (live).
+  const tags = element.matches("input.cx-multi-select-input")
+    ? [...(element.closest(".cx-multi-select, .input-row__control-container")?.querySelectorAll(".cx-multi-select-pill__value-text") || [])]
+    : [];
   return [...[...(box?.querySelectorAll('[data-automation-id="selectedItem"]') || [])]
     .map((item) => clip(item.getAttribute("title") || item.textContent || "")), ...splPicks(element),
-    ...pills.map((pill) => clip(pill.textContent || ""))]
+    ...pills.map((pill) => clip(pill.textContent || "")), ...tags.map((tag) => clip(tag.textContent || ""))]
     .filter(Boolean)
     .join("; ");
 };
+
+// Whether a list takes several picks: Oracle's cx-multi-select, an
+// aria-multiselectable list, or one worded "choose all that apply".
+export function takesSeveralPicks(element: Element, label: string): boolean {
+  return element.matches(".cx-multi-select-input,[aria-multiselectable='true']") ||
+    Boolean(element.closest(".cx-multi-select-container,[aria-multiselectable='true']")) ||
+    /\b(choose|select|check|pick) all that apply\b/i.test(label);
+}
 
 // A SmartRecruiters multiselect keeps its picks as its own value, the ids
 // of the entries chosen; its box stays empty. Read as empty, a list already

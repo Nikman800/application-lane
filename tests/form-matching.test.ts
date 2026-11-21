@@ -3011,3 +3011,22 @@ test("a commute question to the job's on-site location is answered from the job'
   // The doubled question mark does not stop the match.
   assert.equal(asked({ willingToRelocate: "Yes" }, undefined, "Are you willing and able to commute to this job's on-site location??"), "Yes");
 });
+
+test("a saved answer listing several values is one proposal carrying the rest, for a list that takes several picks", () => {
+  const label = "I am working towards a degree in the following discipline: Choose all that apply";
+  const saved = { ...profile, answers: [{ question: label, answer: "Other Program; Computer Science" }] };
+  const [proposal] = proposals([field(label, { kind: "combobox" })], saved);
+  assert.equal(proposal.value, "Other Program");
+  assert.deepEqual(proposal.also, ["Computer Science"]);
+  // A list that takes one pick picks the first of these its options have.
+  assert.deepEqual(proposal.choices, ["Computer Science"]);
+  // So is a list whose options the fill has already read (live: 35 read, and
+  // only the first value was picked).
+  const read = proposals([field(label, { kind: "combobox", options: ["Accounting", "Computer Science", "Other Program", "Physics"] })], saved)[0];
+  assert.equal(read?.value, "Other Program");
+  assert.deepEqual(read?.also, ["Computer Science"]);
+  // One value stays as it was, with nothing extra.
+  const single = proposals([field(label, { kind: "combobox" })], { ...profile, answers: [{ question: label, answer: "Computer Science" }] })[0];
+  assert.equal(single.value, "Computer Science");
+  assert.equal(single.also, undefined);
+});

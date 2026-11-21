@@ -724,7 +724,9 @@ export async function selectCustom(
           // ARIZONA", "+1" for "+1 (United States)".
           const keptWhole = normalize(valueOf(element)) === normalize(expected) ||
             (element.matches("input.cx-select-input") && Boolean(valueOf(element).trim()) &&
-              normalize(valueOf(element)) === normalize(expected.split(/[,(]/)[0]));
+              normalize(valueOf(element)) === normalize(expected.split(/[,(]/)[0])) ||
+            // A multiselect keeps its box empty and shows the pick as a tag.
+            (element.matches("input.cx-multi-select-input") && picksOf(element).split("; ").some((pick) => normalize(pick) === normalize(expected)));
           if (!keptWhole ||
             (ashbyLocation && element.getAttribute("aria-expanded") === "true"))
             throw new Error(

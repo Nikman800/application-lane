@@ -491,7 +491,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-20-bamboohr-and-oracle-required-star";
+export const CONTENT_VERSION = "2026-11-20-multi-pick-saved-answer";
 export type Proposal = {
   fieldId: string;
   value: string;
@@ -508,6 +508,10 @@ export type Proposal = {
   // U.S. citizen") answers a bare Yes or No only when it says no more than
   // that (plainStance, answers.ts).
   question?: string;
+  // The rest of a saved answer listing several values ("A; B; C"): picked one
+  // by one after `value` on a field that takes several picks. A field that
+  // takes one picks the first of value and these that its list has.
+  also?: string[];
   expectedValue: string;
   revision: number;
   source: string;

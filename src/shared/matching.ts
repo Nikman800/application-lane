@@ -2004,6 +2004,21 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
     // What the field asks, so a list worded in sentences is read against it
     // (plainStance, answers.ts).
     const question = `${field.question || ""} ${field.label}`.trim();
+    // A saved answer naming several values ("Other Program; Computer Science"):
+    // the first is the value, the rest follow it on a field that takes
+    // several picks (also), or are other wordings for one that takes a single
+    // pick (choices). Its options read or not: the fill reads a list's options
+    // before proposing, and the live list (35 read) got only its first value.
+    let also: string[] | undefined;
+    const joined = answer.value;
+    if (field.kind === "combobox" && !special && !answer.choices?.length && joined?.includes(";") &&
+        profile.answers.some((saved) => normalize(saved.question) === normalize(field.label) && saved.answer === joined)) {
+      const values = joined.split(";").map((part) => part.trim()).filter(Boolean);
+      if (values.length > 1) {
+        answer = { ...answer, value: values[0], choices: values.slice(1) };
+        also = values.slice(1);
+      }
+    }
     if (field.options.length) {
       let option: string | undefined;
       let refused = false;
@@ -2053,6 +2068,7 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
       {
         fieldId: field.id,
         ...answer,
+        ...(also ? { also } : {}),
         question,
         expectedValue: field.value,
         revision: field.revision,

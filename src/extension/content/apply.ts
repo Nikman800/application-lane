@@ -1,7 +1,7 @@
 // Part of the content script (content.ts): writing a fill's proposals into the page.
 // Split out of content.ts as it was; see content.ts for how it starts.
 import { signatureField, signingAllowed, signatureLeftReason } from "../../engine/page/signatures";
-import { tell, paylocityAddressBox, ripplingLocation, radioGroup, associatedNativeChoice } from "../content-dom";
+import { tell, paylocityAddressBox, ripplingLocation, radioGroup, associatedNativeChoice, takesSeveralPicks } from "../content-dom";
 import { tdsDateBox, pickTdsDate } from "../../engine/page/tds-date-picker";
 import { pickOption } from "../../shared/answers";
 import { writable, isToggleChoice, toggleGroup } from "../semantics";
@@ -95,7 +95,13 @@ export async function apply(command: Command) {
         continue;
       }
       if ((element.getAttribute("role") === "combobox" && !(element instanceof HTMLSelectElement) && !calendarBox(element)) || element.closest(".pcty-input-select__input") || element.matches(legacyReactSelect) || listButton(element)) {
-        await selectCustom(command, proposal, record);
+        // A saved answer listing several values on a field that takes several
+        // picks: each is picked in turn, the field read again between them.
+        const several = proposal.also?.length && takesSeveralPicks(element, record.label);
+        await selectCustom(command, several ? { ...proposal, choices: undefined } : proposal, record);
+        if (several)
+          for (const value of proposal.also!)
+            await selectCustom(command, { ...proposal, value, choices: undefined, also: undefined, expectedValue: valueOf(element), revision: record.revision }, record);
         recheckPhoneBeside(element, record.label);
         await awaitSiteSave(savesBefore);
         record.fillWarning = undefined;

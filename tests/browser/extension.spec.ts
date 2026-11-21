@@ -8483,6 +8483,50 @@ test("an Oracle application-questions page: starred questions are required, pill
   await page.close();
 });
 
+test("an Oracle multi-select discipline list takes every value of a saved answer listing several", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, answers: [{ question: "I am working towards a degree in the following discipline: Choose all that apply", answer: "Other Program; Computer Science" }] } });
+  const disciplines = ["Biology", "Chemistry", "Computer Science", "Mathematics", "Other Program", "Physics"];
+  await context.route(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/1/apply/section/5`, (route) => route.fulfill({ contentType: "text/html",
+    body: `<!doctype html><title>Application Questions</title><main>
+      <div class="input-row"><form-element-label><label class="input-row__label input-row__label--required" for="discipline"><span class="input-row__linebreak">I am working towards a degree in the following discipline: Choose all that apply</span><span class="input-row__label--required-star" aria-hidden="true"></span></label></form-element-label>
+      <div class="input-row__control-container input-row--multiselect cx-multi-select reset-z-index"><div><div aria-busy="false" class="cx-multi-select-container "><div class="input-field-container "><div class="input-field-container__left">
+        <input id="discipline" name="discipline" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="discipline-list" aria-expanded="false" aria-required="true" class="cx-multi-select-input " autocomplete="none"></div>
+        <div class="input-field-container__right"><button type="button" id="discipline-toggle-button" tabindex="-1" aria-label="Open the drop-down list for I am working towards a degree in the following discipline: Choose all that apply." aria-expanded="false" aria-controls="discipline-list" class="icon-dropdown-arrow "></button></div></div></div>
+        <ul class="cx-multi-select-pill__values" id="tags"></ul>
+        <ul role="listbox" id="discipline-list" aria-multiselectable="true" class="cx-multi-select__list" hidden></ul></div></div></div>
+      </main><script>
+      const box = document.getElementById('discipline');
+      const list = document.getElementById('discipline-list');
+      const tags = document.getElementById('tags');
+      const picked = new Set();
+      const draw = () => {
+        list.innerHTML = ${JSON.stringify(disciplines)}.map((m, i) => '<li tabindex="-1" role="option" id="discipline-listitem-' + i + '" aria-selected="' + picked.has(m) + '" aria-label="' + m + '" class="cx-multi-select__list-item' + (picked.has(m) ? ' cx-multi-select__list-item--selected' : '') + '"><div class="cx-multi-select__list-item-container"><span class="cx-multi-select__list-item--content"><span>' + m + '</span></span></div></li>').join('');
+        tags.innerHTML = [...picked].map((m) => '<li class="cx-multi-select-pill__value"><span class="cx-multi-select-pill__value-text">' + m + '</span></li>').join('');
+      };
+      const open = () => { draw(); list.hidden = false; box.setAttribute('aria-expanded', 'true'); };
+      // As live: the box opens its list on a mousedown, the arrow on a click.
+      box.addEventListener('mousedown', open);
+      document.getElementById('discipline-toggle-button').addEventListener('click', open);
+      // As live: a pick is marked selected, shows as a pill beside the box
+      // (which stays empty), and the list closes.
+      list.addEventListener('click', (event) => {
+        const item = event.target.closest('[role="option"]');
+        if (!item) return;
+        const name = item.getAttribute('aria-label');
+        if (picked.has(name)) picked.delete(name); else picked.add(name);
+        draw();
+        setTimeout(() => { list.hidden = true; box.setAttribute('aria-expanded', 'false'); box.blur(); }, 150);
+      });
+      document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { list.hidden = true; box.setAttribute('aria-expanded', 'false'); } });
+      </script>` }));
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/1/apply/section/5`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect(page.locator(".cx-multi-select-pill__value-text")).toHaveText(["Other Program", "Computer Science"], { timeout: 45_000 });
+  await page.close();
+});
+
 test("a date picker asked when the applicant can start gets today's date, which it keeps", async () => {
   await context.route("https://jobs.ashbyhq.com/**", (route) =>
     route.fulfill({
