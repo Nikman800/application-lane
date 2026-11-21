@@ -306,12 +306,16 @@ export const fabricToggle = (element: Element): element is HTMLButtonElement =>
   element instanceof HTMLButtonElement && element.matches("button.fab-SelectToggle[data-menu-id]");
 // Opened only by a whole press (live, a BambooHR State list): a click
 // alone, or a focus and click, leaves it shut.
+// The click too is a mouse's (detail 1): element.click() says 0, which reads
+// as a keyboard's, and the live State menu stayed shut after the whole press
+// with it.
 export function pressFabric(element: HTMLElement) {
   const init = { bubbles: true, cancelable: true, composed: true, view: window, detail: 1, button: 0 };
   element.dispatchEvent(new PointerEvent("pointerdown", init));
   element.dispatchEvent(new MouseEvent("mousedown", init));
   element.dispatchEvent(new PointerEvent("pointerup", init));
   element.dispatchEvent(new MouseEvent("mouseup", init));
+  element.dispatchEvent(new MouseEvent("click", init));
 }
 export const fabricMenu = (element: Element): HTMLElement | null => {
   const id = element.getAttribute("data-menu-id") || "";

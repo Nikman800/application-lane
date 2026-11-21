@@ -270,8 +270,11 @@ export async function selectCustom(
             }),
           );
         else {
-          if (fabricToggle(element)) pressFabric(element);
-          fillClick(element);
+          // A BambooHR menu still drawn is used as it is: a press would
+          // shut it.
+          if (fabricToggle(element)) {
+            if (!fabricOptions(fabricMenu(element)).length) pressFabric(element);
+          } else fillClick(element);
         }
         // The opening handler can focus asynchronously. The scoped focus
         // listener attributes that focus only while this command and field

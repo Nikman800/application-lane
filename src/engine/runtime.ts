@@ -160,6 +160,17 @@ export function submittedOnPage(): boolean {
   });
 }
 
+// The jobs a site lists as applications sent (Oracle's My Applications page,
+// where it lands after Submit: "Active Job Applications", each row a link to
+// its job). The page says nothing else, so only the tab's own job in the
+// list says its application went in (background.ts).
+export function appliedJobLinks(): string[] {
+  return [...document.querySelectorAll<HTMLAnchorElement>(".cs-applications__container-active a.cs-job-info__title[href]")]
+    .filter((link) => link.getClientRects().length > 0)
+    .map((link) => link.href)
+    .slice(0, 100);
+}
+
 // A site's own confirmation that no rule knows (an employer:
 // "Your application has been submitted successfully." where its form was):
 // a short message saying the application went in, on a page that no longer

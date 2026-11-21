@@ -273,6 +273,13 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       // yet (the site's page after Submit is a new document).
       const shown = bg.state.applications.find((a) => a.tabId === sender.tab!.id && a.status !== "cancelled");
       if (shown && message.generic === true && !(shown.formFrames || []).includes(sender.frameId ?? -1)) return;
+      // A list of sent applications (Oracle's My Applications) counts only
+      // when it holds this application's own job.
+      if (shown && Array.isArray(message.applied)) {
+        const jobOf = (url: string | undefined) => url?.match(/\/job\/(\d+)(?:[/?#]|$)/)?.[1];
+        const own = [shown.url, shown.sourceUrl, shown.postingUrl].map(jobOf).filter(Boolean);
+        if (!own.length || !message.applied.some((link: unknown) => typeof link === "string" && own.includes(jobOf(link)))) return;
+      }
       if (shown) await siteSubmitted(shown);
       return;
     }

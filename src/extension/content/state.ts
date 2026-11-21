@@ -99,6 +99,7 @@ export const cs = {
   // Submit, or a banner drawn in place): said once, so the applicant does not
   // have to mark it submitted. Nothing here presses Submit.
   toldSubmitted: false,
+  toldApplied: false,
   toldByWords: false,
   submittedTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   timer: undefined as ReturnType<typeof setTimeout> | undefined,

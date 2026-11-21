@@ -8269,6 +8269,37 @@ test("a JazzHR list left on -- No answer -- reads as empty and is listed as unan
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
+// Oracle lands on My Applications after Submit, with nothing but the list
+// of applications sent (live: "Applied on 11/20/2026" under Active Job
+// Applications); the lane missed it. Only the tab's own job in that list
+// counts: the same page from a draft's tab lists other jobs.
+for (const listed of ["own", "other"] as const)
+  test(`Oracle's My Applications page marks the tab's application submitted ${listed === "own" ? "when its job is listed as active" : "only for its own job, not another listed one"}`, async () => {
+    const activeJob = listed === "own" ? "4101" : "4102";
+    await context.route(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/**`, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: route.request().url().endsWith("/my-profile")
+          ? `<!doctype html><html><head><title>My Applications - Careers</title></head><body><cs-applications><div class="cs-applications"><div class="cs-applications__container cs-applications__container-active"><h2 class="cs-header">Active Job Applications</h2><ul role="list" class="cs-applications__list"><li class="cs-application-tile"><div class="cs-job-info__title-container"><a class="cs-job-info__title cs-button--link" href="${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/${activeJob}">Engineer Intern</a></div><span>Applied on 11/20/2026</span></li></ul></div><div class="cs-applications__container cs-applications__container-draft"><h2 class="cs-header">Draft Applications</h2><ul role="list" class="cs-applications__list"><li class="cs-application-tile"><a class="cs-job-info__title cs-button--link" href="${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/4101">Engineer Intern</a></li></ul></div></div></cs-applications></body></html>`
+          : `<!doctype html><html><head><title>Apply - Engineer Intern</title></head><body><form onsubmit="window.submissions++; return false"><div class="input-row"><label class="input-row__label" for="email">Email Address</label><input id="email" name="email" type="email"></div><div class="input-row"><label class="input-row__label" for="city">City</label><input id="city" name="city" type="text"></div><button type="submit">Submit</button></form><script>window.submissions = 0;</script></body></html>`,
+      }),
+    );
+    const page = await context.newPage();
+    await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/4101/apply/section/1`);
+    await panel.bringToFront();
+    await enqueue([page]);
+    await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+    expect((await state()).applications[0].workflowStage).not.toBe("submitted");
+    await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/my-profile`);
+    if (listed === "own")
+      await expect.poll(async () => (await state()).applications[0].workflowStage, { timeout: 20000 }).toBe("submitted");
+    else {
+      await page.waitForTimeout(4000);
+      expect((await state()).applications[0].workflowStage).not.toBe("submitted");
+    }
+    expect(await page.evaluate(() => (window as any).submissions ?? 0)).toBe(0);
+  });
+
 // The applicant had to choose Mark submitted after every application, though
 // the site had just told them, and the card said nothing of what a fill was
 // doing beyond "Filling".
@@ -23125,9 +23156,15 @@ const bambooForm = (menu = "fab-menu54") => `<!doctype html><html><head><title>B
     // click); a click alone leaves it shut.
     let pressed = false;
     toggle.addEventListener('mousedown', () => { pressed = true; });
-    toggle.addEventListener('click', () => {
-      if (!pressed || document.getElementById('${menu}')) return;
+    // As live: Escape says closed but leaves the menu drawn.
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') toggle.setAttribute('aria-expanded', 'false'); });
+    toggle.addEventListener('click', (event) => {
+      // As live: a click with no mouse count (element.click()) is a keyboard's,
+      // and a press on a drawn menu shuts it.
+      if (!pressed || event.detail < 1) return;
       pressed = false;
+      const drawn = document.getElementById('${menu}');
+      if (drawn) { drawn.closest('.fab-MenuVessel').remove(); toggle.setAttribute('aria-expanded', 'false'); return; }
       toggle.setAttribute('aria-expanded', 'true');
       const vessel = document.createElement('div');
       vessel.className = 'fab-MenuVessel fab-MenuVessel--bottom';

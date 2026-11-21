@@ -3,7 +3,7 @@
 import { rendered } from "../semantics";
 import { successFactorsPicklist, closeSuccessFactorsList, tell } from "../content-dom";
 import { noteSession } from "../badge";
-import { submittedOnPage, confirmationInPlace } from "../../engine/runtime";
+import { submittedOnPage, confirmationInPlace, appliedJobLinks } from "../../engine/runtime";
 import { cs } from "./state";
 import { pause } from "./core";
 
@@ -97,6 +97,14 @@ export const checkSubmitted = () => {
   if (submittedOnPage()) {
     cs.toldSubmitted = true;
     tell({ type: "SUBMITTED_PAGE", generic: false });
+    return;
+  }
+  // A list of the applicant's sent applications: told once with its jobs;
+  // the background marks the tab's application only if its job is listed.
+  const applied = cs.toldApplied ? [] : appliedJobLinks();
+  if (applied.length) {
+    cs.toldApplied = true;
+    tell({ type: "SUBMITTED_PAGE", generic: false, applied });
     return;
   }
   // A message read from the page's words, not a site rule: the

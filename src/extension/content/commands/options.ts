@@ -44,7 +44,7 @@ for (const id of (command.fieldIds || []).slice(0, 40)) {
     cs.writing = true;
     try {
       if (fabricToggle(button)) pressFabric(button);
-      fillClick(button);
+      else fillClick(button);
       let options: string[] = [];
       let steady = 0;
       for (let attempt = 0; attempt < 40 && steady < 2 && current(); attempt++) {
@@ -58,6 +58,13 @@ for (const id of (command.fieldIds || []).slice(0, 40)) {
         // Workday fills the list a moment after it opens.
         steady = shown.length && shown.length === options.length ? steady + 1 : 0;
         options = shown;
+      }
+      // A BambooHR menu outlives Escape (its toggle says closed, the menu
+      // stays drawn, and the next press shut it instead of opening it): it
+      // is closed as it opened, by another whole press.
+      if (fabricToggle(button) && fabricOptions(fabricMenu(button)).length) {
+        pressFabric(button);
+        await pause(150);
       }
       if (button.getAttribute("aria-expanded") === "true") {
         button.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));

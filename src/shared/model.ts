@@ -491,7 +491,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-20-multi-pick-saved-answer";
+export const CONTENT_VERSION = "2026-11-21-oracle-my-applications-submitted";
 export type Proposal = {
   fieldId: string;
   value: string;
