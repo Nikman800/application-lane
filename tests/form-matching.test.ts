@@ -1577,6 +1577,10 @@ test("a question naming a level of study is answered from the education row at t
   assert.ok(ask("Highest Degree Earned/Pursuing")?.choices?.includes("Master"));
   // A degree still in progress is not one earned.
   assert.equal(ask("Highest degree earned")?.value, "Bachelors of Science");
+  // Nor is it the "highest level of education" asked bare: a text box names
+  // the finished degree and the one under way; a list takes the finished one.
+  assert.equal(ask("What is your highest level of education?", { kind: "textarea" })?.value, "Bachelors of Science (Masters of Science in progress, expected May 2099)");
+  assert.equal(ask("What is your highest level of education?", { kind: "select", options: ["-- No answer --", "Bachelor", "Master", "PhD"] })?.value, "Bachelor");
   assert.equal(ask("Completion date of your highest degree (mm/yyyy)")?.value, "05/2099");
   assert.equal(ask("Name of the School: Undergraduate Degree", { kind: "select", options: schools })?.value, "Virginia Polytechnic Institute and State University");
   assert.equal(ask("Name of the School: Graduate/MBA/PhD Degree", { kind: "select", options: schools })?.value, "Michigan State University");
@@ -3085,4 +3089,37 @@ test("a UKG Pro 'if you are under the age of 18, list your age' question is answ
   assert.equal(ask({ ...profile, dateOfBirth: "1990-01-01", age18OrOlder: "" }), "N/A");
   assert.equal(ask({ ...profile, dateOfBirth: "", age18OrOlder: "" }), undefined);
   assert.equal(ask({ ...profile, dateOfBirth: "", age18OrOlder: "No" }), undefined);
+});
+
+// Apple's gauges: "<Skill> Skill Proficiency Levels", options "1-Beginner" to
+// "5-Expert", optional. Answered from the profile's skill level only when
+// filling levels is on, by the skill's name or a well-known alias.
+test("a skill proficiency gauge takes the profile skill's level only when filling levels is on", () => {
+  const options = ["1-Beginner", "2-Basic", "3-Proficient", "4-Advanced", "5-Expert"];
+  const gauge = (name: string) =>
+    field(name, { kind: "radio", required: false, options, question: "Skill Proficiency Levels", section: "Skill Proficiency Levels" });
+  const withSkills = (on: boolean, extra: string[] = []) =>
+    profileSchema.parse({
+      ...profile,
+      skills: ["Python", "C#", "JavaScript", "CSS", "C", "Pandas", "REST APIs", ...extra],
+      skillLevels: { Python: 4, "C#": 2, JavaScript: 3, CSS: 5, C: 1, Pandas: 3, "REST APIs": 2, ...(extra.length ? { Git: 4 } : {}) },
+      fillSkillLevels: on,
+    });
+  const on = withSkills(true);
+  assert.equal(deterministicAnswer(gauge("Python"), on), "4-Advanced");
+  assert.equal(deterministicAnswer(gauge("python"), on), "4-Advanced");
+  assert.equal(deterministicAnswer(gauge("Python Programming"), on), "4-Advanced");
+  assert.equal(deterministicAnswer(gauge("Microsoft C-SHARP"), on), "2-Basic");
+  assert.equal(deterministicAnswer(gauge("Javascript"), on), "3-Proficient");
+  assert.equal(deterministicAnswer(gauge("Cascading Style Sheets"), on), "5-Expert");
+  assert.equal(deterministicAnswer(gauge("C Programming Language"), on), "1-Beginner");
+  assert.equal(deterministicAnswer(gauge("pandas"), on), "3-Proficient");
+  assert.equal(deterministicAnswer(gauge("API"), on), "2-Basic");
+  // Never guessed: a skill the profile lacks, and Version Control without Git.
+  assert.equal(deterministicAnswer(gauge("Rust"), on), undefined);
+  assert.equal(deterministicAnswer(gauge("Version Control"), on), undefined);
+  assert.equal(deterministicAnswer(gauge("Version Control"), withSkills(true, ["Git"])), "4-Advanced");
+  // A listed skill with no level is left, and so is everything when off.
+  assert.equal(deterministicAnswer(gauge("Python"), profileSchema.parse({ ...on, skillLevels: {} })), undefined);
+  assert.equal(deterministicAnswer(gauge("Python"), withSkills(false)), undefined);
 });

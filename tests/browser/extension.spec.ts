@@ -8014,6 +8014,51 @@ test("Apple's Additional Files list that already holds a résumé row does not g
   await expect(page.locator("#resume-supportfile-category-0")).toHaveValue("supportingFileCategory-RESM");
 });
 
+// Apple's "Provide your proficiency level for the skills on your profile
+// (optional)": one radiogroup of five empty buttons per skill, named only by
+// aria-labels ("<Skill> 3-Proficient"). Each gauge is one optional radio field;
+// it takes the profile skill's level when filling levels is on, else is left.
+test("A skill proficiency gauge takes the profile skill's level when filling levels is on, and is left when off", async () => {
+  test.setTimeout(240000);
+  const levels = [["BE", "1-Beginner"], ["BA", "2-Basic"], ["PRO", "3-Proficient"], ["ADV", "4-Advanced"], ["EXP", "5-Expert"]];
+  const gauge = (skill: string, index: number) =>
+    `<li role="listitem"><div class="skill-proficiency-rating"><div class="skill-name-container"><span class="t-body text-ellipsis" title="${skill}">${skill}</span></div><div class="rating-buttons-container" role="radiogroup" aria-label="${skill} Skill Proficiency Levels">${levels
+      .map(([id, name], at) => `<button id="skill-${skill}-${index}-level-skillsProficiency-${id}" type="button" role="radio" aria-checked="false" aria-label="${skill} ${name}" tabindex="${at ? -1 : 0}" data-level-id="${id}" class="rating-button"></button>`)
+      .join("")}</div></div></li>`;
+  const body = `<!doctype html><html><head><title>Skills - Software Engineer - Apply Jobs: Step 3 of 5 - Careers at Apple</title></head><body><main><h1>Skills</h1>
+    <section><h3 id="apply-rating-section-header">Provide your proficiency level for the skills on your profile (optional).</h3>
+    <ol role="list" aria-label="Skill proficiency levels from beginner to expert">${levels.map(([, name]) => `<li role="listitem">${name}</li>`).join("")}</ol>
+    <ul role="list">${["Python", "Cascading Style Sheets", "Rust"].map(gauge).join("")}</ul></section>
+    <button id="apply-step-continue-button" type="button">Continue</button></main><script>
+      document.addEventListener('click', (event) => {
+        const button = event.target.closest('[role=radio]');
+        if (!button) return;
+        for (const other of button.parentElement.querySelectorAll('[role=radio]')) other.setAttribute('aria-checked', String(other === button));
+      });
+    </script></body></html>`;
+  await context.route(`${appleOrigin}/app/en-us/apply/200000004-037**`, (route) => route.fulfill({ contentType: "text/html", body }));
+  const checked = (page: Page) =>
+    page.evaluate(() =>
+      [...document.querySelectorAll("[role=radiogroup]")].map((group) => group.querySelector("[aria-checked=true]")?.getAttribute("aria-label") || ""),
+    );
+  for (const [at, on] of [[7, true], [8, false]] as const) {
+    const current = await ui({ type: "API", path: "/v1/profile", method: "GET" });
+    await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, revision: current.revision, skills: ["Python", "CSS"], skillLevels: { Python: 4, CSS: 5 }, fillSkillLevels: on } });
+    const page = await context.newPage();
+    await page.goto(`${appleOrigin}/app/en-us/apply/200000004-037${at}?stepName=skills`);
+    await panel.bringToFront();
+    await enqueue([page]);
+    await expect.poll(async () => (await state()).applications.at(-1)?.status, { timeout: 90000 }).toMatch(/^(awaiting-user|ready)$/);
+    await page.waitForTimeout(2000);
+    await ui({ type: "FILL_STEP", id: (await state()).applications.at(-1)!.id });
+    await page.waitForTimeout(500);
+    await expect.poll(async () => (await state()).applications.at(-1)?.status, { timeout: 90000 }).toMatch(/^(awaiting-user|ready)$/);
+    await page.waitForTimeout(2000);
+    expect(await checked(page)).toEqual(on ? ["Python 4-Advanced", "Cascading Style Sheets 5-Expert", ""] : ["", "", ""]);
+    await page.close();
+  }
+});
+
 // Rippling's confirmation: "You have successfully applied to
 // Software Engineer Intern" on step=confirmation, outside the action card
 // its rule looked in, so the application was never marked submitted.

@@ -286,6 +286,11 @@ const profileObject = z.object({
   preferredName: z.string().max(100).optional(),
   currentCompany: z.string().max(300).optional(),
   skills: z.array(z.string().max(300)).max(100).default([]),
+  // How well the applicant knows each skill, 1 (Beginner) to 5 (Expert), keyed
+  // by the skill as written in `skills`. Answered on applications only when
+  // fillSkillLevels is on (optional proficiency questions, Apple's gauges).
+  skillLevels: z.record(z.string().max(300), z.number().int().min(1).max(5)).default({}),
+  fillSkillLevels: z.boolean().default(false),
   // One line per language with how well: "English: Native", "Hindi: Fluent".
   languages: z.array(z.string().max(120)).max(20).default([]),
   referralSource: z.array(z.string().max(300)).max(20).default([]),
@@ -491,7 +496,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-24-adp-long-labels";
+export const CONTENT_VERSION = "2026-11-24-skill-levels";
 export type Proposal = {
   fieldId: string;
   value: string;

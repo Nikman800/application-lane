@@ -47,6 +47,9 @@ export function ProfilePage({ panel }: { panel: PanelState }) {
               const normalized = {
                 ...profile,
                 skills: cleanLines(profile.skills),
+                skillLevels: Object.fromEntries(
+                  Object.entries(profile.skillLevels || {}).filter(([skill]) => cleanLines(profile.skills).includes(skill)),
+                ),
                 languages: cleanLines(profile.languages),
                 referralSource: cleanLines(profile.referralSource),
                 // A country row added but never chosen says nothing.
@@ -220,6 +223,39 @@ export function ProfilePage({ panel }: { panel: PanelState }) {
                 }
                 onBlur={() => edit("skills", cleanLines(profile.skills))}
               />
+            </label>
+            {cleanLines(profile.skills).length > 0 && (
+              <div className="grid">
+                {cleanLines(profile.skills).map((skill) => (
+                  <label key={skill}>
+                    {skill} level
+                    <select
+                      value={profile.skillLevels?.[skill] ?? ""}
+                      onChange={(e) => {
+                        const next = { ...(profile.skillLevels || {}) };
+                        if (e.target.value) next[skill] = Number(e.target.value);
+                        else delete next[skill];
+                        edit("skillLevels", next);
+                      }}
+                    >
+                      <option value="">–</option>
+                      {["Beginner", "Basic", "Proficient", "Advanced", "Expert"].map((name, index) => (
+                        <option key={name} value={index + 1}>
+                          {index + 1} {name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            )}
+            <label>
+              <input
+                type="checkbox"
+                checked={profile.fillSkillLevels === true}
+                onChange={(e) => edit("fillSkillLevels", e.target.checked)}
+              />{" "}
+              Fill skill proficiency levels on applications (optional questions)
             </label>
             <label>
               Languages, one per line with how well (English: Native,

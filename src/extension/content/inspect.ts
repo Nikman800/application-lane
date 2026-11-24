@@ -2,7 +2,7 @@
 // Split out of content.ts as it was; see content.ts for how it starts.
 import { type Observation, type Field, normalize } from "../../shared/model";
 import { adapterFor } from "../adapters";
-import { writable, controlVisible, isToggleChoice, sectionFor, placeholderOption, isRequired, fieldWordLimit, replacesForm, groupQuestion, checkboxEntryTitle, hiddenAnswerQuestion, validationState, rendered, wfnDropdown, digitsOnlyBox } from "../semantics";
+import { proficiencyGauge, writable, controlVisible, isToggleChoice, sectionFor, placeholderOption, isRequired, fieldWordLimit, replacesForm, groupQuestion, checkboxEntryTitle, hiddenAnswerQuestion, validationState, rendered, wfnDropdown, digitsOnlyBox } from "../semantics";
 import { radioGroup, lockKey, closestAcrossShadows, searchWithoutPick, manualSigningControl, clip, drawnOptions, picksOf, inEntryEditor, readableText, nextButton } from "../content-dom";
 import { configEngineEnabled } from "../../engine/mode";
 import { resumeSlotOpen, slowResumeParse, configUploadSlots, addableCollections } from "../../engine/runtime";
@@ -311,7 +311,7 @@ export function inspect(): Observation {
         : {}),
       documentKind: fileKind(element),
       replacesForm: replacesForm(element) || undefined,
-      question: (kind === "checkbox" && (groupQuestion(element)?.text || checkboxEntryTitle(element) || hiddenAnswerQuestion(element))) || undefined,
+      question: proficiencyGauge(element) ? "Skill Proficiency Levels" : (kind === "checkbox" && (groupQuestion(element)?.text || checkboxEntryTitle(element) || hiddenAnswerQuestion(element))) || undefined,
       attachmentId: record.attachmentId,
       conflict: record.conflict,
       fillWarning: record.fillWarning?.slice(0, 350),

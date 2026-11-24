@@ -208,7 +208,22 @@ function textBeforeRadios(element: Element): string {
   return text.length > 300 ? cleanLabel(text.slice(-300).replace(/^\S*\s/, "")) : text;
 }
 
+// A skill-proficiency gauge (Apple's "Provide your proficiency level for the
+// skills on your profile"): a radiogroup labelled "<Skill> Skill Proficiency
+// Levels" of five empty buttons named only by aria-label ("<Skill> 3-Proficient").
+// The question is the skill's; each option is its level's own words.
+export function proficiencyGauge(element: Element): { skill: string; option: string } | undefined {
+  if (element.getAttribute("role") !== "radio") return undefined;
+  const skill = element.closest('[role="radiogroup"]')?.getAttribute("aria-label")?.match(/^(.+?)\s+Skill Proficiency Levels?$/i)?.[1]?.trim();
+  if (!skill) return undefined;
+  const named = (element.getAttribute("aria-label") || "").trim();
+  const option = named.startsWith(`${skill} `) ? named.slice(skill.length + 1).trim() : "";
+  return /^[1-5]\b/.test(option) ? { skill, option } : undefined;
+}
+
 export function fieldLabel(element: Control): string {
+  const gauge = proficiencyGauge(element);
+  if (gauge) return gauge.skill;
   if (isToggleChoice(element))
     return cleanLabel(labelText(toggleQuestion(element)) || element.parentElement!.getAttribute("aria-label") || "") || "Unlabelled field";
   if (
@@ -862,6 +877,8 @@ export function ownLabel(element: Control): string {
 }
 
 function ownLabelRaw(element: Control): string {
+  const gauge = proficiencyGauge(element);
+  if (gauge) return gauge.option;
   const iconLabel = iconRadioLabel(element);
   if (iconLabel) return cleanLabel(iconLabel.textContent || "");
   // A toggle choice's option is its own text ("Yes", "No").
@@ -1063,6 +1080,9 @@ export function honeypot(element: Control): boolean {
 export function controlVisible(element: Control): boolean {
   if (honeypot(element)) return false;
   if (rendered(element)) return true;
+  // A gauge's buttons are drawn over the page's own bar and may have no box
+  // of their own; the group they sit in is what shows.
+  if (proficiencyGauge(element)) return rendered(element.closest('[role="radiogroup"]')!);
   if (element instanceof HTMLInputElement && element === paylocityForcedResume(element.ownerDocument)) return true;
   const selection = select2Selection(element);
   if (selection) return rendered(selection);

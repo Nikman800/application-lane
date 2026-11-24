@@ -191,6 +191,13 @@ export function deterministicAnswer(
     const resume = field.options.find((option) => /^resume$/i.test(option.trim()));
     if (resume) return resume;
   }
+  // A skill-proficiency gauge (Apple's "<Skill> Skill Proficiency Levels", options
+  // "1-Beginner" to "5-Expert") is optional: answered only when the applicant
+  // has switched filling levels on and gave this skill a level, else left.
+  if (field.kind === "radio" && /\bskill proficiency levels?\b/.test(`${normalize(field.question || "")} ${section}`)) {
+    const level = skillLevel(profile, field.label);
+    return level ? field.options.find((option) => new RegExp(`^\\s*${level}\\b`).test(option)) : undefined;
+  }
   if (!/work|employment|experience/.test(section)) {
     const row = educationRowFor(profile, section, field.index);
     if (schoolNameQuestion(field.label)) return row?.organization;
@@ -1146,8 +1153,21 @@ function educationAndPlaceAnswer({ field, profile, label, asked, educationRow }:
   const pursuedOrHeld = /^(?:the |your )?degree you are (?:currently )?pursuing or have completed$/;
   const highest = label.match(highestPattern) || label.match(pursuedOrHeld) || (lastAsk ? lastAsk.match(highestPattern) : null);
   if (highest) {
-    const row = rowAtLevel(profile, "highest", !highest[1] || /pursuing|in progress/.test(highest[1]));
-    return row ? { value: row.title, choices: degreeAliases(row.title) } : undefined;
+    // A bare "highest level of education" asks what is held: a degree still
+    // under way is not it (one form's free-text box got a master's due next
+    // year). A text box also names the degree under way, with its expected
+    // date; a list takes the finished one. Only "pursuing" or "in progress"
+    // asks for the degree under way.
+    const pursuing = /pursuing|in progress/.test(highest[1] || "") || pursuedOrHeld.test(label) || pursuedOrHeld.test(lastAsk);
+    const held = rowAtLevel(profile, "highest", pursuing);
+    if (!highest[1] && !pursuing) {
+      const underWay = rowAtLevel(profile, "highest", true);
+      if (!held) return underWay ? { value: underWay.title, choices: degreeAliases(underWay.title) } : undefined;
+      const end = underWay?.endDate.match(/^(\d{4})-(\d{2})/);
+      if (underWay && underWay !== held && /^(text|textarea)$/.test(field.kind) && !field.options.length)
+        return { value: `${held.title} (${underWay.title} in progress${end ? `, expected ${months[Number(end[2]) - 1]} ${end[1]}` : ""})` };
+    }
+    return held ? { value: held.title, choices: degreeAliases(held.title) } : undefined;
   }
   // "Please select your degree type" (BA/BS, Masters, PhD, N/A) beside a
   // graduation month and year is the degree being finished, the highest
@@ -2325,6 +2345,34 @@ function listChoice(field: Field, profile: Profile): Answer | "leave" | undefine
     return { value: none ? "Yes" : "No" };
   }
   if (legalQuestion(field.question) || /\b(prior|previous|above) question\b|\bif you (selected|answered|chose|checked)\b/.test(asked)) return "leave";
+  return undefined;
+}
+
+// A site's name for a skill, as the profile would write it. Conservative:
+// only well-known renamings, and "Version Control" only for a profile with Git.
+const skillAliases: Record<string, string[]> = {
+  python: ["python programming"],
+  "c#": ["microsoft c sharp", "microsoft c-sharp", "csharp", "c sharp"],
+  javascript: ["java script"],
+  css: ["cascading style sheets"],
+  html: ["hypertext markup language"],
+  c: ["c programming language", "c programming"],
+  git: ["version control"],
+  "rest apis": ["api", "apis", "rest api", "restful apis"],
+};
+function skillKey(name: string): string {
+  return name.toLowerCase().replace(/c#/g, "c sharp").replace(/[^a-z0-9+ ]+/g, " ").replace(/\s+/g, " ").trim();
+}
+function skillLevel(profile: Profile, asked: string): number | undefined {
+  if (!profile.fillSkillLevels) return undefined;
+  const wanted = skillKey(asked.replace(/\s+skill proficiency levels?$/i, ""));
+  for (const [skill, level] of Object.entries(profile.skillLevels || {})) {
+    if (!profile.skills.includes(skill)) continue;
+    const own = skillKey(skill);
+    if (own === wanted) return level;
+    const aliases = Object.entries(skillAliases).find(([name]) => skillKey(name) === own)?.[1] || [];
+    if (aliases.some((alias) => skillKey(alias) === wanted)) return level;
+  }
   return undefined;
 }
 
