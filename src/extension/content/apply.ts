@@ -300,6 +300,12 @@ export async function apply(command: Command) {
         element instanceof HTMLTextAreaElement ||
         (element instanceof HTMLInputElement && !["checkbox", "radio"].includes(element.type)))
       ) {
+        // After the page's own turn: a React blur handler that checks the
+        // state its change handler set reads the last render, and blurred in
+        // the same turn it checked the empty value (one employer's "City cannot
+        // be left blank" under the typed city). A message task, unlike a
+        // timer, is not slowed in a tab out of view.
+        await new Promise<void>((resolve) => { const channel = new MessageChannel(); channel.port1.onmessage = () => resolve(); channel.port2.postMessage(0); });
         element.dispatchEvent(new FocusEvent("blur"));
         element.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
       }

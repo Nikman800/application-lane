@@ -36,6 +36,24 @@
           ]
         }
       ]
+    ],
+    [
+      "linkedin",
+      [
+        {
+          "path": [
+            "//section[@id='apply-resume-widgetwrapper']/section[contains(concat(' ',normalize-space(@class),' '),' linkedin-attachment-container ')]"
+          ],
+          "actions": [
+            {
+              "path": "%INPUTPATH%//button[@id='linkedin-remove']",
+              "method": "click",
+              "allowFailure": true,
+              "condition": "%INPUTPATH%[.//p[@id='linkedin-url'][substring-before(concat(substring-after('%LOWERVALUE%','/in/'),'/'),'/') != ''][substring-before(concat(substring-after(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'/in/'),'/'),'/') != substring-before(concat(substring-after('%LOWERVALUE%','/in/'),'/'),'/')]]"
+            }
+          ]
+        }
+      ]
     ]
   ]
 }

@@ -1224,6 +1224,11 @@ test("a school asked as a question picks the listed school, never Other", () => 
   assert.equal(proposals([field("Which high school did you attend?", { kind: "select", options: ["Test University"] })], profile).length, 0);
 });
 
+test("a lone Street Name box takes the saved street address", () => {
+  assert.equal(deterministicAnswer(field("Street Name"), profile), profile.address);
+  assert.equal(deterministicAnswer(field("Street"), profile), profile.address);
+});
+
 test("a work-history row's address and reason for leaving come from that row only", () => {
   const worked = profileSchema.parse({
     ...profile,

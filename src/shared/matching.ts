@@ -295,8 +295,9 @@ export function deterministicAnswer(
     [/^(please )?((list|enter|provide|select|tell us|indicate) )?(what|which|the) state (do |that |in which )?you (currently |permanently |presently )*(reside|live)( in)?$/, "state"],
     [countryLabel, "country"],
     [/^county( of residence)?$/, "county"],
-    // ("Address 1" on UKG Pro's contact form.)
-    [/^(street |mailing |home )?address( line)?( 1| one)?$/, "address"],
+    // ("Address 1" on UKG Pro's contact form; "Street Name" alone, no house
+    // number box beside it, on one employer's form.)
+    [/^(street |mailing |home )?address( line)?( 1| one)?$|^street( name)?$/, "address"],
     [secondAddressLine, "addressLine2"],
     // One name or two: "Zip", "Postal code", "Postcode/ZIP".
     [/^((zip ?code|zip|postal|post ?code)( code)? ?){1,2}$|^please enter the zip code of your primary residence in the united states$|^please provide your post code zip code$|^what is your (home |mailing |residential )?(zip|postal|post)( ?code)?( code)?$/, "postalCode"],

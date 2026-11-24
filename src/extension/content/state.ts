@@ -75,6 +75,11 @@ export const cs = {
     | undefined,
   composing: false,
   lastFingerprint: "",
+  // Every field id an inspection has listed: a required empty one not in it
+  // is a question the page drew after the fill (the applicant's own pick).
+  seenFields: new Set<string>(),
+  // The set of such fields last announced, so each set is announced once.
+  announcedFresh: "",
   autoDocumentMutation: false,
   savesFinished: 0,
   // When the fill last wrote, started or finished, and where: see the site

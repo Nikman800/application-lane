@@ -7819,6 +7819,38 @@ test("Apple's Add Resume step replaces a résumé uploaded before today with the
   await expect(page.locator("#resume-filename")).not.toHaveText("Alex_Rivera_Resume_2024.pdf");
 });
 
+// The site keeps the LinkedIn link an applicant gave it years ago; only
+// LinkedIn's own sign-in button attaches another, so the fill removes a link
+// that is not the profile's and leaves the button to the applicant.
+test("Apple's Add Resume step removes a saved LinkedIn link that is not the profile's, and keeps the profile's own", async () => {
+  test.setTimeout(120000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, linkedin: "https://linkedin.com/in/alex-rivera-2026/" } });
+  const linked = (url: string) => `<section class="resume-linkedin-preview-container pos-rel show-border"><section class="d-flex flex-column text-align-start gap-5 w-100"><section class="m-0"><p class="m-0 file-info t-body fw-semibold" id="linkedin-url">${url}</p></section><p class="m-0 t-body-reduced" id="linkedin-lastupdateddate">Last Updated: Feb 15, 2025, 10:08 AM</p><section class="m-0"><button id="linkedin-remove" class="link" aria-label="Remove ${url}">Remove</button></section></section></section>`;
+  const uploaded = new Date().toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  const body = (url: string) => `<!doctype html><html><head><title>Add Resume - Software Engineer - Apply Jobs: Step 1 of 5 - Careers</title></head><body><main class="main"><section class="pb-40 pt-40" id="apply-container"><section class="resume-step-max-width" id="apply-resume"><section id="apply-resume-header" class="mtb-auto-50 text-center"><h1 id="apply-resume-heading" class="t-headline-reduced text-center">Add Resume</h1></section><section id="apply-resume-widgetwrapper" class="auto-margin"><section class="resume-attachment-container text-center  "><section class="resume-linkedin-preview-container "><div class="d-flex flex-column text-align-start gap-5 w-100"><p class="m-0 file-info t-body fw-semibold" id="resume-filename">Alex_Rivera_Resume.pdf</p><p class="m-0 t-body-reduced">Uploaded: ${uploaded}</p><p class="m-0"><button id="resume-remove" class="link">Remove</button></p></div></section></section><section class="linkedin-attachment-container ">${linked(url)}</section></section><section id="apply-resume-footer" class="d-flex justify-center"><button class="button button-block button-secondary" id="apply-step-back-button">Back</button><button class="button button-block" id="apply-step-continue-button">Submit</button></section></section></section></main><script>
+      window.removed = 0;
+      document.addEventListener('click', (event) => {
+        if (!event.target.closest('#linkedin-remove')) return;
+        window.removed++;
+        setTimeout(() => { document.querySelector('.linkedin-attachment-container').innerHTML = '<section id="linkedin-widget" class="linkedin-apply-container row pos-rel " tabindex="-1"><div class="row "><p class="column large-7 small-12 t-body-reduced">Submit your LinkedIn profile in addition to your resume.</p><section id="linkedInWidget" class="linkedin-widget text-center column large-5 small-12"></section></div></section>'; }, 150);
+      });
+    </script></body></html>`;
+  await context.route(`${appleOrigin}/app/en-us/apply/200000002-0365**`, (route) => route.fulfill({ contentType: "text/html", body: body("https://www.linkedin.com/in/alex-rivera") }));
+  await context.route(`${appleOrigin}/app/en-us/apply/200000003-0365**`, (route) => route.fulfill({ contentType: "text/html", body: body("https://www.linkedin.com/in/Alex-Rivera-2026") }));
+  const stale = await context.newPage();
+  await stale.goto(`${appleOrigin}/app/en-us/apply/200000002-0365?stepName=resume`);
+  const own = await context.newPage();
+  await own.goto(`${appleOrigin}/app/en-us/apply/200000003-0365?stepName=resume`);
+  await panel.bringToFront();
+  await enqueue([stale, own]);
+  await expect.poll(() => stale.evaluate(() => (window as any).removed), { timeout: 60000 }).toBe(1);
+  await expect.poll(async () => (await state()).applications.filter((app: any) => /^(awaiting-user|ready)$/.test(app.status)).length, { timeout: 90000 }).toBeGreaterThanOrEqual(2);
+  await stale.waitForTimeout(2000);
+  expect(await stale.evaluate(() => (window as any).removed)).toBe(1);
+  expect(await own.evaluate(() => (window as any).removed)).toBe(0);
+  await expect(own.locator("#linkedin-url")).toHaveText("https://www.linkedin.com/in/Alex-Rivera-2026");
+});
+
 // Rippling's confirmation: "You have successfully applied to
 // Software Engineer Intern" on step=confirmation, outside the action card
 // its rule looked in, so the application was never marked submitted.
@@ -14713,6 +14745,36 @@ test("a text box that validated on blur before its state caught up with the keys
   await expect(page.locator("#zip-error")).not.toContainText("cannot be left blank");
 });
 
+test("a React text box whose blur checks the state its last render holds keeps the typed city valid", async () => {
+  // A React form's City box: its change handler sets state, which reaches
+  // the blur handler only after the next render (a microtask). The fill
+  // blurred in the same turn as it typed, so the blur checked the empty city
+  // and "City cannot be left blank." showed under the typed city at Submit.
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, city: "Blacksburg" } });
+  await context.route(`${origin}/react-blur`, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html><form>
+    <label for="Application_questions_Q_CITY">City</label><input id="Application_questions_Q_CITY" aria-required="true" aria-invalid="false" aria-describedby="city-error"><div id="city-error"></div>
+    <button type="submit">Submit</button></form><script>
+      const input = document.getElementById('Application_questions_Q_CITY');
+      let rendered = '';
+      input.addEventListener('input', () => { const value = input.value; queueMicrotask(() => { rendered = value; }); });
+      input.addEventListener('blur', () => {
+        const checked = rendered;
+        queueMicrotask(() => {
+          const bad = !checked.trim();
+          input.setAttribute('aria-invalid', String(bad));
+          document.getElementById('city-error').textContent = bad ? 'Error: City cannot be left blank.' : '';
+        });
+      });
+    </script>` }));
+  const page = await context.newPage();
+  await page.goto(`${origin}/react-blur`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 60000 }).toMatch(/^(ready|awaiting-user)$/);
+  await expect(page.locator("#Application_questions_Q_CITY")).toHaveValue("Blacksburg");
+  await expect(page.locator("#Application_questions_Q_CITY")).toHaveAttribute("aria-invalid", "false");
+  await expect(page.locator("#city-error")).not.toContainText("cannot be left blank");
+});
+
 test("the fill's own click on a required acknowledgement box is not the applicant's, though a text box of theirs is in use", async () => {
   // Microsoft's careers form: a required acknowledgement checkbox whose long
   // label wraps it in a grid row. The applicant had clicked into a text box
@@ -18346,6 +18408,111 @@ test("a combobox whose Down focuses the option takes it with Enter there", async
   await enqueue([page]);
   await expect(page.locator("#input-43")).toHaveValue("Yes", { timeout: 45_000 });
   await expect(page.locator("#dropdown-42")).toHaveCount(0);
+});
+
+// Microsoft's careers form: its Work Authorization section is not on the
+// page until the applicant picks a location (a list the profile cannot
+// answer: its places are not the applicant's). The fill that left the
+// location to them never saw the section, and the Fill again that came after
+// the pick found its two lists with no options, which they draw only once
+// opened.
+test("Microsoft's Work Authorization section, drawn once a location is picked, is answered without pressing Fill again", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: { ...profile, workAuthorization: [{ country: "US", status: "citizen", needsSponsorship: false }], citizenships: ["US"], sponsorship: "No" },
+  });
+  await context.route(`${microsoftOrigin}/careers/apply**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Submit application</title><main><form onsubmit="return false">
+        <div class="field"><label id="loc_label" for="loc">Where would you like to apply for Research Intern</label>
+          <div class="select-module_select-wrapper__x select-module_select-wrapper-multiple__x" id="loc" data-options="Contoso, Springfield|Contoso, Riverton">
+            <div aria-atomic="true" aria-live="polite" class="select-module_select-live-region__x" role="status"></div>
+            <div class="select-module_select-dropdown-main-wrapper__x"><div class="select-module_select-input-group__x">
+              <input aria-controls="list-9" aria-expanded="false" aria-labelledby="loc_label" aria-required="true" role="combobox" class="select-module_select-input__bO0s9" id="input-11" placeholder="Select" type="text">
+              <div class="input-module_action-wrapper__x"><button aria-hidden="true" tabindex="-1" type="button" class="arrow"></button></div>
+            </div></div>
+          </div></div>
+        <div id="later"></div>
+      </form></main><script>
+        const later = \`
+        <div class="card-module_body__x"><section data-form-section-id="3"><fieldset data-form-section-id="Work Authorization - United States"><legend class="sr-only">Work Authorization - United States</legend>
+          <div class="field"><label id="auth_label" for="auth"><span>Are you legally authorized to work in the country/region you are applying for?</span></label>
+            <div class="select-module_select-wrapper__x" id="auth" data-options="Yes|No"><div aria-atomic="true" aria-live="polite" class="select-module_select-live-region__x" role="status"></div>
+              <div class="select-module_select-dropdown-main-wrapper__x"><div class="select-module_select-input-group__x">
+                <input aria-controls="list-44" aria-expanded="false" aria-labelledby="auth_label" aria-required="true" role="combobox" aria-disabled="false" class="select-module_select-input__bO0s9" id="input-46" placeholder="Select" type="text" aria-invalid="false">
+                <div class="input-module_action-wrapper__x"><button aria-hidden="true" tabindex="-1" aria-disabled="false" type="button" class="arrow"></button></div></div></div></div></div>
+          <div class="field"><label id="spons_label" for="spons"><span>In order to obtain or maintain employment eligibility, will you now or in the future require the company's sponsorship for an immigration-related employment benefit (i.e., a work visa, work permit, etc.)?</span></label>
+            <div class="select-module_select-wrapper__x" id="spons" data-options="Yes|No"><div aria-atomic="true" aria-live="polite" class="select-module_select-live-region__x" role="status"></div>
+              <div class="select-module_select-dropdown-main-wrapper__x"><div class="select-module_select-input-group__x">
+                <input aria-controls="list-47" aria-expanded="false" aria-labelledby="spons_label" aria-required="true" role="combobox" aria-disabled="false" class="select-module_select-input__bO0s9" id="input-49" placeholder="Select" type="text" aria-invalid="false">
+                <div class="input-module_action-wrapper__x"><button aria-hidden="true" tabindex="-1" aria-disabled="false" type="button" class="arrow"></button></div></div></div></div></div>
+        </fieldset></section></div>\`;
+        // A list opens on a whole press of the box, is drawn again as it
+        // opens, and a click on an option from a script only lights it.
+        const wire = (wrapper) => {
+          const input = wrapper.querySelector('input');
+          const listId = input.getAttribute('aria-controls');
+          const names = wrapper.dataset.options.split('|');
+          const live = wrapper.querySelector('[role="status"]');
+          const buttons = () => [...document.querySelectorAll('#' + listId + ' button[role="option"]')];
+          const menu = () => '<div class="menu-module_menu-container__x"><ul id="' + listId + '" role="listbox">' +
+            names.map((name, i) => '<li role="presentation"><button type="button" tabindex="0" role="option" aria-selected="false" id="' + listId + '-option-' + i + '" title="' + name + '">' + name + '</button></li>').join('') + '</ul></div>';
+          const close = () => { wrapper.querySelector('.overlay')?.remove(); input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); };
+          const choose = (button) => {
+            input.value = button.title; close(); input.focus();
+            if (wrapper.id === 'loc') {
+              document.getElementById('later').innerHTML = later;
+              document.querySelectorAll('#later .select-module_select-wrapper__x').forEach(wire);
+            }
+          };
+          const light = (button) => { input.setAttribute('aria-activedescendant', button.id); button.focus(); };
+          const hook = () => buttons().forEach((button, i) => {
+            button.addEventListener('click', (event) => { if (event.isTrusted) choose(button); });
+            button.addEventListener('keydown', (event) => {
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                light(buttons()[Math.max(0, Math.min(buttons().length - 1, i + (event.key === 'ArrowDown' ? 1 : -1)))]);
+              }
+            });
+          });
+          const open = () => {
+            if (input.getAttribute('aria-expanded') === 'true') return;
+            const overlay = document.createElement('div');
+            overlay.className = 'overlay select-module_select-dropdown-overlay__x';
+            overlay.innerHTML = menu();
+            wrapper.querySelector('.select-module_select-dropdown-main-wrapper__x').append(overlay);
+            input.setAttribute('aria-expanded', 'true');
+            live.textContent = names.length + ' matches found.';
+            setTimeout(() => { if (wrapper.querySelector('.overlay')) { overlay.innerHTML = menu(); hook(); } }, 1);
+            hook();
+          };
+          input.addEventListener('click', open);
+          wrapper.querySelector('.arrow').addEventListener('click', open);
+          input.addEventListener('keydown', (event) => {
+            if (event.key === 'ArrowDown') { event.preventDefault(); open(); setTimeout(() => buttons()[0] && light(buttons()[0]), 300); }
+            if (event.key === 'Escape') close();
+          });
+          document.addEventListener('mousedown', (event) => { if (!wrapper.contains(event.target)) close(); });
+        };
+        wire(document.getElementById('loc'));
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${microsoftOrigin}/careers/apply?pid=1`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 60000 }).toMatch(/^(ready|awaiting-user)$/);
+  await expect(page.locator("#auth")).toHaveCount(0);
+  // The applicant picks a location; the section is drawn.
+  await page.locator("#input-11").click();
+  await page.locator("#list-9-option-0").click();
+  await expect(page.locator("#input-46")).toHaveCount(1);
+  // The applicant presses nothing more: the fill picks up what was drawn.
+  await expect(page.locator("#input-46")).toHaveValue("Yes", { timeout: 60_000 });
+  await expect(page.locator("#input-49")).toHaveValue("No", { timeout: 60_000 });
 });
 
 // SmartRecruiters' screening questions: each list
@@ -23375,4 +23542,81 @@ test("a UKG Pro optional Country list is answered and the address pane it reveal
   await expect(page.locator("#City")).toHaveValue("Blacksburg", { timeout: 45_000 });
   await expect(page.locator("#State option:checked")).toHaveText("Virginia", { timeout: 45_000 });
   await expect(page.locator("#PostalCode")).toHaveValue("24060", { timeout: 45_000 });
+});
+
+test("ADP address step reads error-state labels ('City is required') by the input's validationmessage", async () => {
+  // ADP capture 8a3292ac: after a failed validation ADP rewrites each label
+  // ("Address Line 1" -> "Address Line 1 is required") and names the suffix
+  // in the input's validationmessage attribute.
+  test.setTimeout(90000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: {
+    ...profile, address: "100 Test Way", city: "Blacksburg", postalCode: "24060", state: "Virginia",
+  } });
+  const field = (name: string, label: string, error: boolean) =>
+    `<div class="address-item"><div class="mdf-validated-field "><div class="mdf-label mb-2 flex items-center"><label for="PersonalAddress_${name}" aria-live="polite" class="${error ? " mdf-label-error" : ""}">${label}${error ? " is required" : ""}${error ? '<span class="mdf-required-indicator">*</span>' : ""}</label></div>`
+    + `<input id="PersonalAddress_${name}" validationmessage="${error ? " is required" : ""}" ${error ? 'aria-required="true"' : ""} class="${error ? " vdl-validation-error vdl-textbox vdl-textbox--touched" : "vdl-textbox"}" type="text" autocomplete="off"></div></div>`;
+  await context.route(`${adpOrigin}/**`, (route) => route.fulfill({
+    contentType: "text/html",
+    body: `<!doctype html><title>Address</title><cx-root><form><h1>Address</h1>
+      <div class="vdl-row address-row">${field("address_line1", "Address Line 1", true)}${field("address_line2", "Address Line 2", false)}</div>
+      <div class="vdl-row address-row">${field("city", "City", true)}${field("postalCode", "Zip Code", true)}</div>
+    </form></cx-root>`,
+  }));
+  const page = await context.newPage();
+  await page.goto(`${adpOrigin}/fixture/cx/app?workflowComponent=appbuilder_eform`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 45000 }).toMatch(/ready|awaiting-user/);
+  await expect(page.locator("#PersonalAddress_address_line1")).toHaveValue("100 Test Way");
+  await expect(page.locator("#PersonalAddress_city")).toHaveValue("Blacksburg");
+  await expect(page.locator("#PersonalAddress_postalCode")).toHaveValue("24060");
+});
+
+// UKG Pro: every job and school is a role="form" panel-list-item named by its
+// panel and number ("Education 1"). Its From/To month and year carried no
+// section (they are aria-labelled selects and boxes), so a school's From month
+// and From year could not be told from a job's and stayed empty.
+test("UKG Pro education rows get their From month and From year from the profile's schools", async () => {
+  test.setTimeout(120000);
+  const work = [{ organization: "Acme", title: "Software Engineer Intern", location: "Phoenix, AZ", details: "Built services.", startDate: "2025-05", endDate: "2025-08" }];
+  const education = [
+    { organization: "Penn State", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "State College, PA", details: "" },
+    { organization: "Virginia Tech", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2021-09", endDate: "2025-05", location: "Blacksburg, VA", details: "" },
+  ];
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, work, education } });
+  const months = '<option value="">Choose...</option>' + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => `<option value="${i + 1}">${m}</option>`).join("");
+  const dates = (kind: string, n: number) => `<div class="row"><div class="col-md-12"><div class="form-group" role="group" aria-labelledby="${kind}_FromLabel${n}"><label class="control-label" id="${kind}_FromLabel${n}">From</label>
+      <div class="form-inline"><div class="form-group"><label>Month</label><br><select class="form-control" aria-label="From month">${months}</select></div>
+      <div class="form-group"><label>Year (YYYY)</label><br><input class="form-control" placeholder="YYYY" maxlength="4" type="text" size="4" aria-label="From year"></div></div></div></div>
+    <div class="col-md-12"><div class="form-group" role="group" aria-labelledby="${kind}_ToLabel${n}"><label class="control-label" id="${kind}_ToLabel${n}">To</label>
+      <div class="form-inline"><div class="form-group"><label>Month</label><br><select class="form-control" aria-label="To month">${months}</select></div>
+      <div class="form-group"><label>Year (YYYY)</label><br><input class="form-control" placeholder="YYYY" maxlength="4" type="text" size="4" aria-label="To year"></div></div></div></div></div>`;
+  const item = (panel: string, n: number, fields: string) =>
+    `<div role="form" class="row" data-automation="panel-list-item" aria-label="${panel} ${n}"><div class="col-sm-24"><div class="row"><div class="col-xs-18 col-sm-20 col-md-22">${fields}</div></div></div></div>`;
+  const school = (n: number) => `<div class="row"><div class="col-md-12"><div class="form-group"><label class="control-label required" id="lblSchool${n}">School Name</label><input class="form-control tt-input" type="text" role="combobox" aria-labelledby="lblSchool${n}"></div></div></div>
+    <div class="row"><div class="col-md-12"><div class="form-group"><label class="control-label required" id="lblDegree${n}">Level of Education / Degree</label><input class="form-control tt-input" type="text" role="combobox" aria-labelledby="lblDegree${n}"></div></div></div>
+    <div class="row"><div class="col-md-12"><div class="form-group"><label class="control-label" id="lblMajor${n}">Major</label><input class="form-control" type="text" aria-labelledby="lblMajor${n}"></div></div></div>${dates("NewEducation", n)}`;
+  const job = (n: number) => `<div class="row"><div class="col-md-12"><div class="form-group"><label class="control-label required" id="lblEmployer${n}">Employer</label><input class="form-control" type="text" aria-labelledby="lblEmployer${n}"></div></div></div>${dates("NewEmployment", n)}`;
+  const panel = (title: string, items: string) =>
+    `<div class="panel panel-transparent" role="region" aria-label="${title}"><div class="panel-heading"><div class="panel-title"><h2 class="collapsible-panel-title">${title}</h2></div></div><div class="panel-collapse collapse in"><div class="panel-body">${items}</div></div></div>`;
+  await context.route(`${ukgOrigin}/acme/JobBoard/job/OpportunityApply**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Data Analyst Intern | Apply</title><main><h1>Data Analyst Intern</h1>
+      <div class="form-group"><label for="FirstName" class="control-label">First Name</label><input class="form-control" id="FirstName" type="text" autocomplete="given-name"></div>
+      ${panel("Work Experience", item("Work Experience", 1, job(0)))}
+      ${panel("Education", item("Education", 1, school(0)) + item("Education", 2, school(1)))}
+      </main>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${ukgOrigin}/acme/JobBoard/job/OpportunityApply?opportunityId=1`);
+  await enqueue([page]);
+  const scope = (name: string) => page.locator(`[aria-label="${name}"][role="form"]`);
+  await expect(page.locator("#FirstName")).toHaveValue(profile.firstName, { timeout: 45_000 });
+  await expect(scope("Work Experience 1").locator('select[aria-label="From month"] option:checked')).toHaveText("May", { timeout: 45_000 });
+  await expect(scope("Work Experience 1").locator('input[aria-label="From year"]')).toHaveValue("2025", { timeout: 45_000 });
+  await expect(scope("Education 1").locator('select[aria-label="From month"] option:checked')).toHaveText("Aug", { timeout: 45_000 });
+  await expect(scope("Education 1").locator('input[aria-label="From year"]')).toHaveValue("2025", { timeout: 45_000 });
+  await expect(scope("Education 2").locator('select[aria-label="From month"] option:checked')).toHaveText("Sep", { timeout: 45_000 });
+  await expect(scope("Education 2").locator('input[aria-label="From year"]')).toHaveValue("2021", { timeout: 45_000 });
 });

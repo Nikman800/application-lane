@@ -23,6 +23,17 @@ declare global {
 // reloaded to take the new build: reloading lost unsaved entries, and on
 // one employer's SuccessFactors its one-time address showed only an error.
 if (window.__applicationLane && window.__applicationLane.version !== CONTENT_VERSION) window.__applicationLane = undefined;
+// Required questions the page drew after the fill, from the applicant's own
+// pick (Microsoft's location list draws its Work Authorization section):
+// told to the extension once the applicant has stopped, for it to fill them
+// as if Fill this step were chosen again. Never while they are still at it.
+async function announceFresh(key: string) {
+  for (let waited = 0; userAttention() && waited < 30000; waited += 300) await pause(300);
+  if (userAttention() || !cs.applicationId) return;
+  const ids = new Set(key.split("|"));
+  const still = inspect().fields.some((f) => ids.has(f.id) && !f.value);
+  if (still) tell({ type: "FORM_CHANGED", applicationId: cs.applicationId, operation: cs.operation, documentId, fresh: key });
+}
 if (!window.__applicationLane) {
   // Leaving the page ends their last click or key too: kept, a key of theirs
   // before they switched away came back to life when the debugger's first
@@ -135,7 +146,15 @@ if (!window.__applicationLane) {
     cs.timer = setTimeout(() => {
       cs.autoDocumentMutation = true;
       try {
+        const known = new Set(cs.seenFields);
         const observation = inspect();
+        const fresh = known.size
+          ? observation.fields.filter((f) => !known.has(f.id) && f.required && !f.value && !f.protected).map((f) => f.id).sort().join("|")
+          : "";
+        if (fresh && fresh !== cs.announcedFresh) {
+          cs.announcedFresh = fresh;
+          void announceFresh(fresh);
+        }
         const fingerprint = JSON.stringify(
           observation.fields.map((f) => [f.id, f.value, f.protected]),
         );

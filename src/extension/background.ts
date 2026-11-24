@@ -302,6 +302,19 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       if (label && message.operation === app.operation) noteProgress(app, label);
       return;
     }
+    // New required questions drawn by the applicant's own pick after the
+    // fill (the fill ended, or paused on that pick): filled as Fill this
+    // step would, once per set of fields. Their own answers stay: a field
+    // they touched is locked and one with a value is not rewritten.
+    if (message.type === "FORM_CHANGED" && typeof message.fresh === "string") {
+      const key = `${app.id}|${message.fresh}`;
+      const waiting = app.status === "awaiting-user" || (app.status === "paused" && app.note?.startsWith("You interacted with this application"));
+      if (waiting && !app.explicitFill && app.attempts.some((attempt) => attempt.completedAt) && !refilled.has(key)) {
+        refilled.add(key);
+        await uiMessage({ type: "FILL_STEP", id: app.id }).catch(() => { /* a fill already running or reviewed values pending: the applicant's Fill this step stays */ });
+      }
+      return;
+    }
     if (message.type === "HUMAN_PAUSE") {
       recordHandAnswersSoon(app);
       bg.locks[app.id] = [
@@ -335,6 +348,8 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       );
   });
 });
+// The sets of fresh required fields already filled for, by application.
+const refilled = new Set<string>();
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "queue-recovery")
     void pump().then(() => initial.then(sweepTrustedInput));

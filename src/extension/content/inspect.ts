@@ -410,6 +410,7 @@ export function inspect(): Observation {
         clip(b.textContent || b.getAttribute("value") || ""),
       ),
   );
+  for (const field of fields) cs.seenFields.add(field.id);
   return {
     documentId,
     url: location.href,

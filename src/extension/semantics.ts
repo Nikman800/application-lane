@@ -737,7 +737,19 @@ export function iconRadioLabel(element: Element): HTMLLabelElement | undefined {
   return label && control instanceof HTMLInputElement && control.type === role && !element.contains(control) ? label : undefined;
 }
 
+// ADP rewrites a field's label in its error state ("City" becomes "City is
+// required") and names the suffix in the input's own validationmessage.
+function withoutValidationMessage(element: Control, text: string): string {
+  const message = (element.getAttribute("validationmessage") || "").trim();
+  if (!message || text.length <= message.length || !text.toLowerCase().endsWith(message.toLowerCase())) return text;
+  return text.slice(0, text.length - message.length).trim() || text;
+}
+
 export function ownLabel(element: Control): string {
+  return withoutValidationMessage(element, ownLabelRaw(element));
+}
+
+function ownLabelRaw(element: Control): string {
   const iconLabel = iconRadioLabel(element);
   if (iconLabel) return cleanLabel(iconLabel.textContent || "");
   // A toggle choice's option is its own text ("Yes", "No").
@@ -1136,6 +1148,12 @@ function pageSectionFor(element: Control): {
     const rows = [...avatureGroup.querySelectorAll("fieldset.datasetField__row:not(.datasetField__row--sample)")];
     if (title) return { section: title.slice(0, 500), index: Math.max(0, rows.indexOf(avatureRow)) };
   }
+  // UKG Pro: each job or school is a role="form" panel-list-item named by its
+  // panel and number ("Education 1"). Its From and To month/year had no
+  // section, so a school's From was told from nothing and stayed empty.
+  const ukgItem = element.closest('[role="form"][data-automation="panel-list-item"][aria-label]');
+  const ukgTitled = cleanLabel(ukgItem?.getAttribute("aria-label") || "").match(/^(.*\S)\s+(\d{1,3})$/);
+  if (ukgTitled) return { section: ukgTitled[1].slice(0, 500), index: Number(ukgTitled[2]) - 1 };
   // Workday: each job or school is a group labelled by its panel's heading
   // ("Work or Other Experience 2", an h5), and the first legend inside it is
   // a date's ("From"). Read as the section, every job's Location was one
