@@ -1,6 +1,6 @@
 // Part of the content script (content.ts): reading controls' values, and the marks the fill leaves on what it wrote.
 // Split out of content.ts as it was; see content.ts for how it starts.
-import { type Control, iconRadioLabel, currentFileName, isToggleChoice, toggleGroup, selectedCustomValue, wfnDropdown, placeholderOption, sectionFor, legacyLabels, writable } from "../semantics";
+import { type Control, iconRadioLabel, currentFileName, listedFileName, isToggleChoice, toggleGroup, selectedCustomValue, wfnDropdown, placeholderOption, sectionFor, legacyLabels, writable } from "../semantics";
 import { radioGroup, clip, isTrackableControl, openModal, lockKey, searchWithoutPick, placeholder, nativeActivationControl } from "../content-dom";
 import { configEngineEnabled } from "../../engine/mode";
 import { configuredFileControls, configuredRadioControls } from "../../engine/runtime";
@@ -245,6 +245,9 @@ export const lockReason = (element: Control, label: string) => {
     : "edit lock";
 };
 export const adoptSiteValue = (record: RecordEntry) => {
+  // A file Apple lists in the uploader's own list stays: the list only grows,
+  // and replacing it would add the document a second time.
+  if (listedFileName(record.element)) return;
   const ownWritten = cs.ownWrites.some((entry) => entry.label === record.label && entry.value === record.last);
   if ((cs.replaceSiteValues || placeholder(record.last) || ownWritten) && record.protectedBy === "existing value") {
     record.protected = false;

@@ -12,7 +12,7 @@ export type Posting = {
   location?: string;
   description: string;
   // "Posting page": a page the applicant linked; "Pasted": text they pasted.
-  source: "Greenhouse" | "Lever" | "Ashby" | "Workday" | "Oracle" | "Workable" | "SmartRecruiters" | "iCIMS" | "BambooHR" | "Posting page" | "Pasted";
+  source: "Greenhouse" | "Lever" | "Ashby" | "Workday" | "Oracle" | "Workable" | "ADP" | "SmartRecruiters" | "iCIMS" | "BambooHR" | "Posting page" | "Pasted";
 };
 
 import { fetchPublic, publicURL, type Lookup } from "./public-url";
@@ -124,6 +124,28 @@ export function postingEndpoint(raw: string): Endpoint | undefined {
               company: account,
               location: [body.location?.city, body.location?.region, body.location?.country].filter(Boolean).join(", ") || undefined,
               description: join(htmlText(body.description || ""), htmlText(body.requirements || ""), htmlText(body.benefits || "")),
+            }
+          : undefined,
+    };
+  }
+
+  // ADP Workforce Now's career center (recruitment.html, postLogin.html or
+  // the /job short link, with cid and jobId or requisitionId) builds its
+  // pages by script; its public requisition API carries the posting.
+  if (host === "workforcenow.adp.com") {
+    const cid = url.searchParams.get("cid") || "";
+    const job = url.searchParams.get("requisitionId") || url.searchParams.getAll("jobId").find((id) => /_\d+$/.test(id)) || url.searchParams.get("jobId") || "";
+    if (!/^[0-9a-f-]{8,64}$/i.test(cid) || !/^[\w-]{1,64}$/.test(job)) return;
+    return {
+      source: "ADP",
+      api: `https://workforcenow.adp.com/mascsr/default/careercenter/public/events/staffing/v1/job-requisitions/${encodeURIComponent(job)}?cid=${encodeURIComponent(cid)}&lang=en_US&locale=en_US`,
+      read: (body) =>
+        body?.requisitionTitle
+          ? {
+              source: "ADP",
+              title: body.requisitionTitle,
+              location: [body.requisitionLocations?.[0]?.address?.cityName, body.requisitionLocations?.[0]?.address?.countrySubdivisionLevel1?.codeValue].filter(Boolean).join(", ") || undefined,
+              description: htmlText(body.requisitionDescription || ""),
             }
           : undefined,
     };
@@ -388,7 +410,53 @@ function jobLocation(value: unknown): string | undefined {
 }
 const decodeText = (text: string) => htmlText(text.replace(/&quot;/g, '"'));
 
+// The object literal passed to a page script's call (UKG Pro's
+// OpportunityDetail page: `new US.Opportunity.CandidateOpportunityDetail({…})`),
+// read up to its closing brace.
+function scriptObject(html: string, call: string): Record<string, unknown> | undefined {
+  const start = html.indexOf(`${call}({`);
+  if (start < 0) return;
+  const from = start + call.length + 1;
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let index = from; index < html.length && index < from + 2_000_000; index++) {
+    const char = html[index];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') quoted = false;
+    } else if (char === '"') quoted = true;
+    else if (char === "{") depth++;
+    else if (char === "}" && --depth === 0) {
+      try {
+        const value: unknown = JSON.parse(html.slice(from, index + 1));
+        return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+      } catch {
+        return;
+      }
+    }
+  }
+}
+
+// UKG Pro's public OpportunityDetail page draws the posting by script from an
+// object in the page: its title, places and description HTML.
+function ukgOpportunity(html: string): Omit<Posting, "source"> | undefined {
+  const job = scriptObject(html, "CandidateOpportunityDetail");
+  if (!job || typeof job.Title !== "string" || typeof job.Description !== "string") return;
+  const description = htmlText(job.Description);
+  if (description.length < 100) return;
+  const places = (Array.isArray(job.Locations) ? job.Locations : []).flatMap((place: any) => {
+    const address = place?.Address;
+    const parts = [address?.City, address?.State?.Code || address?.State?.Name].filter((part) => typeof part === "string" && part.trim());
+    return parts.length ? [parts.join(", ")] : [];
+  });
+  return { title: job.Title.trim(), location: places.length ? places.join("; ").slice(0, 300) : undefined, description };
+}
+
 export function postingFromPage(html: string): Omit<Posting, "source"> | undefined {
+  const ukg = ukgOpportunity(html);
+  if (ukg) return ukg;
   for (const match of html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
     let data: unknown;
     try {

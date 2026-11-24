@@ -97,10 +97,15 @@ if (command.groupLoop) {
   return { removed: !loop.isConnected };
 }
 const number = Number(command.index) + 1;
-const wanted = new RegExp(
-  `^(delete|remove)\\s+${section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\(?${number}\\)?$`,
-  "i",
-);
+// Apple's review of the parsed resume: "Remove Employment Summary 2" for the
+// fieldset "Edit Employment 2".
+const apple = section.match(/^Edit (Employment|Education)$/);
+const wanted = apple
+  ? new RegExp(`^remove\\s+${apple[1]}\\s+summary\\s+${number}$`, "i")
+  : new RegExp(
+      `^(delete|remove)\\s+${section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\(?${number}\\)?$`,
+      "i",
+    );
 const control = [
   ...document.querySelectorAll<HTMLElement>("a[aria-label],button[aria-label],[role='button'][aria-label]"),
 ].find((element) => wanted.test((element.getAttribute("aria-label") || "").trim()));

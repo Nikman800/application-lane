@@ -289,6 +289,14 @@ export function fieldLabel(element: Control): string {
     const legend = labelText(element.closest('[data-automation-id^="formField-"]')?.querySelector("legend") || null);
     if (legend) return cleanLabel(`${legend}: ${own}`);
   }
+  // Apple's Start Date and End Date are fieldsets of a Month list and a Year
+  // list named only so; the legend is the question.
+  if (/^(month|year)$/i.test(own) && element instanceof HTMLSelectElement) {
+    const dates = element.closest("fieldset");
+    const legend = cleanLabel(dates?.querySelector(":scope > legend")?.textContent || "");
+    if (/^(start|end) date$/i.test(legend) && dates?.parentElement?.closest("fieldset")?.querySelector(":scope > legend.a11y"))
+      return `${legend} ${own}`;
+  }
   // iCIMS draws a date as Month, Day and Year boxes, and a salary as Currency,
   // Amount and Rate, under one line of text in the cell around them ("Date
   // Available to Start", "Desired Salary"): each box read only as its part
@@ -594,6 +602,14 @@ export function fileQuestion(element: Control): { kind: DocumentKind; text: stri
     return named(
       [...block.querySelectorAll(".apply-flow-block__title,.apply-flow-block__instructions")].map(labelText).join(" "),
     );
+  // ADP's Attachments area has no label: its words offer "documents, such as
+  // a cover letter, work samples, transcripts, and certifications", which name
+  // several kinds, and the first example is the one it takes. Only the
+  // uploader's own words (its single-input scope, never a section that holds
+  // another uploader), and only when the cover letter is the first example.
+  const words = (uploaderScope(element).textContent || "").replace(/\s+/g, " ").trim();
+  if (words.length < 600 && /\b(?:add|attach|upload)\b[^.]{0,40}\bdocuments?,?\s+(?:such as|like|including|e\.?g\.?:?)\s+(?:an?\s+)?cover[\s_-]*letters?\b/i.test(words))
+    return { kind: "cover", text: words };
 }
 
 // The single-uploader container of a file input, up to a few levels out.
@@ -659,6 +675,30 @@ export function currentFileName(element: Control): string {
     const named = documentKind(name);
     if (purpose && named && named !== purpose) continue;
     if (/\.(pdf|docx?|rtf|txt|odt)\b/i.test(name)) return name.slice(0, 300);
+  }
+  return listedFileName(element, scope);
+}
+
+// Apple lists each uploaded file as a row of its own: a disabled "File" box
+// holding the name, a Category select and a Remove button, the uploader
+// staying empty. A row of this uploader's kind (by its Category, else its
+// name) is the file already there; another kind's (a cover letter) is not.
+// The list only grows: such a file is never replaced by an upload.
+export function listedFileName(element: Control, scope?: Element): string {
+  if (!(element instanceof HTMLInputElement) || element.type !== "file") return "";
+  const purpose = fileKind(element);
+  scope ||= uploaderScope(element);
+  for (const box of scope.querySelectorAll<HTMLInputElement>(
+    'li input[type="text"][disabled],li input[type="text"][readonly]',
+  )) {
+    const name = box.value.replace(/\s+/g, " ").trim();
+    if (!/\.(pdf|docx?|rtf|txt|odt)$/i.test(name)) continue;
+    const row = box.closest("li");
+    if (!row || row.querySelector('input[type="file"]')) continue;
+    const chosen = row.querySelector("select")?.selectedOptions[0]?.textContent || "";
+    const named = documentKind(chosen) || documentKind(name);
+    if (purpose && named && named !== purpose) continue;
+    return name.slice(0, 300);
   }
   return "";
 }
@@ -969,7 +1009,22 @@ export function honeypot(element: Control): boolean {
   // Wholly left of or above the page, where no one can scroll to it.
   const box = element.getBoundingClientRect();
   const view = element.ownerDocument.defaultView;
-  return Boolean(view) && (box.right + view!.scrollX < 0 || box.bottom + view!.scrollY < 0);
+  // The page can scroll in its body or an inner block (UKG Pro's long
+  // application, window.scrollY 0): a box scrolled up past the top of that
+  // scroller is above the viewport but reachable, so what the ancestors are
+  // scrolled by counts as well. Only a box above the scroller's own origin
+  // is out of reach. The scroller can sit in a component's shadow root with
+  // the form slotted into it (UKG Pro's ukg-layout-container), so the walk
+  // follows the rendered tree: slot, parent, shadow host.
+  let scrolledX = view?.scrollX || 0;
+  let scrolledY = view?.scrollY || 0;
+  const up = (node: Element): Element | null =>
+    node.assignedSlot || node.parentElement || ((node.parentNode as ShadowRoot | null)?.host ?? null);
+  for (let parent = up(element); parent && parent !== element.ownerDocument.documentElement; parent = up(parent)) {
+    scrolledX += parent.scrollLeft;
+    scrolledY += parent.scrollTop;
+  }
+  return Boolean(view) && (box.right + scrolledX < 0 || box.bottom + scrolledY < 0);
 }
 
 export function controlVisible(element: Control): boolean {
@@ -1091,6 +1146,25 @@ function pageSectionFor(element: Control): {
   section: string;
   index: number;
 } {
+  // Apple's parsed-résumé review: each job, school and language is a
+  // <fieldset> whose hidden legend names it and its number ("Edit Employment
+  // 3"); its Current Employer and Graduated radios and its Start and End Date
+  // groups are fieldsets of their own inside it. Without the number every row
+  // after the first was row 0 (the same job written into four rows), and
+  // the inner groups were sections of their own, never a job's.
+  for (let fieldset = element.closest("fieldset"); fieldset; fieldset = fieldset.parentElement?.closest("fieldset") || null) {
+    const numbered = cleanLabel(fieldset.querySelector(":scope > legend.a11y")?.textContent || "").match(/^(Edit .*\S)\s+(\d{1,3})$/);
+    if (numbered) return { section: numbered[1].slice(0, 500), index: Number(numbered[2]) - 1 };
+  }
+  // Its Additional Files & Links rows are list items of one group: a file's
+  // Category and a link's are both "Category".
+  const supportRow = element.closest('li[role="listitem"]');
+  const supportGroup = supportRow?.closest('[role="group"][aria-label^="Edit "]');
+  if (supportRow && supportGroup && supportRow.querySelector(".supportingfile-widget-section"))
+    return {
+      section: cleanLabel(supportGroup.getAttribute("aria-label") || "").slice(0, 500),
+      index: Math.max(0, [...supportGroup.querySelectorAll('li[role="listitem"]')].indexOf(supportRow)),
+    };
   // Jobvite's prescreen questions are elements of jv-form-field children.
   const jobvite = element.closest(".jv-prescreen-element");
   const jobviteRow = jobvite && jobvitePrescreenRow(jobvite, element);

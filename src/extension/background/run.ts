@@ -660,29 +660,35 @@ export async function run(app: Application, operation: number) {
           issues.push(`Education row ${page + 1} was added by the site and is not the highest completed degree, so it was removed.`);
         }
     }
+    // Education rows, then job rows, the site added from the resume.
+    for (const [collection, held, pattern] of [
+      ["education", profile.education, /education/],
+      ["work", profile.work, /work|experience|employment/],
+    ] as const) {
     const educationRows = new Map<number, Observation["fields"]>();
     for (const field of allFields)
-      if (/education/.test(normalize(field.section || "")) && !removedFields.has(field))
+      if (pattern.test(normalize(field.section || "")) && !removedFields.has(field))
         educationRows.set(field.index || 0, [
           ...(educationRows.get(field.index || 0) || []),
           field,
         ]);
-    if (educationRows.size > profile.education.length) {
+    if (educationRows.size > held.length) {
       const paired = historyRowMap(allFields, profile);
       // Highest first, so removing one row does not renumber the next.
       for (const [page, rowFields] of [...educationRows].sort((a, b) => b[0] - a[0])) {
-        const kept = paired.size
-          ? paired.has(`education:${page}`)
-          : page < profile.education.length;
+        const kept = [...paired.keys()].some((key) => key.startsWith(`${collection}:`))
+          ? paired.has(`${collection}:${page}`)
+          : page < held.length;
         if (kept || !rowFields.some((field) => field.value)) continue;
-        const school = rowFields.find((field) => /school|university|institution/i.test(field.label) && field.value);
-        const described = `Education row ${page + 1}${school ? ` ("${school.value.slice(0, 60)}")` : ""}`;
+        const school = rowFields.find((field) => (collection === "education" ? /school|university|institution/i : /employer|company|organization/i).test(field.label) && field.value);
+        const described = `${collection === "education" ? "Education" : "Employment"} row ${page + 1}${school ? ` ("${school.value.slice(0, 60)}")` : ""}`;
+        const section = rowFields.find((field) => field.section)?.section || (collection === "education" ? "Education" : "Employment");
         // Only a row that holds nothing but the site's own guesses, made
-        // from a resume this extension uploaded, is removed.
+        // from a resume this extension uploaded (or, on Apple's review of
+        // the parsed resume, read before this fill), is removed.
         const siteMade =
-          app.siteFillPending &&
+          (app.siteFillPending || /^Edit /.test(section)) &&
           rowFields.every((field) => !field.value || field.siteValue);
-        const section = rowFields.find((field) => field.section)?.section || "Education";
         const frame = frames.find((candidate) =>
           candidate.observation.fields.some((field) => rowFields.includes(field)),
         );
@@ -698,6 +704,7 @@ export async function run(app: Application, operation: number) {
             : `${described} is not in your profile; the site probably added it from your resume. Remove it if it is a duplicate.`,
         );
       }
+    }
     }
   }
   for (const frame of frames) {

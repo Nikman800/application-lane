@@ -7851,6 +7851,169 @@ test("Apple's Add Resume step removes a saved LinkedIn link that is not the prof
   await expect(own.locator("#linkedin-url")).toHaveText("https://www.linkedin.com/in/Alex-Rivera-2026");
 });
 
+// Apple's review of the parsed résumé titles each row with a hidden legend
+// ("Edit Employment 3"), whose number is the row; the fill took the rows by a
+// count of same-titled fieldsets, so a later row got the first one's job,
+// its Current Employer, Start and End dates and Graduated/Completed were
+// never answered (their fieldsets are sections of their own), the
+// parser's extra rows stayed, "Preferred Phone Number" kept the parsed number,
+// Languages Spoken stayed empty and the uploaded résumé's Category was empty.
+test("Apple's parsed-résumé step fills each row by its legend's number, removes the parser's extra jobs, replaces the preferred phone, adds the languages and files the résumé as a Resume", async () => {
+  test.setTimeout(150000);
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      phone: "6025550101",
+      linkedin: "https://www.linkedin.com/in/alex-rivera",
+      languages: ["English: Native"],
+      work: [
+        { organization: "Acme", title: "Software Engineer", location: "Phoenix, AZ", details: "Built services.", startDate: "2025-06", endDate: "" },
+        { organization: "Contoso", title: "Data Analyst", location: "Tucson, AZ", details: "Built reports.", startDate: "2023-01", endDate: "2024-12" },
+      ],
+      education: [{ organization: "Penn State", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2099-05", location: "State College, PA", details: "" }],
+    },
+  });
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    .map((name, index) => `<option value="${String(index + 1).padStart(2, "0")}">${name}</option>`).join("");
+  const years = Array.from({ length: 80 }, (_, index) => 2100 - index).map((year) => `<option value="${year}">${year}</option>`).join("");
+  const date = (kind: string, row: number, month: string, year: string) =>
+    `<fieldset class="column"><legend><label class="label">${kind} Date</label></legend><div class="row"><div class="form-dropdown"><select id="parsedmodal-${kind.toLowerCase()}month-${row}" name="Month" class="form-dropdown-select" aria-labelledby="parsedmodal-${kind.toLowerCase()}month-${row}_label" data-v="${month}"><option value=""></option>${months}</select><span class="form-dropdown-label" id="parsedmodal-${kind.toLowerCase()}month-${row}_label" aria-hidden="true">Month</span></div><div class="form-dropdown"><select id="parsedmodal-${kind.toLowerCase()}year-${row}" name="Year" class="form-dropdown-select" aria-labelledby="parsedmodal-${kind.toLowerCase()}year-${row}_label" data-v="${year}"><option value=""></option>${years}</select><span class="form-dropdown-label" id="parsedmodal-${kind.toLowerCase()}year-${row}_label" aria-hidden="true">Year</span></div></div></fieldset>`;
+  const radios = (name: string, label: string, choices: string[], checked: string) =>
+    `<fieldset id="${name}-set" class=" mt-0"><legend class=" fw-semibold form-label mb-10">${label} </legend><div class="row">${choices.map((choice) => `<div class="form-radiobutton"><input type="radio" id="${name}-${choice.replace(/\W/g, "")}" name="${name}" class="form-radiobutton-input" ${choice === checked ? "checked" : ""}><label class="form-label" for="${name}-${choice.replace(/\W/g, "")}"><span>${choice}</span></label></div>`).join("")}</div></fieldset>`;
+  const job = (row: number, employer: string, title: string, current: boolean) =>
+    `<fieldset><legend class="a11y">Edit Employment ${row + 1}</legend><div class="row"><div class="form-textbox"><label for="parsedmodal-employer-${row}-suggestion-textbox" class="form-textbox-label">Employer</label><input id="parsedmodal-employer-${row}-suggestion-textbox" type="text" class="form-textbox-input" value="${employer}" required></div><div class="form-textbox"><label for="parsedmodal-jobtitle-${row}" class="form-textbox-label">Job Title</label><input id="parsedmodal-jobtitle-${row}" type="text" class="form-textbox-input" value="${title}" required></div></div>${radios(`currentEmployer${row}`, "Current Employer", ["Yes", "No"], current ? "Yes" : "")}${date("Start", row, "03", "2026")}${date("End", row, "04", "2026")}<div class="form-textbox"><label for="parsedmodal-job-description-${row}" class="form-textbox-label">Job Description</label><textarea id="parsedmodal-job-description-${row}">Parsed text.</textarea></div><button type="button" class="link" id="parsedmodal-remove-employment-${row}" aria-label="Remove Employment Summary ${row + 1}">Remove</button></fieldset>`;
+  const rows = [
+    ["Acme", "Founder", true],
+    ["Acme", "Founder", true],
+    ["Acme", "Founder", false],
+    ["Acme", "Founder", false],
+  ] as const;
+  const body = `<!doctype html><html><head><title>Review Resume - Software Engineer - Apply Jobs: Step 2 of 5 - Careers at Apple</title></head><body><main><h1>Review Resume</h1>
+    <div role="group" aria-label="Phone number"><div class="form-textbox"><label for="apply-contact-pref-phone-0" class="form-textbox-label">Preferred Phone Number</label><input id="apply-contact-pref-phone-0" type="tel" autocomplete="tel" class="form-textbox-input" value="(480) 555-0199" required></div></div>
+    <div role="group" aria-label="Edit Employment Summary" id="jobs">${rows.map((row, index) => job(index, row[0], row[1], row[2])).join("")}</div>
+    <div role="group" aria-label="Edit Education Summary"><fieldset><legend class="a11y">Edit Education 1</legend><div class="row"><div class="form-textbox"><label for="parsedmodal-school-0-suggestion-textbox" class="form-textbox-label">School</label><input id="parsedmodal-school-0-suggestion-textbox" type="text" value="Penn State" required></div></div>${radios("graduated0", "Graduated/Completed", ["Yes", "No", "Still Attending"], "Yes")}<button type="button" class="link" id="parsedmodal-remove-education-degree-0" aria-label="Remove Education Summary 1">Remove</button></fieldset></div>
+    <div role="group" aria-label="Edit Languages Spoken" id="langs"><button type="button" id="parsedmodal-add-language-0">Add language</button></div>
+    <div role="group" aria-label="Edit Additional Files &amp; Links"><ul id="files"><li role="listitem"><div class="row"><div class="column supportingfile-widget-section"><div class="form-textbox"><label for="resume-supportlink-text-1" class="form-textbox-label">Link</label><input type="text" id="resume-supportlink-text-1" class="form-textbox-input" value="https://www.linkedin.com/in/alex-rivera-old" required></div></div><div class="column supportingfile-widget-section"><div class="form-dropdown"><select id="resume-supportlink-category-1" name="Category" aria-labelledby="cat1"><option value="">Select</option><option value="linkCategory-PORT">Portfolio</option><option value="linkCategory-PATN">Patents</option><option value="linkCategory-LNKD">LinkedIn Profile</option><option value="linkCategory-MEDIA">Professional Media</option></select><span id="cat1" aria-hidden="true">Category</span></div></div></div></li></ul><span role="button"><input type="file" id="attachfile-resume-supportfile" aria-hidden="true"><button type="button" class="button" id="attachfile-button-resume-supportfile">Add file</button></span></div>
+    <button id="apply-step-continue-button" type="button">Continue</button></main><script>
+      window.removedRows = [];
+      document.getElementById('resume-supportlink-category-1').value = 'linkCategory-LNKD';
+      for (const select of document.querySelectorAll('select[data-v]')) select.value = select.dataset.v;
+      document.addEventListener('click', (event) => {
+        const remove = event.target.closest('button[id^="parsedmodal-remove-employment-"]');
+        if (remove) {
+          window.removedRows.push(remove.id);
+          const fieldset = remove.closest('fieldset');
+          setTimeout(() => {
+            fieldset.remove();
+            [...document.querySelectorAll('#jobs > fieldset')].forEach((set, index) => {
+              set.querySelector('legend').textContent = 'Edit Employment ' + (index + 1);
+              set.querySelector('button[id^="parsedmodal-remove-employment-"]').setAttribute('aria-label', 'Remove Employment Summary ' + (index + 1));
+            });
+          }, 100);
+        }
+        if (event.target.closest('#parsedmodal-add-language-0')) {
+          const options = (list) => list.map((text) => '<option value="' + text + '">' + text + '</option>').join('');
+          const count = document.querySelectorAll('#langs > fieldset').length;
+          const set = document.createElement('fieldset');
+          set.innerHTML = '<legend class="a11y">Edit Languages Spoken ' + (count + 1) + '</legend><div class="form-dropdown"><select id="parsedmodal-language-' + count + '" aria-labelledby="l' + count + '"><option value=""></option>' + options(['English', 'French', 'Spanish']) + '</select><span id="l' + count + '" aria-hidden="true">Language</span></div><div class="form-dropdown"><select id="parsedmodal-spokenlanguages-' + count + '" aria-labelledby="p' + count + '"><option value=""></option>' + options(['Beginner', 'Intermediate', 'Advanced', 'Native']) + '</select><span id="p' + count + '" aria-hidden="true">Proficiency (optional)</span></div><label><input type="checkbox" id="preferred-lang-' + count + '"> Use as preferred language</label>';
+          document.getElementById('langs').insertBefore(set, event.target);
+        }
+      });
+      document.addEventListener('change', (event) => {
+        if (event.target.id !== 'attachfile-resume-supportfile') return;
+        const name = event.target.files[0].name;
+        setTimeout(() => {
+          document.getElementById('files').insertAdjacentHTML('afterbegin', '<li role="listitem"><div class="supportingfile-widget-section"><input type="text" id="resume-supportfile-text-0" disabled value="' + name + '"></div><div class="supportingfile-widget-section"><div class="form-dropdown"><select id="resume-supportfile-category-0" name="Category" aria-labelledby="cat0"><option value="">Select</option><option value="supportingFileCategory-RESM">Resume</option><option value="supportingFileCategory-CVLT">Cover Letter</option></select><span id="cat0" aria-hidden="true">Category</span></div></div></li>');
+        }, 200);
+      });
+    </script></body></html>`;
+  await context.route(`${appleOrigin}/app/en-us/apply/200000004-0365**`, (route) => route.fulfill({ contentType: "text/html", body }));
+  const page = await context.newPage();
+  await page.goto(`${appleOrigin}/app/en-us/apply/200000004-0365?stepName=resumeParsedinfo`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications.at(-1)?.status, { timeout: 90000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.waitForTimeout(2000);
+  // The site parsed the uploaded résumé; the next fill answers what it wrote.
+  await expect(page.locator("#resume-supportfile-category-0")).toHaveCount(1);
+  await ui({ type: "FILL_STEP", id: (await state()).applications.at(-1)!.id });
+  await page.waitForTimeout(500);
+  await expect.poll(async () => (await state()).applications.at(-1)?.status, { timeout: 90000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.waitForTimeout(2000);
+  // The phone is the profile's, not the one the site parsed.
+  expect((await page.locator("#apply-contact-pref-phone-0").inputValue()).replace(/\D/g, "")).toContain("6025550101");
+  // The parser's duplicates match no profile job: removed with the row's own button, highest first.
+  expect(await page.evaluate(() => (window as any).removedRows)).toEqual(["parsedmodal-remove-employment-3", "parsedmodal-remove-employment-2"]);
+  await expect(page.locator("#jobs > fieldset")).toHaveCount(2);
+  // Row 1 is the profile's current job; row 2 the past one, with its dates.
+  await expect(page.locator("#parsedmodal-employer-0-suggestion-textbox")).toHaveValue("Acme");
+  await expect(page.locator("#currentEmployer0-Yes")).toBeChecked();
+  await expect(page.locator("#parsedmodal-employer-1-suggestion-textbox")).toHaveValue("Contoso");
+  await expect(page.locator("#currentEmployer1-No")).toBeChecked();
+  await expect(page.locator("#parsedmodal-startmonth-1")).toHaveValue("01");
+  await expect(page.locator("#parsedmodal-startyear-1")).toHaveValue("2023");
+  await expect(page.locator("#parsedmodal-endmonth-1")).toHaveValue("12");
+  await expect(page.locator("#parsedmodal-endyear-1")).toHaveValue("2024");
+  // A school still attended is not "Yes" to Graduated/Completed.
+  await expect(page.locator("#graduated0-StillAttending")).toBeChecked();
+  // Languages Spoken.
+  await expect(page.locator("#parsedmodal-language-0")).toHaveValue("English");
+  await expect(page.locator("#parsedmodal-spokenlanguages-0")).toHaveValue("Native");
+  // The uploaded résumé is a Resume in Additional Files & Links.
+  await expect(page.locator("#resume-supportfile-category-0")).toHaveValue("supportingFileCategory-RESM");
+  // The résumé listed after the first fill is not uploaded again by the second: one row names it.
+  await expect(page.locator('#files input[disabled][id^="resume-supportfile-text-"]')).toHaveCount(1);
+  await expect(page.locator('#files select[id^="resume-supportfile-category-"]')).toHaveCount(1);
+  // Each row's Category is a field of its own (the link was read as the only row before the file was listed).
+  const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, page.url());
+  const categories = (await ui({ type: "SCAN_TAB", tabId })).observation.fields.filter((f: { label: string }) => f.label === "Category");
+  expect(categories).toHaveLength(2);
+  expect(new Set(categories.map((f: { id: string }) => f.id)).size).toBe(2);
+  // The saved LinkedIn link, its Category LinkedIn Profile, is the profile's; the Category stays.
+  await expect(page.locator("#resume-supportlink-text-1")).toHaveValue("https://www.linkedin.com/in/alex-rivera");
+  await expect(page.locator("#resume-supportlink-category-1")).toHaveValue("linkCategory-LNKD");
+});
+
+// The same step on a refill: the site lists a résumé from an earlier fill
+// (another file name than this one's, the uploader stays empty), and it is
+// not uploaded again.
+test("Apple's Additional Files list that already holds a résumé row does not get the résumé uploaded again", async () => {
+  test.setTimeout(150000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, phone: "6025550101" } });
+  const row = (index: number, name: string) =>
+    `<li role="listitem"><div class="supportingfile-widget-section"><div class="form-textbox"><label for="resume-supportfile-text-${index}" class="form-textbox-label">File</label><input type="text" id="resume-supportfile-text-${index}" disabled value="${name}"></div></div><div class="supportingfile-widget-section"><div class="form-dropdown"><select id="resume-supportfile-category-${index}" name="Category" aria-labelledby="cat${index}"><option value="">Select</option><option value="supportingFileCategory-RESM">Resume</option><option value="supportingFileCategory-CVLT">Cover Letter</option></select><span id="cat${index}" aria-hidden="true">Category</span></div></div><button type="button" aria-label="Remove ${name}">Remove</button></li>`;
+  const body = `<!doctype html><html><head><title>Review Resume - Software Engineer - Apply Jobs: Step 2 of 5 - Careers at Apple</title></head><body><main><h1>Review Resume</h1>
+    <div role="group" aria-label="Phone number"><div class="form-textbox"><label for="apply-contact-pref-phone-0" class="form-textbox-label">Preferred Phone Number</label><input id="apply-contact-pref-phone-0" type="tel" autocomplete="tel" class="form-textbox-input" value="(480) 555-0199" required></div></div>
+    <div role="group" aria-label="Edit Additional Files &amp; Links"><ul id="files">${row(0, "Alex_Rivera_Resume_earlier.pdf")}</ul><span role="button"><input type="file" id="attachfile-resume-supportfile" aria-hidden="true"><button type="button" class="button" id="attachfile-button-resume-supportfile">Add files</button></span></div>
+    <button id="apply-step-continue-button" type="button">Continue</button></main><script>
+      document.getElementById('resume-supportfile-category-0').value = 'supportingFileCategory-RESM';
+      window.uploads = 0;
+      document.addEventListener('change', (event) => {
+        if (event.target.id !== 'attachfile-resume-supportfile') return;
+        window.uploads++;
+        const name = event.target.files[0].name;
+        setTimeout(() => document.getElementById('files').insertAdjacentHTML('beforeend', ${JSON.stringify(row(1, "NAME"))}.replace(/NAME/g, name)), 200);
+      });
+    </script></body></html>`;
+  await context.route(`${appleOrigin}/app/en-us/apply/200000004-0366**`, (route) => route.fulfill({ contentType: "text/html", body }));
+  const page = await context.newPage();
+  await page.goto(`${appleOrigin}/app/en-us/apply/200000004-0366?stepName=resumeParsedinfo`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications.at(-1)?.status, { timeout: 90000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.waitForTimeout(2000);
+  await ui({ type: "FILL_STEP", id: (await state()).applications.at(-1)!.id });
+  await page.waitForTimeout(500);
+  await expect.poll(async () => (await state()).applications.at(-1)?.status, { timeout: 90000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.waitForTimeout(2000);
+  expect(await page.evaluate(() => (window as unknown as { uploads: number }).uploads)).toBe(0);
+  await expect(page.locator("#files input[disabled]")).toHaveCount(1);
+  await expect(page.locator("#resume-supportfile-category-0")).toHaveValue("supportingFileCategory-RESM");
+});
+
 // Rippling's confirmation: "You have successfully applied to
 // Software Engineer Intern" on step=confirmation, outside the action card
 // its rule looked in, so the application was never marked submitted.
@@ -9357,6 +9520,34 @@ test("an Oracle uploader whose instructions name the cover letter gets it", asyn
   await expect.poll(async () => (await state()).applications.find((app: { url: string }) => app.url.includes("oracle-attachments"))?.status, { timeout: 30000 }).toMatch(/awaiting-user|ready/);
   await ui({ type: "FILL_STEP", id: (await state()).applications.find((app: { url: string }) => app.url.includes("oracle-attachments"))!.id });
   await expect.poll(() => page.evaluate(() => (window as any).attached.length), { timeout: 45000 }).toBe(2);
+  await page.close();
+});
+
+// ADP Workforce Now's Resume step: an "Attachments" area with no label, only
+// the words "You can add documents, such as a cover letter, work samples,
+// transcripts, and certifications" and a hidden multiple input, was not read
+// as a file field at all, so no cover letter went there.
+test("ADP's Attachments uploader whose words offer a cover letter first gets it, the resume stays in Resume", async () => {
+  await context.route(`${origin}/adp-attachments`, (route) => route.fulfill({ contentType: "text/html",
+    body: `<!doctype html><title>Application</title><form><label>Full name<input name="name"></label>
+      <div name="uploadResumeView"><h3>Resume</h3><div class="uploadRoot"><div class="dropTargetStyle"><div class="dropZoneLabel"><div>Drag and drop files</div><sdf-button type="button" variant="text">Upload resume</sdf-button></div></div>
+        <input multiple name="file" type="file" accept=".pdf,.doc,.docx" style="display: none;"></div></div>
+      <div class="additional-documents-content"><div class="upload-button"><div class="uploadRoot"><div class="dropTargetStyle"><div class="targetZone"><div class="dropZoneLabel">
+        <div> You can add documents, such as a cover letter, work samples, transcripts, and certifications. Drag and drop files</div><div>or</div>
+        <sdf-button type="button" variant="text">Upload attachments</sdf-button></div></div></div>
+        <input multiple name="file" type="file" accept=".pdf,.doc,.docx" style="display: none;"></div></div></div>
+      </form><script>
+        window.attached = { resume: [], attachments: [] };
+        const inputs = document.querySelectorAll('input[type=file]');
+        inputs[0].addEventListener('change', (event) => window.attached.resume.push(...[...event.target.files].map((f) => f.name)));
+        inputs[1].addEventListener('change', (event) => window.attached.attachments.push(...[...event.target.files].map((f) => f.name)));
+      </script>` }));
+  const page = await context.newPage();
+  await page.goto(`${origin}/adp-attachments`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).attached.attachments), { timeout: 45000 }).toEqual([expect.stringMatching(/cover/i)]);
+  await expect.poll(() => page.evaluate(() => (window as any).attached.resume), { timeout: 45000 }).toEqual([expect.stringMatching(/resume/i)]);
+  expect(await page.evaluate(() => (window as any).attached.attachments.filter((name: string) => /resume/i.test(name)))).toEqual([]);
   await page.close();
 });
 
@@ -23797,4 +23988,48 @@ test("UKG Pro education rows get their From month and From year from the profile
   await expect(scope("Education 1").locator('input[aria-label="From year"]')).toHaveValue("2025", { timeout: 45_000 });
   await expect(scope("Education 2").locator('select[aria-label="From month"] option:checked')).toHaveText("Sep", { timeout: 45_000 });
   await expect(scope("Education 2").locator('input[aria-label="From year"]')).toHaveValue("2021", { timeout: 45_000 });
+});
+
+test("UKG Pro questions scrolled up inside the page's scroller stay in the scanned fields", async () => {
+  test.setTimeout(120000);
+  const asked = [
+    "Please list when you are available to work:",
+    "If you are under the age of 18, please list your age. If not applicable, enter N/A.",
+    "Location you are applying for:",
+    "Position you are seeking:",
+    "List friends / relatives currently employed at Contoso:",
+    "What is the best day/time for a representative from Contoso to reach you by phone?",
+    "In the past 12 months, how many days of school or work did you miss?",
+    "What are you passionate about and why?",
+  ];
+  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const grid = days.flatMap((day) => Array.from({ length: 24 }, (_, hour) => `<div class="checkbox"><label><input type="checkbox" aria-label="${day} ${hour}:00"> ${day} ${hour}:00</label></div>`)).join("");
+  const question = (text: string, n: number) => `<div data-automation="application-knockout-question" class="row"><div class="col-md-24">
+    <div><div class="form-group"><label data-automation="question-title" class="control-label required" for="TextResponse${n}">${text}</label>
+      <textarea data-automation="text-response" rows="4" class="form-control" required id="TextResponse${n}"></textarea></div></div>
+    <div id="TextTemplate" style="display: none"><div class="form-group"><label data-automation="question-title" class="control-label required"></label>
+      <textarea data-automation="text-response" rows="4" class="form-control" required></textarea></div></div></div></div>`;
+  await context.route(`${ukgOrigin}/acme/JobBoard/job/OpportunityApply**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Data Analyst Intern | Apply</title><style>html,body{height:100%;margin:0;overflow:hidden}ukg-layout-container{display:flex;height:100%;overflow:auto}</style>
+      <script>customElements.define("ukg-layout-container", class extends HTMLElement { constructor() { super(); this.attachShadow({ mode: "open" }).innerHTML = '<style>.ukg-layout-content{height:100vh;overflow-y:auto;flex:1}</style><div class="ukg-layout-content"><slot></slot></div>'; } });</script>
+      <ukg-layout-container><main><h1>Data Analyst Intern</h1>
+      <div class="form-group"><label for="FirstName" class="control-label">First Name</label><input class="form-control" id="FirstName" type="text" autocomplete="given-name"></div>
+      <div class="form-group" role="group"><label class="control-label">Availability</label>${grid}</div>
+      <div id="ApplicationQuestions">${[...asked, ...Array.from({ length: 14 }, (_, i) => `Describe example number ${i + 1} of your work`)].map(question).join("")}</div></main></ukg-layout-container>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${ukgOrigin}/acme/JobBoard/job/OpportunityApply?opportunityId=1`);
+  await enqueue([page]);
+  await expect(page.locator("#FirstName")).toHaveValue(profile.firstName, { timeout: 45_000 });
+  // Worked down to the last question: the first ones lie above the top of
+  // the scroller, a block in the layout component's shadow root.
+  await page.evaluate(() => { const scroller = document.querySelector("ukg-layout-container")!.shadowRoot!.querySelector(".ukg-layout-content")!; scroller.scrollTop = scroller.scrollHeight; });
+  expect(await page.evaluate(() => document.querySelector("ukg-layout-container")!.shadowRoot!.querySelector(".ukg-layout-content")!.scrollTop)).toBeGreaterThan(1000);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, page.url());
+  const labels = ((await ui({ type: "SCAN_TAB", tabId })).observation.fields as { label: string }[]).map((field) => field.label);
+  expect(labels).toEqual(expect.arrayContaining(asked.map((text) => text.replace(/:$/, ""))));
 });

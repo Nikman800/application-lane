@@ -145,6 +145,22 @@ test("a linked posting page is read from its schema.org JobPosting, else from it
   assert.equal(postingFromPage('<html><body><div id="root"></div><script src="/app.js"></script></body></html>'), undefined);
 });
 
+test("a UKG Pro OpportunityDetail page is read from the opportunity its script draws: title, location and description", () => {
+  const job = {
+    Id: "0d48376c",
+    Title: "Data Analyst Intern",
+    Locations: [{ LocalizedName: "Acme Corporate Office", Address: { Line1: "1 Main St", City: "Fargo", State: { Name: "North Dakota", Code: "ND" }, PostalCode: "58103", Country: { Name: "United States", Code: "USA" } } }],
+    Description: `<p><strong>Acme's goals:</strong></p><p>${long}</p><ul><li>SQL</li></ul>`,
+    Links: [{ Href: "/x", Rel: "self" }],
+  };
+  const html = `<html><head><title>Opportunity Details</title></head><body><div id="opportunity"></div><nav>Search jobs</nav>
+    <script>$(function () { var model = new US.Opportunity.CandidateOpportunityDetail(${JSON.stringify(job)}); ko.applyBindings(model); });</script></body></html>`;
+  const posting = postingFromPage(html);
+  assert.equal(posting?.title, "Data Analyst Intern");
+  assert.equal(posting?.location, "Fargo, ND");
+  assert.match(posting!.description, /payments platform[\s\S]*• SQL/);
+});
+
 test("only a public https posting page is fetched, redirects included", async () => {
   assert.equal(publicPostingURL("http://careers.example.com/job/1"), undefined);
   for (const host of ["localhost", "127.0.0.1", "10.0.0.5", "192.168.1.2", "172.20.0.1", "[::1]", "printer.local", "[::ffff:7f00:1]", "100.64.0.1"])
@@ -177,6 +193,25 @@ test("only a public https posting page is fetched, redirects included", async ()
     undefined,
   );
   assert.deepEqual(internal, ["https://careers.example.com/job/2"]);
+});
+
+test("an ADP Workforce Now career-center or sign-in page's posting is read from its public requisition API", () => {
+  // Its pages are built by script; the postLogin page names the job twice
+  // (jobId=<requisition>_1 and a short jobId), plus requisitionId.
+  const cid = "0123abcd-4567-89ab-cdef-0123456789ab";
+  const want = `https://workforcenow.adp.com/mascsr/default/careercenter/public/events/staffing/v1/job-requisitions/9100000000001_1?cid=${cid}&lang=en_US&locale=en_US`;
+  assert.equal(postingEndpoint(`https://workforcenow.adp.com/mascsr/default/mdf/recruitment/postLogin.html?cid=${cid}&jobId=9100000000001_1&lang=en_US&jobId=958000&requisitionId=9100000000001_1&params=jobId`)?.api, want);
+  assert.equal(postingEndpoint(`https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=${cid}&jobId=9100000000001_1&lang=en_US`)?.api, want);
+  const posting = postingEndpoint(`https://workforcenow.adp.com/job?cid=${cid}&jobId=9100000000001_1`)!.read({
+    requisitionTitle: "Engineer, Software I",
+    requisitionLocations: [{ address: { cityName: "", countrySubdivisionLevel1: { codeValue: "" } } }],
+    requisitionDescription: "<div><p>Build and test network software.</p><ul><li>Python</li></ul></div>",
+  });
+  assert.equal(posting?.source, "ADP");
+  assert.equal(posting?.title, "Engineer, Software I");
+  assert.equal(posting?.location, undefined);
+  assert.match(posting!.description, /Build and test network software\./);
+  assert.equal(postingEndpoint("https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html")?.api, undefined);
 });
 
 test("a Workable application's posting is read from its API", () => {

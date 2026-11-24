@@ -2601,6 +2601,12 @@ test("legal restrictions to working are the inverse of work authorization", () =
   assert.equal(proposals([asked], citizen)[0]?.value, "No");
 });
 
+test("'legally eligible for employment in this country' is work authorization, answered from the profile", () => {
+  const citizen = profileSchema.parse({ ...profile, workAuthorization: [{ country: "US", status: "citizen", needsSponsorship: false }], applyingTo: { country: "US" } });
+  const asked = field("Are you legally eligible for employment in this country? Proof of eligibility will be required upon employment .", { id: "eligible", kind: "radio", options: ["Yes", "No"] });
+  assert.equal(proposals([asked], citizen)[0]?.value, "Yes");
+});
+
 // Woodgrove's Workday export-control question.
 test("a Yes/No question about citizenship of a sanctioned country is No for a citizen elsewhere", () => {
   const elsewhere = profileSchema.parse({ ...profile, country: "United States", citizenships: ["US"] });

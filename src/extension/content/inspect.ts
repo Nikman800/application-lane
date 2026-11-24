@@ -15,6 +15,7 @@ export function inspect(): Observation {
   const ats = adapterFor(location.href);
   const fields: Field[] = [];
   const counts = new Map<string, number>();
+  const claimed = new Set<string>();
   const positionedRadioGroups = new Set<string>();
   for (const element of controls()) {
     // A read-only box filled from its own picker (Tesla's start date) is a
@@ -86,6 +87,20 @@ export function inspect(): Observation {
       id = record?.id || crypto.randomUUID();
       semanticIds.set(semanticKey, id);
     }
+    // A row added above another (Apple's uploaded file, listed before a link
+    // read earlier as the only row) leaves both its Category selects one id:
+    // the earlier one's id is kept by its element, the new row's by its key.
+    // The row read second gets an id of its own.
+    if (claimed.has(id)) {
+      id = crypto.randomUUID();
+      semanticIds.set(semanticKey, id);
+      if (record) {
+        record = { ...record, id };
+        nodeRecords.set(element, record);
+        records.set(id, record);
+      }
+    }
+    claimed.add(id);
     const current = valueOf(element);
     if (!record) {
       const previous = records.get(id);

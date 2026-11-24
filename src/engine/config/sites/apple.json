@@ -54,6 +54,40 @@
           ]
         }
       ]
+    ],
+    [
+      "language",
+      [
+        {
+          "array": true,
+          "addButtonPath": "//button[starts-with(@id,'parsedmodal-add-language-')]",
+          "containerPath": "//fieldset[normalize-space(legend)='Edit Languages Spoken %NUMBER0%']",
+          "confirmAddedPath": [
+            "//fieldset[normalize-space(legend)='Edit Languages Spoken %NUMBER0%']"
+          ],
+          "time": 3000,
+          "inputSelectors": [
+            [
+              "language",
+              [
+                {
+                  "path": ".//select[starts-with(@id,'parsedmodal-language-')]",
+                  "method": "default"
+                }
+              ]
+            ],
+            [
+              "level",
+              [
+                {
+                  "path": ".//select[starts-with(@id,'parsedmodal-spokenlanguages-')]",
+                  "method": "default"
+                }
+              ]
+            ]
+          ]
+        }
+      ]
     ]
   ]
 }

@@ -185,6 +185,12 @@ export function deterministicAnswer(
   )
     return;
   const section = normalize(field.section || "");
+  // Apple's Additional Files & Links: the résumé uploaded there is a
+  // "Resume" in the Category beside its name (a link's list has no such choice).
+  if (label === "category" && field.kind === "select" && /\bfiles\b.*\blinks\b/.test(section) && !field.value) {
+    const resume = field.options.find((option) => /^resume$/i.test(option.trim()));
+    if (resume) return resume;
+  }
   if (!/work|employment|experience/.test(section)) {
     const row = educationRowFor(profile, section, field.index);
     if (schoolNameQuestion(field.label)) return row?.organization;
@@ -217,10 +223,13 @@ export function deterministicAnswer(
     // Graduated only when the end date has passed; an ongoing or future end
     // date is an expected graduation, not a completed one.
     // A row with neither an end date nor "still studying" says nothing.
-    if (/^(did you graduate|graduated|have you graduated|completed)$/.test(label)) {
-      if (row.current) return "No";
+    if (/^(did you graduate|graduated|graduated completed|have you graduated|completed)$/.test(label)) {
+      // Apple's Graduated/Completed has a choice of its own for a school
+      // still attended.
+      const notYet = field.options.find((option) => /^still attending$/i.test(option.trim())) || "No";
+      if (row.current) return notYet;
       if (!/^\d{4}-\d{2}/.test(row.endDate)) return;
-      return row.endDate.slice(0, 7) <= currentMonth() ? "Yes" : "No";
+      return row.endDate.slice(0, 7) <= currentMonth() ? "Yes" : notYet;
     }
     // A form that asks a row's whole span in one box: "Dates of Employment"
     // (MM/YYYY - MM/YYYY, "Present" for the job held now), a school's "Years
@@ -283,7 +292,7 @@ export function deterministicAnswer(
     [/^(re ?type|confirm|verify|re ?enter|repeat)( your)? e ?mail( address)?$|^e ?mail( address)? (confirmation|again)$/, "email"],
     // (The national number: the country code is asked apart, or is the
     // profile's phoneCountryCode.)
-    [/^((home|cell|cellular|mobile|primary) )?(phone|mobile|telephone)( number)?$/, "phone"],
+    [/^((home|cell|cellular|mobile|primary|preferred) )?(phone|mobile|telephone)( number)?$/, "phone"],
     // "What is your phone number?" (Workday), "Daytime Phone" (Taleo).
     [/^what is your ((home|cell|cellular|mobile|primary|daytime|contact) )?(phone|mobile|telephone)( number)?$|^(daytime|day time) (phone|telephone)( number)?$/, "phone"],
     // Also "City/Town" (Apple's profile step).
@@ -469,7 +478,10 @@ function screeningQuestion(
   label: string,
 ): { field: "workAuthorization" | "sponsorship"; invert: boolean } | undefined {
   const authorized =
-    /\b(authorized|authorised|eligible|permitted|entitled|legally able|legally allowed)\b( \w+){0,2} to work\b|\bright to work\b|\bwork authori[sz]ation\b|\b(legal )?authori[sz]ation to work\b/.test(label);
+    /\b(authorized|authorised|eligible|permitted|entitled|legally able|legally allowed)\b( \w+){0,2} to work\b|\bright to work\b|\bwork authori[sz]ation\b|\b(legal )?authori[sz]ation to work\b/.test(label) ||
+    // "Are you legally eligible for employment in this country? Proof of
+    // eligibility will be required upon employment." (ADP)
+    /\b(legally )?(eligible|authori[sz]ed|authorised|permitted) for employment\b/.test(label);
   // "Are you legally authorized to work in the United States? In other
   // words, do you currently hold or can you obtain valid US work
   // authorization…" asks whether the applicant may work, not for sponsorship
@@ -1161,11 +1173,11 @@ function studyAndPayAnswer({ field, profile, label, saved, asked, educationRow }
   // level "All".
   // SuccessFactors' "Language Skills" rows: Language, then Speak, Read and
   // Write (Fabrikam).
-  if (/^languages?( skills?| proficiency)?$/.test(normalize(field.section || "")) && profile.languages?.length) {
+  if (/^(edit )?languages?( spoken| skills?| proficiency)?$/.test(normalize(field.section || "")) && profile.languages?.length) {
     const row = profileLanguages(profile.languages)[field.index || 0];
     if (row && /\bfluent\b/.test(label) && field.kind === "checkbox") return { value: isFluent(row) ? "Yes" : "No" };
     if (row && /^language( name)?$/.test(label)) return { value: row.language };
-    if (row?.level && /^(all|comprehension|overall|reading|speaking|writing|listening|read|speak|write|listen|level|proficiency)$/.test(label)) {
+    if (row?.level && /^(all|comprehension|overall|reading|speaking|writing|listening|read|speak|write|listen|level|proficiency( optional)?)$/.test(label)) {
       const choices = levelChoices(row.level);
       return { value: choices[0], choices };
     }
@@ -1853,6 +1865,17 @@ function proposalsFor(fields: Field[], profile: Profile): Proposal[] {
   return [...found, ...otherSchool(fields, profile, answered).filter((proposal) => !answered.has(proposal.fieldId))];
 }
 
+// Apple's Additional Files & Links: a link row's "Link" box, whose Category
+// is LinkedIn Profile (or which holds a LinkedIn address), is the profile's
+// LinkedIn; a link of another category is the applicant's own.
+function supportLink(field: Field, fields: Field[], profile: Profile): Answer | undefined {
+  if (normalize(field.label) !== "link" || !/\bfiles\b.*\blinks\b/.test(normalize(field.section || "")) || !profile.linkedin?.trim()) return;
+  const category = fields.find((other) => other !== field && other.kind === "select" && normalize(other.label) === "category" &&
+    other.section === field.section && (other.index || 0) === (field.index || 0));
+  if (category?.value ? !/linkedin/i.test(`${category.valueText || ""} ${category.value}`) : !/linkedin\.com/i.test(field.value)) return;
+  return { value: fullURL(profile.linkedin) };
+}
+
 function ownProposals(fields: Field[], profile: Profile): Proposal[] {
   const rowMap = historyRowMap(fields, profile);
   return fields.flatMap((original) => {
@@ -1937,7 +1960,7 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
       /file|password|hidden/.test(field.kind)
     )
       return [];
-    const special = choice || profileAnswer(field, profile);
+    const special = choice || supportLink(field, fields, profile) || profileAnswer(field, profile);
     let answer: Answer | undefined =
       special ||
       (() => {
