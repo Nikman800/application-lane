@@ -174,9 +174,12 @@ export function repairCommands(ctx: RepairContext) {
     if (!repair) throw new Error(`${ctx.name(app)} has no repair. Open one from what shows the problem: lane repair <app> --report <id>.`);
     const reason = flagValues(ctx.words, "--reason")[0] as Attempt["reason"] | undefined;
     if (reason && !["repair", "profile", "page"].includes(reason)) throw new Error("--reason is repair, profile or page.");
-    const allowed = mayRetry(repair, reason, buildKey((await about(app)).build));
+    // Without a reason the refill is refused before the extension is asked
+    // for its build: the refusal must not depend on Chrome being open.
+    const known = reason ? await about(app) : undefined;
+    const allowed = mayRetry(repair, reason, buildKey(known?.build));
     if (!allowed.ok) throw new Error(`Not refilled. ${allowed.why}`);
-    const state = await about(app);
+    const state = known ?? (await about(app));
     const newest = await ctx.distBuild();
     if (newerBuild(state.build, newest)) throw new Error(`The extension runs an older build (${state.build?.commit}) than dist/extension (${newest!.commit}): lane reload, then lane refresh ${ctx.short(app)}.`);
     if (!state.tab.open) throw new Error("Its tab is closed: lane switch opens it again (a sign-in may be needed first).");
