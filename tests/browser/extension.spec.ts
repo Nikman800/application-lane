@@ -86,9 +86,11 @@ const avatureOrigin = "https://acme.avature.net";
 const avatureOwnDomainOrigin = "https://careers.contoso.com";
 const breezyOrigin = "https://acme.breezy.hr";
 const bambooOrigin = "https://acme.bamboohr.com";
+const ukgOrigin = "https://recruiting2.ultipro.com";
 const ripplingOrigin = "https://ats.rippling.com";
 const teslaOrigin = "https://www.tesla.com";
 const tiktokOrigin = "https://lifeattiktok.com";
+const appleOrigin = "https://jobs.apple.com";
 const smartRecruitersOrigin = "https://jobs.smartrecruiters.com";
 // Pages the fixture server itself serves, for tabs the extension opens: a
 // Playwright route does not reach those.
@@ -293,7 +295,7 @@ test.beforeEach(async () => {
       backendOrigin,
     ),
   );
-  manifest.host_permissions.push(...[...atsOrigins, oracleOrigin, microsoftOrigin, workableOrigin, sapsfOrigin, adpOrigin, talNetOrigin, amazonOrigin, paylocityOrigin, jazzOrigin, jobviteOrigin, avatureOrigin, avatureOwnDomainOrigin, breezyOrigin, bambooOrigin, ripplingOrigin, teslaOrigin, tiktokOrigin, smartRecruitersOrigin, "https://smartapply.indeed.com", "https://www.linkedin.com"].map((origin) => `${origin}/*`));
+  manifest.host_permissions.push(...[...atsOrigins, oracleOrigin, microsoftOrigin, workableOrigin, sapsfOrigin, adpOrigin, talNetOrigin, amazonOrigin, paylocityOrigin, jazzOrigin, jobviteOrigin, avatureOrigin, avatureOwnDomainOrigin, breezyOrigin, bambooOrigin, ukgOrigin, ripplingOrigin, teslaOrigin, tiktokOrigin, appleOrigin, smartRecruitersOrigin, "https://smartapply.indeed.com", "https://www.linkedin.com"].map((origin) => `${origin}/*`));
   await writeFile(
     join(extensionPath, "manifest.json"),
     JSON.stringify(manifest),
@@ -7771,6 +7773,50 @@ test("TikTok's resume slot takes the tailored resume once, and its Work Authoriz
   // The list that takes several choices is closed once its choice is made,
   // not left open over the form.
   await expect(page.locator(".ud__select__dropdown:not(.ud__select__dropdown-hidden)")).toHaveCount(0);
+});
+
+// Apple's Add Resume step shows the résumé saved on the candidate's
+// profile (a preview with "Uploaded: <date>" and a Remove button) and no
+// file input until Remove is pressed; the fill found no field and left a
+// résumé from a past year in place.
+test("Apple's Add Resume step replaces a résumé uploaded before today with the tailored one, once", async () => {
+  test.setTimeout(120000);
+  const preview = (name: string, stamp: string) => `<section class="resume-linkedin-preview-container "><div aria-hidden="true"><img src="/public/images/resume-icon.svg" alt="" width="61" height="80" class="icon cursor-default " aria-hidden="true"></div><div class="d-flex flex-column text-align-start gap-5 w-100"><p class="m-0 file-info t-body fw-semibold" id="resume-filename">${name}</p><p class="m-0 t-body-reduced">Uploaded: ${stamp}</p><p class="m-0"><button id="resume-remove" class="link" aria-label="Remove ${name}">Remove</button></p></div></section>`;
+  const upload = `<section class="resume-upload-container show-border "><img src="/public/images/resume-icon.svg" alt="" width="50" height="50" class="icon cursor-default " aria-hidden="true"><p class="text-center t-body-reduced" id="resume-upload-title">Upload or drag a PDF, Microsoft Word, Pages, RTF, or TXT file.</p><div class="mt-20 text-center"><span id="file-resume-fileupload" class="p-5 align-middle pos-rel row justify-content-center" role="button"><input type="file" id="attachfile-resume-fileupload" class="attach-file-input d-none" aria-hidden="true"><div class="file-upload-button"><button class="button button-block" id="attachfile-button-resume-fileupload">Choose File</button></div></span></div></section>`;
+  await context.route(`${appleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Add Resume - Software Engineer - Apply Jobs: Step 1 of 5 - Careers</title><style>.d-none{display:none}</style></head><body><main class="main" aria-label="Main App Content"><section class="pb-40 pt-40" id="apply-container"><p id="apply-jobtitle" class="fw-500 text-center t-eyebrow-reduced" tabindex="-1">Software Engineer</p><section class="resume-step-max-width" id="apply-resume"><section id="apply-resume-header" class="mtb-auto-50 text-center"><h1 id="apply-resume-heading" class="t-headline-reduced text-center">Add Resume</h1></section><section id="apply-resume-widgetwrapper" class="auto-margin"><section class="resume-attachment-container text-center  ">${preview("Alex_Rivera_Resume_2024.pdf", "Feb 15, 2025, 10:08 AM")}</section><section class="linkedin-attachment-container "><section class="resume-linkedin-preview-container pos-rel show-border"><section class="d-flex flex-column text-align-start gap-5 w-100"><section class="m-0"><p class="m-0 file-info t-body fw-semibold" id="linkedin-url">https://www.linkedin.com/in/alex-rivera</p></section><p class="m-0 t-body-reduced" id="linkedin-lastupdateddate">Last Updated: Feb 15, 2025, 10:08 AM</p><section class="m-0"><button id="linkedin-remove" class="link" aria-label="Remove https://www.linkedin.com/in/alex-rivera">Remove</button></section></section></section></section></section><section id="apply-resume-footer" class="d-flex justify-center"><section id="apply-action-container" class="d-flex mt-40 gap-20 actions-btngroup-2 mt-20"><div class="d-flex-equal"><button class="button button-block button-secondary" id="apply-step-back-button">Back</button></div><div class="d-flex-equal"><button class="button button-block" id="apply-step-continue-button">Submit</button></div></section></section></section></section></main><script>
+        window.uploaded = []; window.removed = 0;
+        const box = document.querySelector('.resume-attachment-container');
+        const preview = ${JSON.stringify(preview("NAME", "STAMP"))};
+        const upload = ${JSON.stringify(upload)};
+        const today = () => new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+        document.addEventListener('click', (event) => {
+          if (!event.target.closest('#resume-remove')) return;
+          window.removed++;
+          setTimeout(() => { box.classList.add('mb-45'); box.innerHTML = upload; }, 150);
+        });
+        document.addEventListener('change', (event) => {
+          if (event.target.id !== 'attachfile-resume-fileupload') return;
+          const file = event.target.files[0];
+          window.uploaded.push(file.name);
+          setTimeout(() => { box.classList.remove('mb-45'); box.innerHTML = preview.replaceAll('NAME', file.name).replace('STAMP', today()); }, 300);
+        });
+      </script></body></html>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${appleOrigin}/app/en-us/apply/200000001-0365?stepName=resume`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).uploaded), { timeout: 60000 }).toEqual([expect.stringMatching(/\.pdf$/i)]);
+  await expect.poll(async () => (await state()).applications.at(-1)?.status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.waitForTimeout(3000);
+  // Once: the résumé uploaded today is kept, not removed again.
+  expect(await page.evaluate(() => (window as any).removed)).toBe(1);
+  expect(await page.evaluate(() => (window as any).uploaded)).toHaveLength(1);
+  await expect(page.locator("#resume-filename")).not.toHaveText("Alex_Rivera_Resume_2024.pdf");
 });
 
 // Rippling's confirmation: "You have successfully applied to
@@ -23149,7 +23195,7 @@ test("Oracle's Skills block adds the profile's first 15 skills one at a time and
 // upload is an input whose only name is aria-label="file-input", under a
 // "Resume*" paragraph and beside a hidden resumeFileId; and its commute
 // question is a radiogroup fieldset typed with a doubled question mark.
-const bambooForm = (menu = "fab-menu54") => `<!doctype html><html><head><title>BambooHR</title></head><body><form onsubmit="window.submissions++; return false">
+const bambooForm = (menu = "fab-menu54", keepHidden = false) => `<!doctype html><html><head><title>BambooHR</title></head><body><form onsubmit="window.submissions++; return false">
   <div class="MuiFormControl-root fabric-ivrykt-SelectField-root-root css-1qk38wv" data-fabric-component="SelectField InputWrapper">
     <div class="fabric-1nxauls-SelectField-label-labelWrapper"><label class="MuiFormLabel-root MuiInputLabel-root Mui-required css-1d73w0j" data-shrink="false" for="fab-select85">State<span aria-hidden="true" class="MuiFormLabel-asterisk MuiInputLabel-asterisk css-1rm2pe1"> *</span></label></div>
     <div class="fabric-1vlsppk-root MuiBox-root css-fv3lde"><div class="fab-Select" data-fabric-component="Select"><div style="display: inline-block;"><div class="fab-SelectToggle__container">
@@ -23177,12 +23223,21 @@ const bambooForm = (menu = "fab-menu54") => `<!doctype html><html><head><title>B
       // and a press on a drawn menu shuts it.
       if (!pressed || event.detail < 1) return;
       pressed = false;
+      // As live (keepHidden): a closed menu stays in the page, its holder
+      // hidden with display: none, and is shown again on the next press.
+      const holder = document.getElementById('menu-holder');
       const drawn = document.getElementById('${menu}');
-      if (drawn) { drawn.closest('.fab-MenuVessel').remove(); toggle.setAttribute('aria-expanded', 'false'); return; }
+      const shown = drawn && (!holder || holder.style.display !== 'none');
+      const shut = () => { toggle.setAttribute('aria-expanded', 'false'); if (${keepHidden}) holder.style.cssText = 'visibility: hidden; display: none; position: absolute;'; else drawn.closest('.fab-MenuVessel').remove(); };
+      if (shown) { shut(); return; }
+      // Drawn hidden and shown once placed, on an animation frame, which a
+      // tab out of view never gets: there it stays open and hidden.
+      const show = () => { const box = document.getElementById('menu-holder'); box.style.cssText = 'visibility: hidden; display: flex; position: absolute;'; box.querySelector('.fab-MenuSearch__input')?.focus(); };
+      if (drawn) { show(); toggle.setAttribute('aria-expanded', 'true'); return; }
       toggle.setAttribute('aria-expanded', 'true');
       const vessel = document.createElement('div');
       vessel.className = 'fab-MenuVessel fab-MenuVessel--bottom';
-      vessel.innerHTML = '<div class="fab-MenuVessel__list"><div id="${menu}" role="menu" tabindex="-1" class="fab-MenuList"><div class="fab-MenuList__scrollContainer">' + ['Alabama', 'Ohio', 'Oregon'].map((name, index) => '<div class="fab-MenuOption fab-MenuOption--sizeMedium MuiBox-root" id="' + (index + 1) + '" role="menuitem" tabindex="-1"><div class="fab-MenuOption__content"><div class="fab-MenuOption__row"><div>' + name + '</div></div></div></div>').join('') + '</div></div></div>';
+      vessel.innerHTML = '<div class="fab-MenuVessel__list">' + (${keepHidden} ? '<div class="fab-MenuVessel__search"><label class="fab-MenuSearch"><input aria-label="Search" class="fab-MenuSearch__input" placeholder="Search..." type="text" value=""></label></div>' : '') + '<div id="${menu}" role="menu" tabindex="-1" class="fab-MenuList"><div class="fab-MenuList__scrollContainer">' + ['Alabama', 'Ohio', 'Oregon'].map((name, index) => '<div class="fab-MenuOption fab-MenuOption--sizeMedium MuiBox-root" id="' + (index + 1) + '" role="menuitem" tabindex="-1"><div class="fab-MenuOption__content"><div class="fab-MenuOption__row"><div>' + name + '</div></div></div></div>').join('') + '</div></div></div>';
       for (const option of vessel.querySelectorAll('.fab-MenuOption'))
         option.addEventListener('click', () => {
           const name = option.textContent;
@@ -23190,14 +23245,16 @@ const bambooForm = (menu = "fab-menu54") => `<!doctype html><html><head><title>B
           toggle.setAttribute('aria-label', 'State ' + name);
           toggle.setAttribute('aria-expanded', 'false');
           document.getElementById('fab-select85').innerHTML = '<option value="' + name + '" selected>' + name + '</option>';
-          vessel.remove();
+          if (${keepHidden}) document.getElementById('menu-holder').style.cssText = 'visibility: hidden; display: none; position: absolute;';
+          else vessel.remove();
         });
-      document.body.append(vessel);
+      if (${keepHidden}) { const holder = document.createElement('div'); holder.id = 'menu-holder'; holder.append(vessel); document.body.append(holder); show(); }
+      else document.body.append(vessel);
     });
   </script></body></html>`;
-async function bambooPage(profileChanges: Record<string, unknown> = {}) {
+async function bambooPage(profileChanges: Record<string, unknown> = {}, keepHidden = false) {
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, state: "Ohio", ...profileChanges } });
-  await context.route(`${bambooOrigin}/**`, (route) => route.fulfill({ contentType: "text/html", body: bambooForm() }));
+  await context.route(`${bambooOrigin}/**`, (route) => route.fulfill({ contentType: "text/html", body: bambooForm("fab-menu54", keepHidden) }));
   const page = await context.newPage();
   await page.goto(`${bambooOrigin}/careers/134`);
   await panel.bringToFront();
@@ -23212,6 +23269,19 @@ test("a BambooHR fabric State select is read as a required list labelled State a
   await expect(page.locator("#fab-select85")).toHaveValue("Ohio");
   const observation = (await content(page, { type: "INSPECT" })).data;
   expect(observation.fields.find((field: { label: string }) => field.label === "State")).toMatchObject({ kind: "combobox", required: true, value: "Ohio" });
+  expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+});
+
+// Live, a closed BambooHR menu stays in the page, hidden (display: none on
+// the box around it), and an open one is visibility: hidden until the page
+// places it on an animation frame, which a tab out of view never gets. Read
+// as drawn when closed, it was never pressed open; read as hidden when open,
+// it was waited on. State and Highest Education each waited 5 s and were left.
+test("a BambooHR fabric State select whose closed menu stays hidden in the page is pressed open and its Ohio is picked", async () => {
+  const page = await bambooPage({}, true);
+  await enqueue([page]);
+  await expect(page.locator(".fab-SelectToggle__guts")).toContainText("Ohio", { timeout: 45_000 });
+  await expect(page.locator("#fab-select85")).toHaveValue("Ohio");
   expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
@@ -23242,4 +23312,67 @@ test("a BambooHR commute question is left for the applicant when the profile can
   await enqueue([page]);
   await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 45_000 }).toMatch(/^(awaiting-user|ready)$/);
   await expect(page.locator('input[name="customQuestionAnswers.yes_no_232"]:checked')).toHaveCount(0);
+});
+
+// UKG Pro (UltiPro) recruiting: the Contact Information panel's optional
+// Country list, drawn by Knockout with a "Choose..." caption, reveals a
+// collapsed address pane (its State list loads from the server for the chosen
+// country). Country was left empty and the pane unfilled.
+test("a UKG Pro optional Country list is answered and the address pane it reveals is filled", async () => {
+  test.setTimeout(120000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, address: "100 E. Mill Way", addressLine2: "", city: "Blacksburg", state: "Virginia", postalCode: "24060", country: "United States" } });
+  await context.route(`${ukgOrigin}/acme/JobBoard/job/States**`, (route) =>
+    route.fulfill({ contentType: "application/json", body: JSON.stringify(new URL(route.request().url()).searchParams.get("countryId") === "us-id" ? [{ Id: "va-id", Name: "Virginia" }, { Id: "az-id", Name: "Arizona" }] : [{ Id: "on-id", Name: "Ontario" }]) }),
+  );
+  await context.route(`${ukgOrigin}/acme/JobBoard/job/OpportunityApply**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Data Analyst Intern | Apply</title><style>.collapse{display:none}.collapse.in{display:block}</style><main><h1>Data Analyst Intern</h1>
+      <div class="form-group"><label for="resume">Upload Resume</label><input type="file" id="resume" name="file"></div>
+      <div id="contact"></div><template id="contactTemplate">
+      <div class="panel panel-transparent" role="region" aria-label="Contact Information"><div class="panel-heading"><div class="panel-title"><h2 class="collapsible-panel-title">Contact Information</h2></div></div>
+      <div class="panel-collapse collapse in"><div class="panel-body"><form novalidate autocomplete="on">
+        <div class="row"><div class="col-md-8"><div class="form-group"><label for="FirstName" class="control-label required">First Name</label><input class="form-control" id="FirstName" type="text" autocomplete="given-name" required></div></div>
+        <div class="col-md-8"><div class="form-group"><label for="Phone" class="control-label required">Primary Phone</label><input class="form-control" type="tel" id="Phone" autocomplete="tel" required></div></div></div>
+        <div class="row"><div class="col-md-8"><div class="form-group"><label for="Country" class="control-label">Country</label>
+          <select class="form-control focus-visible" id="Country" name="Country" autocomplete="country-name" aria-describedby="CountryError"><option value="" selected>Choose...</option><option value="ca-id">Canada</option><option value="us-id">United States</option></select>
+          <span id="CountryError" class="help-block" style="display: none;"></span></div></div></div>
+        <div class="collapse" id="addressPane" aria-expanded="false" style="overflow: hidden; height: 0px;">
+          <div class="row"><div class="col-md-16"><div class="form-group"><label id="AddressLine1Label" for="AddressLine1" class="control-label required">Address 1</label><input id="AddressLine1" type="text" class="form-control" autocomplete="address-line1" required></div></div></div>
+          <div class="row"><div class="col-md-16"><div class="form-group"><label for="AddressLine2" class="control-label">Address 2</label><input type="text" id="AddressLine2" class="form-control" autocomplete="address-line2"></div></div></div>
+          <div class="row"><div class="col-md-8"><div class="form-group"><label for="City" class="control-label required">City</label><input id="City" type="text" class="form-control" autocomplete="address-level2" required></div></div>
+            <div class="col-md-8" id="stateGroup" style="display: none;"><div class="form-group"><label for="State" class="control-label required">State / Province</label><select class="form-control" id="State" required autocomplete="address-level1"><option value="" selected>Choose...</option></select></div></div>
+            <div class="col-md-8"><div class="form-group"><label for="PostalCode" class="control-label required">Zip / Postal Code</label><input type="text" id="PostalCode" class="form-control" autocomplete="postal-code" required></div></div></div>
+        </div>
+      </form></div></div></div></template></main><script>
+        // The panel is drawn only once the uploaded resume is parsed.
+        document.getElementById("resume").addEventListener("change", () => setTimeout(() => {
+          document.getElementById("contact").append(document.getElementById("contactTemplate").content.cloneNode(true));
+          const country = document.getElementById("Country");
+          const pane = document.getElementById("addressPane");
+          country.addEventListener("change", async () => {
+          const chosen = country.value;
+          pane.classList.toggle("in", Boolean(chosen));
+          pane.style.height = chosen ? "auto" : "0px";
+          pane.setAttribute("aria-expanded", String(Boolean(chosen)));
+          const state = document.getElementById("State");
+          state.innerHTML = '<option value="" selected>Choose...</option>';
+          const response = await fetch("/acme/JobBoard/job/States?countryId=" + chosen);
+          for (const item of await response.json()) state.insertAdjacentHTML("beforeend", '<option value="' + item.Id + '">' + item.Name + '</option>');
+          document.getElementById("stateGroup").style.display = "";
+          });
+        }, 1500));
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${ukgOrigin}/acme/JobBoard/job/OpportunityApply?opportunityId=1`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect(page.locator("#Country option:checked")).toHaveText("United States", { timeout: 45_000 });
+  await expect(page.locator("#AddressLine1")).toHaveValue("100 E. Mill Way", { timeout: 45_000 });
+  await expect(page.locator("#City")).toHaveValue("Blacksburg", { timeout: 45_000 });
+  await expect(page.locator("#State option:checked")).toHaveText("Virginia", { timeout: 45_000 });
+  await expect(page.locator("#PostalCode")).toHaveValue("24060", { timeout: 45_000 });
 });

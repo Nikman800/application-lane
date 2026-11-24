@@ -7,7 +7,7 @@ import {
   type Application,
 } from "../src/shared/model";
 import { canonicalAnswer, pickOption as pickListOption } from "../src/shared/answers";
-import { deterministicAnswer, nameVariants, postingGuess, proposals } from "../src/shared/matching";
+import { deterministicAnswer, nameVariants, postingGuess, proposals, publicPostingUrl } from "../src/shared/matching";
 import { configPassTimeout, transitionTiming } from "../src/shared/timing";
 import { degreeAliases } from "../src/shared/education";
 import { profileFactQuestion } from "../src/shared/profile-facts";
@@ -1690,6 +1690,10 @@ test("SuccessFactors' education sentences and its availability date are answered
   const ask = (label: string, overrides: Partial<Field> = {}) => proposals([field(label, overrides)], applicant)[0]?.value;
   assert.equal(ask("What is the highest level of education you have completed?", { kind: "select", options: ["High School", "Bachelors Degree", "Masters Degree or Higher"] }), "Bachelors Degree");
   assert.equal(ask("What area was your major in?"), "Data Science");
+  // BambooHR's list puts "College - " before each degree: the finished
+  // Bachelor of Science is its own option, not the Arts one or the Master's.
+  const bamboo = ["GED or Equivalent", "High School", "Some College", "College - Associates", "College - Bachelor of Arts", "College - Bachelor of Fine Arts", "College - Bachelor of Science", "College - Master of Arts", "College - Master of Science", "College - Doctorate", "Other"];
+  assert.equal(ask("Highest Education Obtained", { kind: "combobox", options: bamboo }), "College - Bachelor of Science");
   const today = new Date();
   const two = (n: number) => String(n).padStart(2, "0");
   assert.equal(ask("Date Available"), `${two(today.getMonth() + 1)}/${two(today.getDate())}/${today.getFullYear()}`);
@@ -3029,4 +3033,14 @@ test("a saved answer listing several values is one proposal carrying the rest, f
   const single = proposals([field(label, { kind: "combobox" })], { ...profile, answers: [{ question: label, answer: "Computer Science" }] })[0];
   assert.equal(single.value, "Computer Science");
   assert.equal(single.also, undefined);
+});
+
+test("an ADP Workforce Now short job link, which opens ADP's sign-in, is tracked at the job's public career-center page", () => {
+  assert.equal(
+    publicPostingUrl("https://workforcenow.adp.com/job?cid=11111111-2222-3333-4444-555555555555&jobId=9200000000001_1"),
+    "https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=11111111-2222-3333-4444-555555555555&jobId=9200000000001_1&lang=en_US",
+  );
+  const career = "https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=11111111-2222-3333-4444-555555555555&jobId=9200000000001_1&lang=en_US";
+  assert.equal(publicPostingUrl(career), career);
+  assert.equal(publicPostingUrl("https://jobs.lever.co/acme/123"), "https://jobs.lever.co/acme/123");
 });

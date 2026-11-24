@@ -5,7 +5,7 @@ import { transitionTiming } from "../../shared/timing";
 import { releaseTrustedInput } from "../trusted-input";
 import { locationCountry, type Geography } from "../../shared/geography";
 import globals from "../../engine/config/globals.json" with { type: "json" };
-import { DRAFT_ONLY_NOTE, canonicalURL, sameOpening, postingGuess } from "../../shared/matching";
+import { DRAFT_ONLY_NOTE, canonicalURL, sameOpening, postingGuess, publicPostingUrl } from "../../shared/matching";
 import { companyFor, relatedTab } from "../workspace";
 import { bg } from "./state";
 import { Frame, alive, api, backoff, initial, loadingSince, pageTimers, persist, runners } from "./core";
@@ -281,7 +281,9 @@ export async function enqueue(
   if (items.length > 100)
     throw new Error("Queue up to 100 applications at a time.");
   for (const item of items) {
-    const url = canonicalURL(item.url);
+    // A tab already open keeps its address; a link opened here goes to the
+    // job's public page when its own leads to a sign-in.
+    const url = item.tabId ? canonicalURL(item.url) : publicPostingUrl(canonicalURL(item.url));
     if (
       !(await chrome.permissions.contains({
         origins: [`${new URL(url).origin}/*`],

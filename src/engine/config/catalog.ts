@@ -3,6 +3,7 @@ import type { SiteConfig, GlobalConfig } from "./schema";
 import globalsData from "./globals.json" with { type: "json" };
 import adp from "./sites/adp.json" with { type: "json" };
 import amazon from "./sites/amazon.json" with { type: "json" };
+import apple from "./sites/apple.json" with { type: "json" };
 import ashby from "./sites/ashby.json" with { type: "json" };
 import avature from "./sites/avature.json" with { type: "json" };
 import greenhouse from "./sites/greenhouse.json" with { type: "json" };
@@ -22,5 +23,5 @@ import tiktok from "./sites/tiktok.json" with { type: "json" };
 import workable from "./sites/workable.json" with { type: "json" };
 import workday from "./sites/workday.json" with { type: "json" };
 
-export const configs = [adp, amazon, ashby, avature, greenhouse, icims, jazzhr, jobvite, lever, microsoft, oracle, paylocity, rippling, smartrecruiters, successfactors, talnet, tesla, tiktok, workable, workday] as unknown as SiteConfig[];
+export const configs = [adp, amazon, apple, ashby, avature, greenhouse, icims, jazzhr, jobvite, lever, microsoft, oracle, paylocity, rippling, smartrecruiters, successfactors, talnet, tesla, tiktok, workable, workday] as unknown as SiteConfig[];
 export const globals = globalsData as GlobalConfig;

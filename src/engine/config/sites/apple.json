@@ -1,0 +1,41 @@
+{
+  "ats": "Apple",
+  "urls": [
+    "*://jobs.apple.com/app/*/apply/*"
+  ],
+  "urlsExcluded": [],
+  "embeddedPaths": [],
+  "pathsExcluded": [],
+  "containerPath": [],
+  "containerRequired": false,
+  "defaultMethod": "default",
+  "submitButtonPaths": [],
+  "submittedSuccessPaths": [],
+  "trackedInputSelectors": [],
+  "inputSelectors": [
+    [
+      "resume",
+      [
+        {
+          "path": [
+            "//section[@id='apply-resume-widgetwrapper']/section[contains(concat(' ',normalize-space(@class),' '),' resume-attachment-container ')]"
+          ],
+          "actions": [
+            {
+              "path": "%INPUTPATH%//button[@id='resume-remove']",
+              "method": "click",
+              "allowFailure": true,
+              "condition": "%INPUTPATH%[.//button[@id='resume-remove']][.//p[starts-with(normalize-space(.),'Uploaded:')][number(substring(substring-after(normalize-space(substring-after(.,':')),', '),1,4))*10000 + number(substring(substring-after('Jan01Feb02Mar03Apr04May05Jun06Jul07Aug08Sep09Oct10Nov11Dec12',substring(normalize-space(substring-after(.,':')),1,3)),1,2))*100 + number(substring-before(substring-after(normalize-space(substring-after(.,':')),' '),',')) < %TODAY%]]"
+            },
+            {
+              "path": "%INPUTPATH%//input[@type='file']",
+              "method": "uploadResume",
+              "time": 5000,
+              "condition": "%INPUTPATH%[not(.//button[@id='resume-remove'])]"
+            }
+          ]
+        }
+      ]
+    ]
+  ]
+}

@@ -321,6 +321,12 @@ export const fabricMenu = (element: Element): HTMLElement | null => {
   const id = element.getAttribute("data-menu-id") || "";
   return id ? (element.getRootNode() as Document | ShadowRoot).querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`) : null;
 };
+// A BambooHR menu is drawn hidden (visibility: hidden) and shown once the
+// page has placed it, on an animation frame; in a tab out of view that frame
+// never comes, and the menu, open and taking clicks, stays hidden. It is
+// drawn when it takes up room (display: none, when closed, takes none).
+export const fabricDrawn = (element: Element) =>
+  !element.closest("[hidden],[inert]") && element.getClientRects().length > 0;
 // The menu's choices: its option rows, else its option or menuitem roles.
 export function fabricOptions(menu: ParentNode | null): HTMLElement[] {
   if (!menu) return [];

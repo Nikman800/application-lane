@@ -3,7 +3,7 @@
 import { requestMainWorld } from "../../engine/page/bridge";
 import { nameVariants } from "../../shared/matching";
 import { type Proposal, normalize } from "../../shared/model";
-import { controlledList, fabricToggle, fabricMenu, fabricOptions, pressFabric, ashbyToggle, successFactorsPicklist, ripplingSelect, shadowedOptions, deepOption, pressOutside, splChosen, picksOf, closeSuccessFactorsList, menuEntries } from "../content-dom";
+import { controlledList, fabricToggle, fabricMenu, fabricOptions, fabricDrawn, pressFabric, ashbyToggle, successFactorsPicklist, ripplingSelect, shadowedOptions, deepOption, pressOutside, splChosen, picksOf, closeSuccessFactorsList, menuEntries } from "../content-dom";
 import { writable, rendered } from "../semantics";
 import { pickOption } from "../../shared/answers";
 import { searchSiteList } from "../../engine/runtime";
@@ -271,9 +271,11 @@ export async function selectCustom(
           );
         else {
           // A BambooHR menu still drawn is used as it is: a press would
-          // shut it.
+          // shut it. A closed one stays in the page hidden (display: none on
+          // its vessel), and counted as drawn it was never opened (State and
+          // Highest Education waited 5 s each and were left).
           if (fabricToggle(element)) {
-            if (!fabricOptions(fabricMenu(element)).length) pressFabric(element);
+            if (!fabricOptions(fabricMenu(element)).some(fabricDrawn)) pressFabric(element);
           } else fillClick(element);
         }
         // The opening handler can focus asynchronously. The scoped focus
@@ -443,7 +445,7 @@ export async function selectCustom(
           : listButton(element) && openLists().length === 1 ? openLists()[0] : icimsList();
       if (
         list &&
-        rendered(list) &&
+        (fabricToggle(element) ? fabricDrawn(list) : rendered(list)) &&
         element.getAttribute("aria-expanded") === "true" &&
         list.getAttribute("aria-busy") !== "true"
       ) {
@@ -455,7 +457,7 @@ export async function selectCustom(
           : [...list.querySelectorAll<HTMLElement>(grid ? '[role="option"],[role="gridcell"]' : '[role="option"]')];
         const shadowed = roled.length ? [] : shadowedOptions(list);
         const options = (roled.length ? roled : shadowed).filter(
-          (o) => rendered(o) && o.getAttribute("aria-disabled") !== "true" && (!shadowed.length || deepOption(o)?.getAttribute("aria-disabled") !== "true"),
+          (o) => (fabricToggle(element) ? fabricDrawn(o) : rendered(o)) && o.getAttribute("aria-disabled") !== "true" && (!shadowed.length || deepOption(o)?.getAttribute("aria-disabled") !== "true"),
         );
         // An Ashby school result is a name with its country and web domain
         // beside it; the name alone is the option.

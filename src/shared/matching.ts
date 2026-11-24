@@ -295,7 +295,8 @@ export function deterministicAnswer(
     [/^(please )?((list|enter|provide|select|tell us|indicate) )?(what|which|the) state (do |that |in which )?you (currently |permanently |presently )*(reside|live)( in)?$/, "state"],
     [countryLabel, "country"],
     [/^county( of residence)?$/, "county"],
-    [/^(street |mailing |home )?address( line 1)?$/, "address"],
+    // ("Address 1" on UKG Pro's contact form.)
+    [/^(street |mailing |home )?address( line)?( 1| one)?$/, "address"],
     [secondAddressLine, "addressLine2"],
     // One name or two: "Zip", "Postal code", "Postcode/ZIP".
     [/^((zip ?code|zip|postal|post ?code)( code)? ?){1,2}$|^please enter the zip code of your primary residence in the united states$|^please provide your post code zip code$|^what is your (home |mailing |residential )?(zip|postal|post)( ?code)?( code)?$/, "postalCode"],
@@ -2160,6 +2161,22 @@ export function sameOpening(a: string, b: string): boolean {
   }
   const opening = workdayOpening(a);
   return opening !== undefined && opening === workdayOpening(b);
+}
+// A job link that sends anyone not signed in to a sign-in page, when the same
+// job is public at another address: ADP Workforce Now's short link
+// (/job?cid=…&jobId=…) opens ADP's employee sign-in; its career center shows
+// the job to everyone.
+export function publicPostingUrl(raw: string): string {
+  try {
+    const url = new URL(raw);
+    const cid = url.searchParams.get("cid");
+    const jobId = url.searchParams.get("jobId");
+    if (/^workforcenow\.adp\.com$/i.test(url.hostname) && /^\/job\/?$/i.test(url.pathname) && cid && jobId)
+      return canonicalURL(`https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=${encodeURIComponent(cid)}&jobId=${encodeURIComponent(jobId)}&lang=en_US`);
+  } catch {
+    // Not a URL: canonicalURL reports it.
+  }
+  return raw;
 }
 export function canonicalURL(raw: string): string {
   const url = new URL(raw);

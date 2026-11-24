@@ -190,8 +190,10 @@ export async function run(app: Application, operation: number) {
   // A SuccessFactors page showing only folded sections and upload slots has
   // its whole form behind them: the fill goes on and opens them (the
   // full-page SuccessFactors test, filled nothing).
+  // A site rule's upload slot counts too: Apple's Add Resume step shows the
+  // saved resume with a Remove button and no input until it is pressed.
   const totalFields = frames.reduce(
-    (n, f) => n + fillable(f.observation) + (f.observation.foldedSections || 0) + (f.observation.documentSlots?.length || 0),
+    (n, f) => n + fillable(f.observation) + (f.observation.foldedSections || 0) + (f.observation.documentSlots?.length || 0) + (f.observation.uploadSlots?.length || 0),
     0,
   );
   if (!totalFields) {
@@ -768,7 +770,7 @@ export async function run(app: Application, operation: number) {
     // parses the upload in place can empty them (Microsoft's careers form
     // blanked the typed address and zip 1.5 s after its resume_upload
     // returned). Those are answered again below.
-    const resume: { filledBeforeResume?: Map<string, string> } = {};
+    const resume: { filledBeforeResume?: Map<string, string>; fieldsBeforeResume?: Set<string> } = {};
     const heldBySite = (f: Field) => fileKind(f) === "resume" && Boolean(f.value) && !f.attachmentId &&
       !app.uploadedDocuments?.resume && !app.siteFillTried && !app.siteFillPending &&
       (f.siteValue || (Boolean(app.replaceDocuments) && f.protectedReason === "existing value"));
@@ -841,7 +843,7 @@ export async function run(app: Application, operation: number) {
     // Answers the site emptied after the resume went up: watched until the
     // form has held still for two reads a second apart (or 15 seconds),
     // then answered again once. A site that reloaded is handled above.
-    if (resume.filledBeforeResume?.size && !resetAfterUpload && frame.observation.documentId === beforeUploadInspection) {
+    if (resume.filledBeforeResume && !resetAfterUpload && frame.observation.documentId === beforeUploadInspection) {
       const emptied = (fields: Field[]) => fields.filter((f) => f.kind !== "file" && !f.value && resume.filledBeforeResume!.has(f.id) && !f.protected);
       let previous = "";
       let steady = 0;
@@ -867,9 +869,19 @@ export async function run(app: Application, operation: number) {
         steady = form === previous && waited >= 3 && (answered || !now.slowResumeParse || waited >= 20) ? steady + 1 : 0;
         previous = form;
       }
-      const lost = emptied(frame.observation.fields);
-      const again = lost.length ? proposals(frame.observation.fields, profile).filter((proposal) => lost.some((field) => field.id === proposal.fieldId)) : [];
-      if (again.length) {
+      // A part of the form the site drew only once it had parsed the resume
+      // (UKG Pro's Contact Information, with its Country list): fields the
+      // page did not have when the resume went up, answered as the rest, and
+      // what an answer there opens in turn (the address pane Country
+      // reveals), each round looking again for what the last one opened.
+      for (let round = 0; round < 4; round++) {
+        const lost = [
+          ...(round ? [] : emptied(frame.observation.fields)),
+          ...frame.observation.fields.filter((f) => f.kind !== "file" && !f.value && !f.protected && !resume.fieldsBeforeResume?.has(f.id)),
+        ];
+        const again = lost.length ? proposals(frame.observation.fields, profile).filter((proposal) => lost.some((field) => field.id === proposal.fieldId)) : [];
+        if (!again.length) break;
+        for (const field of frame.observation.fields) resume.fieldsBeforeResume?.add(field.id);
         const applied = await applyFrame(app, frame, again, operation);
         if (applied.navigationInterrupted) {
           await reviewInterruptedWrite(app, applied.observation);
@@ -877,6 +889,10 @@ export async function run(app: Application, operation: number) {
         }
         if (!alive(app, operation)) return;
         frame.observation = applied.observation;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        if (!alive(app, operation)) return;
+        const next: Observation | undefined = await frameCall(app, frame.frameId, { type: "INSPECT", documentId: frame.observation.documentId }).catch(() => undefined);
+        if (next) frame.observation = next;
       }
     }
     issues.push(...frame.observation.blockers);
@@ -1061,7 +1077,7 @@ export async function run(app: Application, operation: number) {
 // Part of run(), for one frame: each field the profile answers, filled by the extension's own rules.
 // "stop" when the run is over (the application moved on or was stopped).
 async function fillByProfile(
-  resume: { filledBeforeResume?: Map<string, string> },
+  resume: { filledBeforeResume?: Map<string, string>; fieldsBeforeResume?: Set<string> },
   { app, fileKind, frame, heldBySite, issues, job, operation, profile, resumeFirst }: {
   app: Application;
   fileKind: (f: Field) => DocumentKind | undefined;
@@ -1150,8 +1166,10 @@ async function fillByProfile(
       issues.push(`Verify upload: ${field.label}`);
       continue;
     }
-    if (kind === "resume" && !resume.filledBeforeResume)
+    if (kind === "resume" && !resume.filledBeforeResume) {
       resume.filledBeforeResume = new Map(frame.observation.fields.filter((f) => f.kind !== "file" && f.value).map((f) => [f.id, f.value]));
+      resume.fieldsBeforeResume = new Set(frame.observation.fields.map((f) => f.id));
+    }
     try {
       const result = await frameCall(app, frame.frameId, {
         type: "ATTACH",

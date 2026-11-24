@@ -133,7 +133,15 @@ function degreeAnswer(row: Education | undefined, field: Field): Answer | undefi
       (/\bor higher\b/i.test(option) && levelRank[level] >= levelRank[offeredLevel]) ||
       (/master.*(ph\.?\s?d|doctor)/i.test(option) && (level === "master" || level === "mba")));
   });
-  return offered.length === 1 ? { value: offered[0] } : { value: row.title, choices: degreeAliases(row.title) };
+  if (offered.length === 1) return { value: offered[0] };
+  // Several at its level, each behind a prefix ("College - Bachelor of Arts",
+  // "College - Bachelor of Science", BambooHR): the one naming the longest
+  // alias of the degree, so no alias matches an option whole.
+  const aliases = degreeAliases(row.title).map(normalize);
+  const named = (option: string) => Math.max(0, ...aliases.filter((alias) => ` ${normalize(option)} `.includes(` ${alias} `)).map((alias) => alias.length));
+  const best = Math.max(0, ...offered.map(named));
+  const picked = best ? offered.filter((option) => named(option) === best) : [];
+  return picked.length === 1 ? { value: picked[0] } : { value: row.title, choices: degreeAliases(row.title) };
 }
 
 // An explicitly listed skill can answer an "at least one" language question.

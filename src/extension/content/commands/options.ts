@@ -5,7 +5,7 @@ import { documentId, records } from "../tracking";
 import { type QuestionnaireAnswers, loadQuestionnaires, questionnaireUrls } from "../../../engine/config/workday-questionnaire";
 import { listButton, pause, Command } from "../core";
 import { fillClick } from "../../../engine/page/click-gate";
-import { controlledList, fabricToggle, fabricMenu, fabricOptions, pressFabric, drawnOptions, pressOutside, picksOf, ashbyToggle, ripplingSelect } from "../../content-dom";
+import { controlledList, fabricToggle, fabricMenu, fabricOptions, fabricDrawn, pressFabric, drawnOptions, pressOutside, picksOf, ashbyToggle, ripplingSelect } from "../../content-dom";
 import { valueOf } from "../controls";
 import { requestMainWorld } from "../../../engine/page/bridge";
 import { reactSelectInput } from "../choose";
@@ -62,7 +62,7 @@ for (const id of (command.fieldIds || []).slice(0, 40)) {
       // A BambooHR menu outlives Escape (its toggle says closed, the menu
       // stays drawn, and the next press shut it instead of opening it): it
       // is closed as it opened, by another whole press.
-      if (fabricToggle(button) && fabricOptions(fabricMenu(button)).length) {
+      if (fabricToggle(button) && fabricOptions(fabricMenu(button)).some(fabricDrawn)) {
         pressFabric(button);
         await pause(150);
       }
