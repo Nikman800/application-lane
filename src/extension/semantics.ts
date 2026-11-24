@@ -246,6 +246,7 @@ export function fieldLabel(element: Control): string {
       : undefined;
     return (
       cleanLabel(
+        wfnRadioQuestion(element) ||
         labelText(ownTitle || null) ||
         labelText(group?.querySelector("legend") || null) ||
           group?.getAttribute("aria-label") ||
@@ -397,9 +398,39 @@ export function wfnDropdown(element: Element): Element | undefined {
   let host = (element.getRootNode() as ShadowRoot).host as Element | undefined;
   for (let depth = 0; host && depth < 3; depth++) {
     if (host.localName === "wfn-dropdown-list") return host;
+    // ADP's recruitment questions draw a bare sdf-select-simple (the salary's
+    // "Select currency type") in their own additional-info block.
+    if (depth === 0 && host.localName === "sdf-select-simple" && host.closest('[class*="additional-info"]')) return host;
     host = (host.getRootNode() as ShadowRoot).host as Element | undefined;
   }
   return undefined;
+}
+
+// ADP's recruitment questions draw each Yes and No of one question as a
+// <wfn-radio-button> holding an sdf-radio-button in its shadow root. The
+// option is the host's own text; the question is the label of the block
+// around them ("Did any of our employees inform you about this position?").
+export function wfnRadioHost(element: Element): Element | undefined {
+  const root = element.getRootNode();
+  const host = root instanceof ShadowRoot ? root.host : undefined;
+  return host?.localName === "wfn-radio-button" ? host : undefined;
+}
+function wfnRadioQuestion(element: Element): string {
+  const host = wfnRadioHost(element);
+  const block = host?.closest(".additional-question,.qMainDiv");
+  return block ? cleanLabel(labelText(block.querySelector(".qLabel"))) : "";
+}
+
+// A text box that takes digits alone: ADP's desired salary ("Invalid salary
+// range. Accepts up to 7 digits."), or any box whose description or alert
+// says it takes only digits.
+export function digitsOnlyBox(element: HTMLInputElement): boolean {
+  if (element.type !== "text") return false;
+  if (element.matches("input.additional-info-salary-textBox")) return true;
+  const root = element.getRootNode() as Document | ShadowRoot;
+  const told = (element.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean)
+    .map((id) => root.querySelector(`#${CSS.escape(id)}`)?.textContent || "").join(" ");
+  return /\b(digits only|only digits|numbers? only|accepts (up to )?\d+ digits)\b/i.test(told);
 }
 
 // The text ids name in a root: ADP repeats an id (a title-only span before
@@ -420,7 +451,7 @@ function associatedLabel(element: Control): string {
   if (dropdown) {
     const hostRoot = dropdown.getRootNode() as Document | ShadowRoot;
     return cleanLabel(
-      dropdown.getAttribute("label-text") ||
+      dropdown.getAttribute("label-text") || dropdown.getAttribute("aria-label") ||
       textOfIds(hostRoot, (dropdown.getAttribute("aria-labelledby") || "").split(/\s+/).filter(Boolean)),
     );
   }
@@ -835,6 +866,8 @@ function ownLabelRaw(element: Control): string {
   if (iconLabel) return cleanLabel(iconLabel.textContent || "");
   // A toggle choice's option is its own text ("Yes", "No").
   if (isToggleChoice(element)) return cleanLabel(element.textContent || "");
+  const wfnOption = wfnRadioHost(element);
+  if (wfnOption && element.getAttribute("role") === "radio") return cleanLabel(wfnOption.textContent || "");
   const question = fileQuestion(element);
   const purpose = question?.kind;
   // A transcript for one degree says which: "Undergraduate transcript".
@@ -1346,6 +1379,10 @@ export function isRequired(element: Control): boolean {
   // BambooHR's fabric select: required on the hidden select beside it.
   if (element.matches("button.fab-SelectToggle[data-menu-id]") && element.closest(".fab-Select")?.querySelector("select[required]")) return true;
   if (wfnDropdown(element)?.getAttribute("required") === "true") return true;
+  // ADP's recruitment questions star a question in its label's own text
+  // (<wfn-text html="…<span class='mdf-required-indicator'>*</span>">), not on
+  // the control: its Yes/No groups and lists read as optional.
+  if (element.closest(".qMainDiv")?.querySelector(":scope > .question-label-container .mdf-required-indicator")) return true;
   if (element.getAttribute("role") === "combobox") {
     const shell = element.closest(".select__container");
     if (shell?.querySelector('input[required][aria-hidden="true"]'))
@@ -1456,7 +1493,11 @@ export function selectedCustomValue(element: Control): string | undefined {
   if (element.matches('input[id^="react-select-"][aria-autocomplete="list"],.dropdown-autocomplete input[aria-autocomplete="list"],input.react-select__input[aria-autocomplete="list"],input.MDFSelectBox__input[aria-autocomplete="list"]')) {
     const container = element.closest('.dropdown-autocomplete,.react-select,[class*="-container"]:not([class*="input-container"])');
     const single = container?.querySelector('[class*="singleValue"],[class*="single-value"]');
-    if (!single) return "";
+    // A multi-select shows each pick as a chip (ADP's "Where did you learn…").
+    if (!single) {
+      const chips = [...(container?.querySelectorAll('[class*="multi-value__label"]') || [])];
+      return chips.map((chip) => (chip.textContent || "").replace(/\s+/g, " ").trim()).filter(Boolean).join(", ");
+    }
     const copy = single.cloneNode(true) as Element;
     copy.querySelectorAll("svg,title").forEach((node) => node.remove());
     return (copy.textContent || "").replace(/\s+/g, " ").trim();

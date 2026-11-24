@@ -2,7 +2,7 @@
 // Split out of content.ts as it was; see content.ts for how it starts.
 import { type Observation, type Field, normalize } from "../../shared/model";
 import { adapterFor } from "../adapters";
-import { writable, controlVisible, isToggleChoice, sectionFor, placeholderOption, isRequired, fieldWordLimit, replacesForm, groupQuestion, checkboxEntryTitle, hiddenAnswerQuestion, validationState, rendered, wfnDropdown } from "../semantics";
+import { writable, controlVisible, isToggleChoice, sectionFor, placeholderOption, isRequired, fieldWordLimit, replacesForm, groupQuestion, checkboxEntryTitle, hiddenAnswerQuestion, validationState, rendered, wfnDropdown, digitsOnlyBox } from "../semantics";
 import { radioGroup, lockKey, closestAcrossShadows, searchWithoutPick, manualSigningControl, clip, drawnOptions, picksOf, inEntryEditor, readableText, nextButton } from "../content-dom";
 import { configEngineEnabled } from "../../engine/mode";
 import { resumeSlotOpen, slowResumeParse, configUploadSlots, addableCollections } from "../../engine/runtime";
@@ -59,7 +59,7 @@ export function inspect(): Observation {
         // A type the browser does not know reads as "text": SuccessFactors'
         // "currency" box takes a number only ("Invalid number." for
         // "$100,000 per year.", an employer).
-        : element instanceof HTMLInputElement && /^(currency|decimal|integer)$/i.test(element.getAttribute("type") || "")
+        : element instanceof HTMLInputElement && (/^(currency|decimal|integer)$/i.test(element.getAttribute("type") || "") || digitsOnlyBox(element))
           ? "number"
         : element instanceof HTMLInputElement
           ? element.type

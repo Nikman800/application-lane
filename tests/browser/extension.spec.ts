@@ -24033,3 +24033,103 @@ test("UKG Pro questions scrolled up inside the page's scroller stay in the scann
   const labels = ((await ui({ type: "SCAN_TAB", tabId })).observation.fields as { label: string }[]).map((field) => field.label);
   expect(labels).toEqual(expect.arrayContaining(asked.map((text) => text.replace(/:$/, ""))));
 });
+
+// ADP Workforce Now's recruitment questions ("mdf"): the desired salary took
+// "$100000" and was marked invalid ("Accepts up to 7 digits."), its currency
+// list (a bare sdf-select-simple) was left empty, the multi-select "Where did
+// you learn…" was emptied by a second fill (selecting a held pick toggles it
+// off), the Applicant Note's "I have read and understand the above statement"
+// Yes/No was left, "If employed here previously…" got no answer, the
+// wfn-radio-button Yes/No read both as "No", and a question starred in its
+// label's text (mdf-required-indicator) read as optional.
+test("ADP's recruitment questions: digits-only salary with its currency, the learn-about list kept, the note acknowledged, prior employment N/A, the referral question named, stars read", async () => {
+  test.setTimeout(120000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile,
+    acknowledgeTerms: true, neverWorkedForApplyingCompanies: true, referralSource: [],
+    salary: { min: 100000, currency: "USD", period: "year" } } });
+  const compiled = await build({
+    entryPoints: ["tests/browser/mdf-select-fixture.tsx"], bundle: true, write: false,
+    format: "iife", define: { "process.env.NODE_ENV": '"production"' },
+  });
+  const star = '<span class="mdf-required-indicator ">*</span>';
+  const question = (index: number, text: string, control: string, starred = true) => `<div class="qMainDiv"><div class="question-label-container"><label class="qLabel" for="question_${index}"><wfn-text class="hydrated">${text}${starred ? star : ""}</wfn-text></label></div><div class="itemPadLeft">${control}</div></div>`;
+  const group = (index: number, text: string) => `<sdf-radio-group label="${text}" class="hydrated"><div class="sdf-form-control-wrapper--sr-only"><span id="sdf-radio-group-${index}-label">${text}</span></div><div class="direction-row" role="radiogroup" aria-labelledby="sdf-radio-group-${index}-label"><sdf-radio-button label="Yes" value="Yes" role="radio" aria-checked="false" tabindex="0"></sdf-radio-button><sdf-radio-button label="No" value="No" role="radio" aria-checked="false" tabindex="-1"></sdf-radio-button></div></sdf-radio-group>`;
+  const filler = "Acme reviews every application with care and keeps the details you share private within its hiring team. ".repeat(10);
+  const note = `Applicant Note: This form is intended for use in evaluating your qualifications for employment. It is not an employment contract. ${filler}<br/><br/>EEO Statement <br/>Acme is an Equal Opportunity Employer. More at https://www.example.com/acme/equal-opportunity<br/><br/>I have read and understand the above statement`;
+  expect(note.length).toBeGreaterThan(1000);
+  const item = (code: string, name: string) => `<sdf-select-item aria-label="${name} ( ${code} )" embedded-context="select" role="option" aria-selected="false" class="hydrated" value="${code}" tabindex="-1">${name} ( ${code} )</sdf-select-item>`;
+  await context.route(`${adpOrigin}/**`, (route) => route.fulfill({ contentType: "text/html",
+    body: `<!doctype html><title>Current Openings | Recruitment</title><style>.floating-pane-hidden{display:none}</style><form onsubmit="return false">
+      ${question(0, "Have you ever applied here previously ?", group(2, "Have you ever applied here previously ?"))}
+      ${question(1, note, group(4, note.replace(/<br\/>/g, " ")))}
+      ${question(7, "If employed here previously:&nbsp;&nbsp;Start and end dates of employment and reason for leaving?", '<input id="question_7" aria-invalid="true" aria-required="true" class="question__text vdl-textbox" type="text" value=""><div><label class="vdl-validation-error error-color" role="alert"></label></div>')}
+      ${question(10, "Where did you learn about an employment opportunity with this company ?", '<div id="mdfRoot"></div>')}
+      <div id="desiredEmplSalaryBlock" class="additional-question qMainDiv"><div id="additionalInfoEmplCard"><div class="additional-info-card"><span id="desiredSalaryLabel" class="question-label-container qLabel required">What is your desired salary?</span></div>
+        <div id="salaryOptions" class="itemPadLeft prop_group additional-salary"><sdf-radio-group label="What is your desired salary?" value="Annually" class="hydrated"><div class="sdf-form-control-wrapper--sr-only"><span id="sdf-radio-group-6-label">What is your desired salary?</span></div><div class="direction-row" role="radiogroup" aria-labelledby="sdf-radio-group-6-label"><sdf-radio-button label="Annually" value="Annually" role="radio" aria-checked="true" tabindex="0"></sdf-radio-button><sdf-radio-button label="Hourly" value="Hourly" role="radio" aria-checked="false" tabindex="-1"></sdf-radio-button></div></sdf-radio-group></div>
+        <div class="currency-rendered-inline itemPadLeft"><div class="additional-info-block "><input id="desiredSalaryId" aria-label="What is your desired salary?" class="additional-info-salary-textBox vdl-textbox" type="text" value=""></div>
+          <div class="additional-info-currency-option-list "><sdf-select-simple id="add_info_select_box" placeholder="Select currency type" required="true" required-state="required" aria-label="Select currency type" input-width="lg" class="additional-info-currency-textBox hydrated"><template shadowrootmode="open"><div class="sdf-form-control-wrapper--container" part="label-container"><label id="label" class="sdf-form-control-wrapper--label" part="label"><slot name="custom-label"></slot></label></div><div class="combo"><div aria-expanded="false" aria-disabled="false" aria-labelledby="label selected-label select-placeholder" aria-describedby="description errorMessage" class="trigger-button w-input-lg" role="button" part="frame" tabindex="0"><span class="selected-label-placeholder" id="select-placeholder" part="placeholder">Select currency type</span><sdf-icon class="expansion-control hydrated" part="expansion-trigger-control" aria-hidden="true" role="presentation"></sdf-icon></div><span style="display: none;"></span>
+            <sdf-floating-pane show-header="" tab-behavior="auto-close" close-on-click-outside="" attachment="bottom-start" class="floating-pane-hidden hydrated anchorable-position-context-element" style="position: absolute; inset: auto auto 0px 0px; margin: 0px;"><template shadowrootmode="open"><div class="floating-pane-container"><slot></slot></div></template><div class="sr-only" aria-hidden="" id="label"></div><div class="list floating-pane-content" style="display: contents"><div role="listbox" id="listbox" aria-required="true" aria-labelledby="label" aria-disabled="false" tabindex="-1" style="display: contents">${item("USD", "United States Dollar")}${item("CAD", "Canada Dollar")}${item("AFN", "Afghanistan Afghani")}${item("XAF", "CFA Franc BEAC")}</div></div></sdf-floating-pane></div></template></sdf-select-simple></div></div>
+        <div class="additional-info-error-block"><label id="desiredSalaryInvalidMessage" class="field-error" role="alert"></label></div></div></div>
+      <div id="employeeRefferalBlock" class="additional-question qMainDiv additional-info-empl-block"><div class="additional-info-card"><span id="employeeRefferalIndicator" class="question-label-container qLabel ">Did any of our employees inform you about this position?</span></div>
+        <div id="refferalOptions" class="itemPadLeft addition-Info-radio prop_group "><wfn-radio-button class="hydrated" id="yes" value="Yes">Yes</wfn-radio-button><wfn-radio-button class="hydrated" id="no" value="No">No</wfn-radio-button></div></div>
+    </form><script>${compiled.outputFiles[0].text}</script><script>
+      customElements.define('sdf-radio-button', class extends HTMLElement {
+        connectedCallback() {
+          this.attachShadow({ mode: 'open' }).innerHTML = '<label id="label" for="toggle">' + (this.getAttribute('label') || '') + '<slot></slot></label>';
+          this.addEventListener('click', () => {
+            const box = this.closest('[role="radiogroup"]');
+            if (box) for (const radio of box.querySelectorAll('[role="radio"]')) radio.setAttribute('aria-checked', String(radio === this));
+          });
+        }
+      });
+      customElements.define('wfn-radio-button', class extends HTMLElement {
+        connectedCallback() {
+          this.attachShadow({ mode: 'open' }).innerHTML = '<sdf-radio-button role="radio" aria-checked="false" name="No" tabindex="0"><slot></slot></sdf-radio-button>';
+        }
+      });
+      window.currencyPicks = [];
+      const select = document.getElementById('add_info_select_box'), root = select.shadowRoot;
+      const trigger = root.querySelector('.trigger-button'), pane = root.querySelector('sdf-floating-pane');
+      trigger.addEventListener('click', () => { trigger.setAttribute('aria-expanded', 'true'); pane.classList.remove('floating-pane-hidden'); });
+      for (const option of root.querySelectorAll('sdf-select-item')) option.addEventListener('click', () => {
+        window.currencyPicks.push(option.textContent);
+        root.querySelector('#select-placeholder')?.remove();
+        const shown = document.createElement('span'); shown.id = 'selected-label'; shown.textContent = option.textContent; trigger.prepend(shown);
+        trigger.setAttribute('aria-expanded', 'false'); pane.classList.add('floating-pane-hidden');
+      });
+      window.salaryTyped = [];
+      const salary = document.getElementById('desiredSalaryId'), message = document.getElementById('desiredSalaryInvalidMessage');
+      salary.addEventListener('input', () => {
+        window.salaryTyped.push(salary.value);
+        message.textContent = /^\\d{1,7}$/.test(salary.value) ? '' : 'Invalid salary range. Accepts up to 7 digits.';
+      });
+    </script>` }));
+  const page = await context.newPage();
+  await page.goto(`${adpOrigin}/fixture/mdf/recruitment`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 60000 }).toMatch(/ready|awaiting-user/);
+  await expect(page.locator("#desiredSalaryId")).toHaveValue("100000");
+  await expect(page.locator("#desiredSalaryInvalidMessage")).toHaveText("");
+  await expect.poll(() => page.evaluate(() => (window as any).currencyPicks)).toEqual(["United States Dollar ( USD )"]);
+  await expect.poll(() => page.evaluate(() => (window as any).mdfValue)).toEqual(["Other"]);
+  await expect(page.locator("#question_7")).toHaveValue("N/A");
+  const checked = (index: number) => page.locator("sdf-radio-group").nth(index).locator('[role="radio"][aria-checked="true"]').evaluateAll((radios) => radios.map((radio) => radio.getAttribute("label")));
+  expect(await checked(1)).toEqual(["Yes"]);
+  expect(await checked(0)).toEqual([]);
+  // A second fill leaves the held pick in the list.
+  await ui({ type: "FILL_STEP", id: (await state()).applications[0].id });
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 60000 }).toMatch(/ready|awaiting-user/);
+  expect(await page.evaluate(() => (window as any).mdfValue)).toEqual(["Other"]);
+  expect(await page.evaluate(() => (window as any).mdfToggles)).toEqual(["Other"]);
+  expect(await page.evaluate(() => (window as any).salaryTyped.every((typed: string) => /^\d+$/.test(typed)))).toBe(true);
+  const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, page.url());
+  const fields = (await ui({ type: "SCAN_TAB", tabId })).observation.fields as { label: string; kind: string; options: string[]; required: boolean; value: string }[];
+  const applied = fields.find((field) => field.label === "Have you ever applied here previously ?")!;
+  expect(applied).toMatchObject({ required: true, value: "" });
+  const referral = fields.filter((field) => field.label === "Did any of our employees inform you about this position?");
+  expect(referral).toHaveLength(1);
+  expect(referral[0]).toMatchObject({ kind: "radio", options: ["Yes", "No"], value: "" });
+  expect(fields.filter((field) => field.label === "No")).toEqual([]);
+  expect(fields.find((field) => /^Select currency type/.test(field.label))).toMatchObject({ required: true });
+  await page.close();
+});

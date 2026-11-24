@@ -328,6 +328,13 @@ function companyFamily(field: Field, profile: Profile): Answer | undefined {
 export function standingAnswer(field: Field, profile: Profile): Answer | undefined {
   const label = normalize(field.label);
   const topic = questionTopic(field.label);
+  // "If employed here previously: start and end dates and reason for
+  // leaving?" as a box to write in: N/A for an applicant who has never
+  // worked for a company they apply to (ADP's custom questions).
+  if (profile.neverWorkedForApplyingCompanies === true && /^(text|textarea)$/.test(field.kind) && !field.options.length &&
+    /^if (you were |you have |you are |you ve )?(been )?(employed|worked|an employee)\b.{0,40}\b(here|by us|for us|with us|previously|before|formerly)\b/.test(label) &&
+    /\b(dates?|reason|leaving|position|title|supervisor|details?|explain|describe)\b/.test(label))
+    return { value: "N/A" };
   if (!topic) return companyFamily(field, profile);
   if (topic === "adult") return ageAnswer(field, profile);
   // Whether the employer's own advertised pay suits the applicant ("Does the

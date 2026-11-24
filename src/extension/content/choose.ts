@@ -441,7 +441,11 @@ export async function selectCustom(
       const wfnList = () => {
         const visit = (scope: ShadowRoot | null, depth: number): HTMLElement | null => {
           if (!scope || depth > 3) return null;
-          const own = [...scope.querySelectorAll<HTMLElement>('[role="listbox"]')].find(rendered);
+          // A list drawn with no box of its own (display: contents inside its
+          // pane) is not "rendered", though its options are: the first list
+          // holding options is the one.
+          const lists = [...scope.querySelectorAll<HTMLElement>('[role="listbox"]')];
+          const own = lists.find(rendered) || lists.find((candidate) => [...candidate.querySelectorAll<HTMLElement>('[role="option"]')].some(rendered));
           if (own) return own;
           for (const node of scope.querySelectorAll("*")) {
             const found = visit(node.shadowRoot, depth + 1);
@@ -463,7 +467,7 @@ export async function selectCustom(
           : listButton(element) && openLists().length === 1 ? openLists()[0] : icimsList();
       if (
         list &&
-        (fabricToggle(element) ? fabricDrawn(list) : rendered(list)) &&
+        (fabricToggle(element) ? fabricDrawn(list) : rendered(list) || Boolean(wfnDropdown(element))) &&
         element.getAttribute("aria-expanded") === "true" &&
         list.getAttribute("aria-busy") !== "true"
       ) {

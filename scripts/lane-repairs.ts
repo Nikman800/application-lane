@@ -39,6 +39,7 @@ import {
   defectId,
   explain,
   heartbeat,
+  buildKey,
   mayRetry,
   openRepair,
   outcome,
@@ -173,7 +174,7 @@ export function repairCommands(ctx: RepairContext) {
     if (!repair) throw new Error(`${ctx.name(app)} has no repair. Open one from what shows the problem: lane repair <app> --report <id>.`);
     const reason = flagValues(ctx.words, "--reason")[0] as Attempt["reason"] | undefined;
     if (reason && !["repair", "profile", "page"].includes(reason)) throw new Error("--reason is repair, profile or page.");
-    const allowed = mayRetry(repair, reason);
+    const allowed = mayRetry(repair, reason, buildKey((await about(app)).build));
     if (!allowed.ok) throw new Error(`Not refilled. ${allowed.why}`);
     const state = await about(app);
     const newest = await ctx.distBuild();
@@ -185,7 +186,7 @@ export function repairCommands(ctx: RepairContext) {
     if (state.busy) throw new Error("It is being filled now. Try again when it finishes.");
     const reply = await ctx.send("fill", app.id);
     if (!reply.ok) throw new Error(reply.error || "The fill did not start.");
-    await save({ ...heartbeat(repair, now()), refill: { at: now(), reason: reason!, build: state.build?.commit } });
+    await save({ ...heartbeat(repair, now()), refill: { at: now(), reason: reason!, build: buildKey(state.build) } });
     print(`${ctx.name(app)}: refilling on build ${state.build?.commit || "unknown"} (${reason}). Then: lane check ${ctx.short(app)}.`);
   }
 
@@ -211,7 +212,7 @@ export function repairCommands(ctx: RepairContext) {
       settled = settledFor(capture);
     }
     const found = findDefects(capture);
-    const result = verifyLive(repair, { capture: capture.id, build: state.build?.commit, settledMs: settled, found, codeChanged: (repair.refill?.reason || "repair") === "repair", confirmed }, now());
+    const result = verifyLive(repair, { capture: capture.id, build: buildKey(state.build), settledMs: settled, found, codeChanged: (repair.refill?.reason || "repair") === "repair", confirmed }, now());
     await save(result.repair);
     if (result.ok) print(`${ctx.name(app)}: verified live in capture ${capture.id}; every targeted defect is gone and nothing new is wrong. Released to the applicant${result.repair.regression === "pending" ? "; its regression test is pending publication" : ""}.`);
     else print(`${ctx.name(app)}: not verified. ${result.why}`);

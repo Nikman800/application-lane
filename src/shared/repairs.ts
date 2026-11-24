@@ -173,13 +173,28 @@ export function lapse(repair: Repair, now: number, limitMs = OWNER_LAPSE_MS): Re
   return { ...repair, state: "needs-fixing", owner: undefined, note: `${repair.owner.name} stopped working on it ${new Date(repair.owner.heartbeatAt).toISOString()}; its defects are still open.`, updatedAt: now };
 }
 
+// The loaded build's identity: its commit alone repeats across builds of
+// uncommitted work ("abc123+changes"), so the build time is part of it.
+export const buildKey = (stamp: { commit: string; builtAt: number } | undefined) => stamp ? `${stamp.commit}@${stamp.builtAt}`.slice(0, 100) : undefined;
+// The trailing attempts made on one build (all of them when it is unknown).
+function sameBuild(attempts: Attempt[], build: string | undefined) {
+  if (build === undefined) return attempts;
+  let start = attempts.length;
+  while (start > 0 && attempts[start - 1].build === build) start--;
+  return attempts.slice(start);
+}
+
 // Whether another refill is worth trying: only for a reason to expect
 // progress, and not after refills in a row that changed nothing.
-export function mayRetry(repair: Repair, reason: Attempt["reason"] | undefined): { ok: boolean; why?: string } {
+// A build loaded since the last check starts the count again: the refills
+// that changed nothing were on code that is no longer running (`build` is
+// the loaded build's key, buildKey()).
+export function mayRetry(repair: Repair, reason: Attempt["reason"] | undefined, build?: string): { ok: boolean; why?: string } {
   if (!reason) return { ok: false, why: "Say why a refill should go differently now: a repair shipped, the profile changed, or the page did." };
-  if (repair.blocker) return { ok: false, why: `Blocked: ${repair.blocker}` };
+  const fresh = build !== undefined && repair.attempts.length > 0 && repair.attempts.at(-1)!.build !== build;
+  if (repair.blocker && !fresh) return { ok: false, why: `Blocked: ${repair.blocker}` };
   if (!repair.defects.some((defect) => defect.status === "open")) return { ok: false, why: "No open defect to refill for." };
-  const recent = repair.attempts.slice(-NO_PROGRESS_LIMIT);
+  const recent = sameBuild(repair.attempts, build).slice(-NO_PROGRESS_LIMIT);
   if (recent.length === NO_PROGRESS_LIMIT && recent.every((attempt) => !attempt.progress))
     return { ok: false, why: `${NO_PROGRESS_LIMIT} refills in a row changed nothing.` };
   return { ok: true };
@@ -212,7 +227,8 @@ export function recordAttempt(repair: Repair, outcome: { reason: Attempt["reason
     progress: resolved.length > 0,
   };
   const attempts = [...repair.attempts, attempt].slice(-50);
-  const recent = attempts.slice(-NO_PROGRESS_LIMIT);
+  const recent = sameBuild(attempts, attempt.build).slice(-NO_PROGRESS_LIMIT);
+  const fresh = repair.attempts.length > 0 && repair.attempts.at(-1)!.build !== attempt.build;
   const stuck = recent.length === NO_PROGRESS_LIMIT && recent.every((entry) => !entry.progress) && attempt.remaining.length > 0;
   return {
     ...repair,
@@ -222,7 +238,7 @@ export function recordAttempt(repair: Repair, outcome: { reason: Attempt["reason
     userActions: [...new Set([...repair.userActions, ...outcome.found.userActions])].slice(0, 50),
     // A later check that resolves something is progress again: the block
     // named defects that are no longer all open.
-    blocker: stuck ? `${NO_PROGRESS_LIMIT} refills changed nothing; still open: ${attempt.remaining.slice(0, 4).join(", ")}` : attempt.progress ? undefined : repair.blocker,
+    blocker: stuck ? `${NO_PROGRESS_LIMIT} refills changed nothing; still open: ${attempt.remaining.slice(0, 4).join(", ")}` : attempt.progress || fresh ? undefined : repair.blocker,
     updatedAt: now,
   };
 }

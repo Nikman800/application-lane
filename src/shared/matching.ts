@@ -411,6 +411,11 @@ function phoneParts(profile: Profile): { code?: string; national: string } {
   return splitPhone(profile.phone || "");
 }
 
+const currencyNames: Record<string, string[]> = {
+  USD: ["United States Dollar", "US Dollar"], CAD: ["Canada Dollar", "Canadian Dollar"], EUR: ["Euro"], GBP: ["United Kingdom Pound", "British Pound"],
+  AUD: ["Australia Dollar", "Australian Dollar"], INR: ["India Rupee", "Indian Rupee"], MXN: ["Mexico Peso", "Mexican Peso"],
+};
+
 // A box that takes only a number: a number input, or one whose label says
 // so ("numbers only", "no commas or currency symbols").
 export const numberOnly = (field: Pick<Field, "kind" | "label">) =>
@@ -737,6 +742,16 @@ export function profileAnswer(
     !/^no\b/.test(ownOption) &&
     /\b(agree\w*|acknowledg\w*|consent\w*|certif\w*|accept\w*|i (understand|confirm|attest|have read|authorize|hereby)|privacy (policy|notice|statement)|terms (and|of) )/.test(label) &&
     !/\bsign(ature|ing|ed)?\b|\binitials?\b|\b(do not|don t|not|decline to) (agree|consent|accept|authorize|wish)\b|\b(sms|text messages?|texts?|whatsapp|marketing|newsletter|promotional|job alerts?|talent (community|network|pool)|future (job |career |employment )?(opportunit\w*|openings?|roles?|positions?)|contact me about|keep me (informed|updated|posted))\b/.test(label)
+  )
+    return { value: "Yes" };
+  // "…I have read and understand the above statement" as Yes or No, after a
+  // note or an EEO statement: an acknowledgement that the text was read, never
+  // a signature, a consent or a declaration (ADP's Applicant Note).
+  if (
+    field.kind === "radio" &&
+    profile.acknowledgeTerms &&
+    field.options.some((option) => normalize(option) === "yes") &&
+    /\bi have read and understand the above statement$/.test(label)
   )
     return { value: "Yes" };
   // The same standing question in other words (standing.ts).
@@ -1257,6 +1272,14 @@ function studyAndPayAnswer({ field, profile, label, saved, asked, educationRow }
     // site has refused the written figure in ("Invalid number." for "USD
     // 100,000", Fabrikam's SuccessFactors).
     return salaryAnswer(profile.salary, { label, numeric: numberOnly(field) || (!!field.invalid && !!field.value) });
+  }
+  // The currency list beside the pay figure ("Select currency type", ADP's):
+  // the one the applicant gave their pay in, as the list names it ("United
+  // States Dollar ( USD )").
+  if (/^(select |choose )?(a )?(the )?currency( type)?$/.test(label) && /^(combobox|select)$/.test(field.kind) && profile.salary?.min !== undefined) {
+    const code = (profile.salary.currency || "").trim().toUpperCase();
+    const names = currencyNames[code];
+    if (names) return { value: names[0], choices: [...names.slice(1), code] };
   }
   // A GPA is its own row's, on that row's scale: the row asked about, or
   // the program held now or ended last.

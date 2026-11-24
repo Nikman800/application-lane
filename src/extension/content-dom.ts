@@ -1,7 +1,7 @@
 // The content script's readers of the page (content.ts): functions that
 // find and read controls, lists and menus, and touch none of a fill's state.
 // Split out of content.ts as they were.
-import { iconRadioLabel, profileImport, select2Selection, toggleGroup, isToggleChoice, redundantAutofill, wfnDropdown, type Control } from "./semantics";
+import { iconRadioLabel, profileImport, select2Selection, toggleGroup, isToggleChoice, redundantAutofill, wfnDropdown, wfnRadioHost, type Control } from "./semantics";
 import { normalize, type Field } from "../shared/model";
 import { adapterFor } from "./adapters";
 
@@ -151,6 +151,13 @@ export const radioGroup = (element: Control): Control[] => {
   if (role === "radio") {
     const group = element.closest('[role="radiogroup"]');
     if (group) return [...group.querySelectorAll<Control>('[role="radio"]')];
+    // ADP's <wfn-radio-button>s: each holds its radio in its shadow root; the
+    // question's choices are the buttons side by side.
+    const wfnHost = wfnRadioHost(element);
+    if (wfnHost?.parentElement)
+      return [...wfnHost.parentElement.children]
+        .filter((child) => child.localName === "wfn-radio-button")
+        .flatMap((child) => [...(child.shadowRoot?.querySelectorAll<Control>('[role="radio"]') || [])]);
     // A group drawn in its component's own shadow root with the choices
     // slotted into it (SmartRecruiters' spl-radio-group): each Yes and No
     // read as a question of its own, both refused as "another field has

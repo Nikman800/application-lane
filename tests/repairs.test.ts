@@ -14,6 +14,7 @@ import {
   explain,
   fromFixingFlag,
   lapse,
+  buildKey,
   mayRetry,
   openRepair,
   outcome,
@@ -122,6 +123,23 @@ test("a defect described in words is resolved only when the fixer confirms it", 
   const carried = fromFixingFlag(APP, { since: 10, note: "Litware: address and languages" }, 20);
   assert.equal(section(carried), "being fixed");
   assert.equal(carried.defects[0].manual, true);
+});
+
+test("a new build loaded starts the count of refills that changed nothing again", () => {
+  let repair = claim(openRepair(undefined, { applicationId: APP, ...found(city) }, 1), "fixer", 2);
+  const old = buildKey({ commit: "abc123+changes", builtAt: 1000 });
+  const loaded = buildKey({ commit: "abc123+changes", builtAt: 900_000 });
+  for (let n = 0; n < NO_PROGRESS_LIMIT; n++) repair = recordAttempt(repair, { reason: "repair", build: old, capture: `c${n}`, found: found(city) }, 10 + n);
+  assert.match(repair.blocker || "", /changed nothing/);
+  assert.equal(mayRetry(repair, "repair", old).ok, false);
+  // The same commit rebuilt is another build: the refill may run.
+  assert.equal(mayRetry(repair, "repair", loaded).ok, true);
+  // A check on it that changes nothing does not block at once.
+  repair = recordAttempt(repair, { reason: "repair", build: loaded, capture: "c7", found: found(city) }, 30);
+  assert.equal(repair.blocker, undefined);
+  assert.equal(mayRetry(repair, "repair", loaded).ok, true);
+  for (let n = 0; n < NO_PROGRESS_LIMIT - 1; n++) repair = recordAttempt(repair, { reason: "repair", build: loaded, capture: `d${n}`, found: found(city) }, 40 + n);
+  assert.equal(mayRetry(repair, "repair", loaded).ok, false);
 });
 
 test("refills need a reason, and stop after refills that change nothing", () => {

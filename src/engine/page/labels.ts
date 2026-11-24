@@ -2,8 +2,14 @@
 // its name. Used by field discovery (src/extension/semantics.ts) and by the
 // engine's own rules (src/engine/runtime.ts), so it lives in the engine.
 
+// A label over the backend's 1,000 characters keeps its start and its end: a
+// long note or statement usually asks its question last ("I have read and
+// understand the above statement").
+export const capLabel = (label: string) =>
+  label.length <= 1000 ? label : `${label.slice(0, 600).trimEnd()} … ${label.slice(-350).trimStart()}`;
+
 export const cleanLabel = (text: string) =>
-  text
+  capLabel(text
     // Markup a site escaped into its text (PageUp's hidden option names:
     // "<b>White</b><br> A person having origins\, …").
     .replace(/<\/?[a-z][a-z0-9]*\s*\/?>/gi, " ")
@@ -17,8 +23,7 @@ export const cleanLabel = (text: string) =>
     .replace(/([?!])\1+/g, "$1")
     .replace(/(\s*[*✱✳✴:])+\s*$/, "")
     .replace(/\s*\(required\)\s*$/i, "")
-    .trim()
-    .slice(0, 1000);
+    .trim());
 // Labels must not absorb option lists, validation messages, or uploaded names.
 const notLabelText =
   'input,textarea,select,button,script,style,svg,iframe,[role="checkbox"],[role="radio"],[role="combobox"],[role="button"],[role="listbox"],[role="option"],[role="status"],[role="alert"],[aria-live],[hidden],.application-field,.select__menu,.select__value-container,.input-select-input-single-value';

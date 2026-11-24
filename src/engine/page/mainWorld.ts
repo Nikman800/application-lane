@@ -376,7 +376,15 @@ export function applyMainWorld(
     const uniqueId = selectedId !== undefined && flat()
       .filter(option => idOf(option) === selectedId)
       .every(option => labelOf(option) === wanted);
-    select.selectOption(matches[0]);
+    const holds = () => {
+      const value = select.props.value;
+      return (Array.isArray(value) ? value : [value]).some(
+        (option) => option && (labelOf(option) === wanted || (selectedId !== undefined && idOf(option) === selectedId && uniqueId)),
+      );
+    };
+    // A multi-select toggles: choosing a held pick again removes it (ADP's
+    // "Where did you learn…", emptied by a second fill).
+    if (!(select.props.isMulti && holds())) select.selectOption(matches[0]);
     reset();
     const kept = () => {
       const value = select.props.value;
