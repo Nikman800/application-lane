@@ -1,6 +1,6 @@
 // Part of the content script (content.ts): reading controls' values, and the marks the fill leaves on what it wrote.
 // Split out of content.ts as it was; see content.ts for how it starts.
-import { type Control, iconRadioLabel, currentFileName, isToggleChoice, toggleGroup, selectedCustomValue, placeholderOption, sectionFor, legacyLabels, writable } from "../semantics";
+import { type Control, iconRadioLabel, currentFileName, isToggleChoice, toggleGroup, selectedCustomValue, wfnDropdown, placeholderOption, sectionFor, legacyLabels, writable } from "../semantics";
 import { radioGroup, clip, isTrackableControl, openModal, lockKey, searchWithoutPick, placeholder, nativeActivationControl } from "../content-dom";
 import { configEngineEnabled } from "../../engine/mode";
 import { configuredFileControls, configuredRadioControls } from "../../engine/runtime";
@@ -49,6 +49,7 @@ export const valueOf = (element: Control): string => {
     if (element.querySelector(".fab-SelectToggle__placeholder")) return "";
     return clip(element.querySelector(".fab-SelectToggle__guts")?.textContent || element.textContent || "");
   }
+  if (wfnDropdown(element)) return selectedCustomValue(element) || "";
   if (element.matches('button[aria-haspopup="listbox"]')) {
     const chosen = selectedCustomValue(element);
     if (chosen !== undefined && element.matches('[role="combobox"]') && element.getRootNode() instanceof ShadowRoot &&

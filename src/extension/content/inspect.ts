@@ -2,7 +2,7 @@
 // Split out of content.ts as it was; see content.ts for how it starts.
 import { type Observation, type Field, normalize } from "../../shared/model";
 import { adapterFor } from "../adapters";
-import { writable, controlVisible, isToggleChoice, sectionFor, placeholderOption, isRequired, fieldWordLimit, replacesForm, groupQuestion, checkboxEntryTitle, hiddenAnswerQuestion, validationState, rendered } from "../semantics";
+import { writable, controlVisible, isToggleChoice, sectionFor, placeholderOption, isRequired, fieldWordLimit, replacesForm, groupQuestion, checkboxEntryTitle, hiddenAnswerQuestion, validationState, rendered, wfnDropdown } from "../semantics";
 import { radioGroup, lockKey, closestAcrossShadows, searchWithoutPick, manualSigningControl, clip, drawnOptions, picksOf, inEntryEditor, readableText, nextButton } from "../content-dom";
 import { configEngineEnabled } from "../../engine/mode";
 import { resumeSlotOpen, slowResumeParse, configUploadSlots, addableCollections } from "../../engine/runtime";
@@ -32,7 +32,7 @@ export function inspect(): Observation {
         ? "file"
         : isToggleChoice(element)
         ? "radio"
-        : element.matches(`button[aria-haspopup="listbox"],button.fab-SelectToggle[data-menu-id],${legacyReactSelect}`) || element.closest(".pcty-input-select__input")
+        : element.matches(`button[aria-haspopup="listbox"],button.fab-SelectToggle[data-menu-id],${legacyReactSelect}`) || element.closest(".pcty-input-select__input") || wfnDropdown(element)
         ? "combobox"
         // A text box that opens a calendar (react-datepicker; Ashby's
         // "ashby-application-form-input-date") takes only a date: on

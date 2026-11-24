@@ -1,4 +1,5 @@
 import { type GenerationJob, type GenerationRequest, type Profile, type JobFit, type Narrative, type Field, type Artifact, type Unchecked, forRole } from "../shared/model";
+import { publicPostingUrl } from "../shared/matching";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { type Posting, fetchPosting, fetchPostingPage } from "./posting";
 import { type Store, type Config } from "./store";
@@ -155,7 +156,7 @@ export class GenerationQueue {
     if (text && text.length >= 100)
       return { source: "Pasted", title: request.title, company: request.company, description: text.slice(0, 25_000) };
     if (!request.postingUrl) return;
-    return fetchPosting([request.postingUrl], { signal }).catch(() => undefined);
+    return fetchPosting([publicPostingUrl(request.postingUrl)], { signal }).catch(() => undefined);
   }
   private async jobFit(request: GenerationRequest, profile: Profile, signal: AbortSignal, graduation?: string): Promise<JobFit> {
     const key = createHash("sha256").update(JSON.stringify([
@@ -529,7 +530,7 @@ export class GenerationQueue {
           [request.url, ...(request.pageUrls || [])],
           controller.signal,
         ).catch(() => undefined)) ??
-        (request.postingUrl ? await this.readPostingPage(request.postingUrl, controller.signal).catch(() => undefined) : undefined);
+        (request.postingUrl ? await this.readPostingPage(publicPostingUrl(request.postingUrl), controller.signal).catch(() => undefined) : undefined);
       if (posting) {
         remember(this.postings, request.applicationId, posting);
         job.posting = { source: posting.source, title: posting.title, ...(posting.location ? { location: posting.location.slice(0, 300) } : {}) };

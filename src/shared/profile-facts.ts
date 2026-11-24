@@ -166,6 +166,14 @@ function programmingAnswer(field: Field, profile: Profile): Answer | undefined {
 export function profileFactAnswer(field: Field, profile: Profile, now = new Date()): Answer | undefined {
   const q = question(field.label);
   if (ageTest(field.label)) return ageAnswer(field, profile, now);
+  // "If you are under the age of 18, please list your age. If not
+  // applicable, enter N/A." (UKG Pro): an adult enters N/A.
+  if (/\bunder (the age of )?18\b.*\b(list|enter|state|provide) (your )?age\b.*\b(n a|not applicable)\b/.test(q)) {
+    const age = ageInYears(profile.dateOfBirth, now);
+    const saved = profile.age18OrOlder.trim().toLowerCase();
+    if (age !== undefined ? age >= 18 && saved !== "no" : saved === "yes") return { value: "N/A" };
+    return;
+  }
   if (/^(what (is|s) )?(your )?(current )?age( range| group| bracket)?$|^how old are you$/.test(q)) {
     const age = ageInYears(profile.dateOfBirth, now);
     return age === undefined ? undefined : { value: String(age), numeric: age };
@@ -253,5 +261,5 @@ export function profileFactAnswer(field: Field, profile: Profile, now = new Date
 export function missingOptionalProfileField(field: Field): boolean {
   if (field.required) return false;
   const q = question(field.label);
-  return /^(address( line)? [23]|phone extension|alternate phone( number)?|secondary phone( number)?|suffix|prefix|i have a preferred name)$/.test(q);
+  return /^(address( line)? [23]|phone extension|alternate phone( number)?|secondary phone( number)?|home (phone|telephone)( number)?|suffix|prefix|i have a preferred name)$/.test(q);
 }

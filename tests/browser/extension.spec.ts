@@ -14925,6 +14925,139 @@ test("ADP keeps selected dropdown answers when their filter boxes are empty", as
   for (const trigger of await page.locator('.trigger-button').all()) await expect(trigger).toHaveAttribute('aria-expanded', 'false');
 });
 
+// ADP Workforce Now's contact step (report eedd2010): rrui phone inputs named
+// only by the group around them, a react-select Country, and a
+// wfn-dropdown-list State whose open shadow root holds an sdf-select-simple
+// with its own shadow root.
+const adpWorkforceContact = () => `<!doctype html><title>Personal Information</title><style>body{font:16px system-ui}</style><form>
+  <div class="mobile-phone-number"><span id="validated_label_mobile" title="Mobile Number,"></span><div class="mdf-validated-field"><div class="mdf-label"><label id="validated_label_mobile" aria-live="polite">Mobile Number<span class="mdf-required-indicator">*</span></label></div>
+    <div role="group" aria-labelledby="validated_label_mobile" tabindex="-1"><div data-testid="phone-dial" class="mdf-Phone dial"><div class="PhoneInput">
+      <div class="rrui__select"><select name="phoneCountry" class="rrui__select__native"><option value="">Select</option><option value="US">United States</option><option value="CA">Canada</option></select></div>
+      <input type="tel" autocomplete="tel" id="personalInfomationMobileNumberError" labeltext="Mobile Number" validationmessage="" data-testid="phone-input" placeholder="Phone Number" aria-label="Phone Number" name="phone" class="PhoneInputInput"></div></div></div></div></div>
+  <div class="home-phone-number"><span id="validated_label_home" title="Home Phone Number,"></span><div class="mdf-validated-field"><div class="mdf-label"><label id="validated_label_home" aria-live="polite">Home Phone Number</label></div>
+    <div role="group" aria-labelledby="validated_label_home" tabindex="-1"><div data-testid="phone-dial" class="mdf-Phone dial"><div class="PhoneInput">
+      <div class="rrui__select"><select name="phoneCountry" class="rrui__select__native"><option value="">Select</option><option value="US">United States</option><option value="CA">Canada</option></select></div>
+      <input type="tel" autocomplete="tel" id="personalInfomationMobileNumberErrorMessage" labeltext="Home Phone Number" validationmessage="" data-testid="phone-input" placeholder="Phone Number" aria-label="Phone Number" name="phone" class="PhoneInputInput"></div></div></div></div></div>
+  <div class="address-item"><div class="mdf-validated-field"><div class="mdf-label"><label for="PersonalAddress_country">Country<span class="mdf-required-indicator">*</span></label></div>
+    <div class="css-b62m3t-container"><div class="MDFSelectBox__control css-13cymwt-control"><div class="MDFSelectBox__value-container MDFSelectBox__value-container--has-value css-hlgwow"><div class="MDFSelectBox__single-value css-1dimb5e-singleValue">United States</div><div class="MDFSelectBox__input-container css-19bb58m" data-value=""><input class="MDFSelectBox__input" autocomplete="off" id="PersonalAddress_country" type="text" aria-autocomplete="list" aria-expanded="false" aria-haspopup="true" role="combobox" style="opacity:0;width:100%"></div></div></div></div></div></div>
+  <div class="address-item"><div class="mdf-validated-field"><div class="mdf-label"><label for="PersonalAddress_address1" aria-live="polite">Address Line 1 is required<span class="mdf-required-indicator">*</span></label></div>
+    <input id="PersonalAddress_address1" validationmessage=" is required" aria-required="true" class="vdl-validation-error vdl-textbox" type="text"></div></div>
+  <div class="address-item"><div class="mdf-validated-field"><div class="mdf-label"><label for="PersonalAddress_city" aria-live="polite">City is required<span class="mdf-required-indicator">*</span></label></div>
+    <input id="PersonalAddress_city" validationmessage=" is required" aria-required="true" class="vdl-validation-error vdl-textbox" type="text"></div></div>
+  <div class="address-item"><div class="mdf-validated-field"><div class="mdf-label"><label id="mdfstatelabel-a5d34d27" aria-live="polite">State / Territory<span class="mdf-required-indicator">*</span></label></div>
+    <div><wfn-dropdown-list state="normal" portal-enabled="true" id="PersonalAddress_state" label-text="State / Territory" is-valid="true" validation-message="" value-field="id" text-field="name" filter="false" value="" required="true" always-show-validation="true" aria-labelledby="mdfstatelabel-a5d34d27" exclude-from-form="true" class="flex flex-row align-end hydrated"><template shadowrootmode="open"><sdf-select-simple aria-describedby="description" aria-invalid="false" class="w-full hydrated"><template shadowrootmode="open"><style>.floating-pane-hidden{display:none}</style>
+      <div class="sdf-form-control-wrapper--sr-only" part="label-container"><label id="label" class="sdf-form-control-wrapper--label" part="label"><slot name="custom-label"></slot></label></div>
+      <div class="combo"><div aria-expanded="false" aria-disabled="false" aria-labelledby="label selected-label select-placeholder" aria-describedby="description errorMessage" class="trigger-button" role="button" part="frame" tabindex="0"><span class="selected-label-placeholder" id="select-placeholder" part="placeholder">Select one...</span></div>
+      <sdf-floating-pane show-header="" tab-behavior="auto-close" class="floating-pane-hidden hydrated" attachment="bottom-start" close-on-click-outside=""><template shadowrootmode="open"><div class="floating-pane-container"><slot name="supporting-content"></slot><slot></slot></div></template>
+        <div class="input-frame" slot="supporting-content"><input part="filter-input" type="text" class="filter" id="select-filter-input" aria-label="Enter text to filter your options" placeholder="Filter..." role="combobox" aria-controls="listbox" aria-expanded="true" autocomplete="off" tabindex="0"></div>
+        <div class="list floating-pane-content"><div role="listbox" id="listbox" aria-required="true" aria-labelledby="label" aria-disabled="false" tabindex="-1">
+          <sdf-select-item aria-label="" role="option" aria-selected="false" value=""></sdf-select-item>
+          <sdf-select-item aria-label="AL - Alabama" role="option" aria-selected="false" value="AL">AL - Alabama</sdf-select-item>
+          <sdf-select-item aria-label="CO - Colorado" role="option" aria-selected="false" value="CO">CO - Colorado</sdf-select-item>
+          <sdf-select-item aria-label="VA - Virginia" role="option" aria-selected="false" value="VA">VA - Virginia</sdf-select-item>
+        </div></div></sdf-floating-pane></div></template></sdf-select-simple></template></wfn-dropdown-list></div></div></div>
+  <div class="address-item"><div class="mdf-validated-field"><div class="mdf-label"><label for="PersonalAddress_zip" aria-live="polite">Zip Code is required<span class="mdf-required-indicator">*</span></label></div>
+    <input id="PersonalAddress_zip" validationmessage=" is required" aria-required="true" class="vdl-validation-error vdl-textbox" type="text"></div></div>
+</form><script>
+  // ADP's vdl-textbox: the box draws its own value only while it has focus,
+  // else the parent's, which the box reports on blur alone.
+  for (const box of document.querySelectorAll('input.vdl-textbox')) {
+    let own = '', parent = '', focused = false;
+    const draw = () => { box.value = focused ? own : parent; };
+    box.addEventListener('focus', () => { focused = true; draw(); });
+    box.addEventListener('input', () => { own = box.value; draw(); });
+    box.addEventListener('change', () => { own = box.value; draw(); });
+    box.addEventListener('blur', () => { parent = own; focused = false; draw(); });
+  }
+  const select = document.querySelector('wfn-dropdown-list').shadowRoot.querySelector('sdf-select-simple');
+  const root = select.shadowRoot;
+  const trigger = root.querySelector('.trigger-button'), pane = root.querySelector('sdf-floating-pane');
+  window.statePicks = 0;
+  // portal-enabled: once open, the pane is drawn in a portal in the page
+  // itself (live ADP), not inside the select's shadow root.
+  trigger.addEventListener('click', () => {
+    trigger.setAttribute('aria-expanded', 'true');
+    const portal = document.createElement('sdf-floating-pane-portal');
+    document.body.append(portal);
+    portal.append(pane);
+  });
+  for (const item of root.querySelectorAll('sdf-select-item')) item.addEventListener('click', () => {
+    window.statePicks++;
+    root.querySelector('#select-placeholder')?.remove();
+    let label = root.querySelector('#selected-label');
+    if (!label) { label = document.createElement('span'); label.id = 'selected-label'; trigger.prepend(label); }
+    label.textContent = item.textContent;
+    trigger.setAttribute('aria-expanded', 'false');
+    const portal = pane.parentElement;
+    root.querySelector('.combo').append(pane);
+    if (portal?.localName === 'sdf-floating-pane-portal') portal.remove();
+  });
+</script>`;
+
+test("ADP's optional home phone stays empty beside a mobile number, each phone named by its group", async () => {
+  // ADP Workforce Now contact step, report eedd2010: both rrui tel inputs are
+  // named "Phone Number"; the group around each says "Mobile Number" or
+  // "Home Phone Number".
+  test.setTimeout(90000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, phone: "540-555-0100", address: "100 Test Way", city: "Blacksburg", state: "Virginia", postalCode: "24060" } });
+  await context.route(`${adpOrigin}/**`, (route) => route.fulfill({ contentType: "text/html", body: adpWorkforceContact() }));
+  const page = await context.newPage();
+  await page.goto(`${adpOrigin}/fixture/cx/app?workflowComponent=contact`);
+  await background(page);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 45000 }).toMatch(/ready|awaiting-user/);
+  await expect(page.locator('#personalInfomationMobileNumberError')).toHaveValue(/540.?555.?0100/);
+  await expect(page.locator('#personalInfomationMobileNumberErrorMessage')).toHaveValue('');
+});
+
+test("ADP's vdl-textbox keeps a written value although it shows its parent's value until focused", async () => {
+  // ADP Workforce Now address step: each write ended "Site did not retain the
+  // value": the box draws the parent's value, which it learns on blur only,
+  // whenever it has no focus, so a value set on an unfocused box went blank.
+  test.setTimeout(90000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, phone: "540-555-0100", address: "100 Test Way", city: "Blacksburg", state: "Virginia", postalCode: "24060" } });
+  await context.route(`${adpOrigin}/**`, (route) => route.fulfill({ contentType: "text/html", body: adpWorkforceContact() }));
+  const page = await context.newPage();
+  await page.goto(`${adpOrigin}/fixture/cx/app?workflowComponent=contact`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 45000 }).toMatch(/ready|awaiting-user/);
+  await expect(page.locator('#PersonalAddress_city')).toHaveValue('Blacksburg');
+  await expect(page.locator('#PersonalAddress_address1')).toHaveValue('100 Test Way');
+  await expect(page.locator('#PersonalAddress_zip')).toHaveValue('24060');
+});
+
+test("ADP's wfn-dropdown-list State is found in its shadow roots and chosen; Country reads as United States", async () => {
+  // ADP Workforce Now contact step, report eedd2010: "State / Territory" is a
+  // wfn-dropdown-list whose shadow root holds an sdf-select-simple (with a
+  // shadow root of its own); its Country is a react-select whose chosen
+  // value is drawn beside an empty input.
+  test.setTimeout(90000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, phone: "540-555-0100", address: "100 Test Way", city: "Blacksburg", state: "Virginia", postalCode: "24060" } });
+  await context.route(`${adpOrigin}/**`, (route) => route.fulfill({ contentType: "text/html", body: adpWorkforceContact() }));
+  const page = await context.newPage();
+  await page.goto(`${adpOrigin}/fixture/cx/app?workflowComponent=contact`);
+  await background(page);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 45000 }).toMatch(/ready|awaiting-user/);
+  const shown = () => page.evaluate(() => document.querySelector('wfn-dropdown-list')!.shadowRoot!.querySelector('sdf-select-simple')!.shadowRoot!.querySelector('#selected-label')?.textContent || '');
+  await expect.poll(shown).toBe('VA - Virginia');
+  expect(await page.evaluate(() => (window as any).statePicks)).toBe(1);
+  await expect(page.locator('#PersonalAddress_country')).toHaveValue('');
+  const tabId = await panel.evaluate(
+    async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!,
+    page.url(),
+  );
+  const fields = (await ui({ type: "SCAN_TAB", tabId })).observation.fields;
+  const country = fields.find((field: { label: string }) => field.label === "Country");
+  expect(country.value).toBe('United States');
+  expect(fields.find((field: { label: string }) => field.label === "State / Territory")?.value).toBe('VA - Virginia');
+  // A second fill leaves the choice alone.
+  await ui({ type: "FILL_STEP", id: (await state()).applications[0].id });
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 45000 }).toMatch(/ready|awaiting-user/);
+  expect(await page.evaluate(() => (window as any).statePicks)).toBe(1);
+  await expect(page.locator('wfn-dropdown-list')).toHaveAttribute('required', 'true');
+});
+
 test("a location search that finds nothing is closed, so the rest of the form stays visible", async () => {
   // As Talos's Ashby form in an eval replay: the search
   // answers "No results", and while its list is open the site hides every
@@ -20593,6 +20726,51 @@ test("a screenshot pasted into an issue report is saved beside it", async () => 
   await expect.poll(async () => (await ui({ type: "API", path: "/v1/issues" }))[0]?.images?.length, { timeout: 15_000 }).toBe(2);
   const reports = await ui({ type: "API", path: "/v1/issues" });
   expect(reports[0].images).toEqual([`${reports[0].id}.image-1.png`, `${reports[0].id}.image-2.png`]);
+});
+
+// A report being written survives a reload of the extension (which reopens
+// the panel): the applicant closed the dialog to look at the extension's
+// state, a reload came, and the typed note was gone.
+test("an issue report's note and screenshot are kept across a panel reload until captured", async () => {
+  await context.route(`${origin}/draft-kept`, (route) =>
+    route.fulfill({ contentType: "text/html", body: `<!doctype html><title>Engineer</title><main><h1>Engineer</h1><form><label>First name<input name="firstName" required></label></form></main>` }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/draft-kept`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 40_000 }).toMatch(/ready|awaiting-user|paused/);
+  const dialog = panel.getByRole("dialog", { name: "Report an extension issue" });
+  await panel.getByRole("button", { name: "Report issue" }).first().click();
+  await dialog.getByRole("combobox", { name: "What went wrong?" }).selectOption("wrong-value");
+  await dialog.getByLabel("What were you doing?").fill("The city was left blank.");
+  await dialog.getByRole("heading", { name: "Report an issue" }).evaluate((element) => {
+    const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+    const data = new DataTransfer();
+    data.items.add(new File([bytes], "image.png", { type: "image/png" }));
+    element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await expect(dialog.getByRole("img", { name: "Screenshot 1" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Close issue report" }).click();
+  await panel.waitForTimeout(800);
+  await panel.reload();
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 20_000 }).toMatch(/ready|awaiting-user|paused/);
+  await panel.getByRole("button", { name: "Report issue" }).first().click();
+  await expect(dialog.getByLabel("What were you doing?")).toHaveValue("The city was left blank.");
+  await expect(dialog.getByRole("combobox", { name: "What went wrong?" })).toHaveValue("wrong-value");
+  await expect(dialog.getByRole("img", { name: "Screenshot 1" })).toBeVisible();
+  await dialog.getByRole("checkbox", { name: /Include this page/ }).check();
+  await dialog.getByRole("button", { name: "Capture report" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(async () => (await ui({ type: "API", path: "/v1/issues" }))[0]?.note, { timeout: 15_000 }).toBe("The city was left blank.");
+  // Captured: the draft is gone, after a reload too.
+  await panel.waitForTimeout(800);
+  await panel.reload();
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 20_000 }).toMatch(/ready|awaiting-user|paused/);
+  await panel.getByRole("button", { name: "Report issue" }).first().click();
+  await expect(dialog.getByLabel("What were you doing?")).toHaveValue("");
+  await expect(dialog.getByRole("img", { name: "Screenshot 1" })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Close issue report" }).click();
 });
 
 // A screenshot that arrives through a paste as an empty file (the clipboard

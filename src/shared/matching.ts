@@ -286,7 +286,8 @@ export function deterministicAnswer(
     [/^((home|cell|cellular|mobile|primary) )?(phone|mobile|telephone)( number)?$/, "phone"],
     // "What is your phone number?" (Workday), "Daytime Phone" (Taleo).
     [/^what is your ((home|cell|cellular|mobile|primary|daytime|contact) )?(phone|mobile|telephone)( number)?$|^(daytime|day time) (phone|telephone)( number)?$/, "phone"],
-    [/^(city|current city|location city|current location)$/, "city"],
+    // Also "City/Town" (Apple's profile step).
+    [/^(city|current city|location city|current location)$|^(city|town)( ?\/? ?(or )?(city|town))?$/, "city"],
     [/^where (do you( currently)? live|are you( currently)? (located|based))$|^(what|which) city do you( currently)? live in$/, "city"],
     // "State / District", "State / Province / Region".
     [stateLabel, "state"],
@@ -1905,6 +1906,13 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
     const specified = hearAboutSpecify(field, fields, profile);
     if (specified) return [{ fieldId: field.id, value: specified, expectedValue: field.value, revision: field.revision, source: "confirmed-profile" as const }];
     if (/^if other\b/.test(normalize(field.label))) return [];
+    // An optional home phone beside a mobile one the profile's number fills
+    // (ADP's contact step: "Home Phone Number" and "Mobile Number" both read
+    // as the phone): the number goes in the mobile one only.
+    // Also when it holds a number already (an earlier fill's): the
+    // applicant asked for it left alone.
+    if (!field.required && /^home (phone|telephone)( number)?$/.test(normalize(field.label)) &&
+        fields.some((other) => other !== field && /^(mobile|cell|cellular)( phone)?( number)?$/.test(normalize(other.label)))) return [];
     // One box of a "select all that apply" list is a choice, not a
     // question of its own: one employer's sanctions list had "Ordinarily a
     // resident of Russia or Belarus and not willing to relocate…" ticked as a
@@ -2174,6 +2182,23 @@ export function publicPostingUrl(raw: string): string {
     const jobId = url.searchParams.get("jobId");
     if (/^workforcenow\.adp\.com$/i.test(url.hostname) && /^\/job\/?$/i.test(url.pathname) && cid && jobId)
       return canonicalURL(`https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=${encodeURIComponent(cid)}&jobId=${encodeURIComponent(jobId)}&lang=en_US`);
+    // UKG Pro's application page and its sign-in (AuthCode/Register, with the
+    // application page in the state's returnUrl) both stand for the job's
+    // public OpportunityDetail page.
+    if (/(^|\.)ultipro\.com$/i.test(url.hostname)) {
+      let path = url.pathname;
+      let id = url.searchParams.get("opportunityId");
+      if (/\/AuthCode\//i.test(path)) {
+        const back = /(?:^|[&|])returnUrl=([^&|]*)/i.exec(url.searchParams.get("state") || "")?.[1];
+        if (back) {
+          const target = new URL(decodeURIComponent(back), url.origin);
+          path = target.pathname;
+          id = target.searchParams.get("opportunityId");
+        }
+      }
+      const board = /^(\/[^/]+\/JobBoard\/[0-9a-f-]{36})\/Opportunity(?:Apply|Detail)\/?$/i.exec(path);
+      if (board && id) return `${url.origin}${board[1]}/OpportunityDetail?opportunityId=${encodeURIComponent(id)}`;
+    }
   } catch {
     // Not a URL: canonicalURL reports it.
   }

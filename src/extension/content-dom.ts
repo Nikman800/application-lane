@@ -1,7 +1,7 @@
 // The content script's readers of the page (content.ts): functions that
 // find and read controls, lists and menus, and touch none of a fill's state.
 // Split out of content.ts as they were.
-import { iconRadioLabel, profileImport, select2Selection, toggleGroup, isToggleChoice, redundantAutofill, type Control } from "./semantics";
+import { iconRadioLabel, profileImport, select2Selection, toggleGroup, isToggleChoice, redundantAutofill, wfnDropdown, type Control } from "./semantics";
 import { normalize, type Field } from "../shared/model";
 import { adapterFor } from "./adapters";
 
@@ -57,6 +57,11 @@ export const siteChrome = (element: Control) => {
 
 export const isTrackableControl = (element: Control) =>
   (!element.matches("button[aria-pressed]") || isToggleChoice(element)) &&
+  // A list button is a control only in ADP's wfn-dropdown-list (its other
+  // sdf-select-simple lists have site rules), and the filter box in its open
+  // list is no field.
+  (!element.matches('.trigger-button[role="button"][aria-expanded]') || Boolean(wfnDropdown(element))) &&
+  !element.matches('input[part="filter-input"]#select-filter-input') &&
   !siteChrome(element) &&
   !redundantAutofill(element) &&
   !behindToggle(element) &&

@@ -491,7 +491,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-24-adp-ukg-labels";
+export const CONTENT_VERSION = "2026-11-24-ukg-posting";
 export type Proposal = {
   fieldId: string;
   value: string;

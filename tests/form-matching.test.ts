@@ -1224,6 +1224,17 @@ test("a school asked as a question picks the listed school, never Other", () => 
   assert.equal(proposals([field("Which high school did you attend?", { kind: "select", options: ["Test University"] })], profile).length, 0);
 });
 
+test("an optional home phone beside a mobile one gets no proposal, empty or holding a number", () => {
+  for (const value of ["", "+1 540 555 0100"]) {
+    const found = proposals([field("Mobile Number", { id: "mobile", kind: "tel" }), field("Home Phone Number", { id: "home", kind: "tel", value })], profile);
+    assert.ok(!found.some((p) => p.fieldId === "home"), value || "empty");
+  }
+});
+
+test("a City/Town box takes the saved city", () => {
+  for (const label of ["City/Town", "City / Town", "Town or City"]) assert.equal(deterministicAnswer(field(label), profile), profile.city, label);
+});
+
 test("a lone Street Name box takes the saved street address", () => {
   assert.equal(deterministicAnswer(field("Street Name"), profile), profile.address);
   assert.equal(deterministicAnswer(field("Street"), profile), profile.address);
@@ -3048,4 +3059,24 @@ test("an ADP Workforce Now short job link, which opens ADP's sign-in, is tracked
   const career = "https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=11111111-2222-3333-4444-555555555555&jobId=9200000000001_1&lang=en_US";
   assert.equal(publicPostingUrl(career), career);
   assert.equal(publicPostingUrl("https://jobs.lever.co/acme/123"), "https://jobs.lever.co/acme/123");
+});
+
+test("a UKG Pro sign-in link (the application page in its returnUrl) and its application page are tracked at the job's public OpportunityDetail page", () => {
+  const board = "https://recruiting2.ultipro.com/ACM1000ACME/JobBoard/11111111-2222-3333-4444-555555555555";
+  const detail = `${board}/OpportunityDetail?opportunityId=66666666-7777-8888-9999-000000000000`;
+  assert.equal(
+    publicPostingUrl("https://recruiting2.ultipro.com/ACM1000ACME/AuthCode/Register?state=returnUrl%3D%2FACM1000ACME%2FJobBoard%2F11111111-2222-3333-4444-555555555555%2FOpportunityApply%3FopportunityId%3D66666666-7777-8888-9999-000000000000%7Cta%3DACM1000ACME"),
+    detail,
+  );
+  assert.equal(publicPostingUrl(`${board}/OpportunityApply?opportunityId=66666666-7777-8888-9999-000000000000`), detail);
+  assert.equal(publicPostingUrl(detail), detail);
+});
+
+test("a UKG Pro 'if you are under the age of 18, list your age' question is answered N/A for an adult and left without proof", () => {
+  const label = "If you are under the age of 18, please list your age. If not applicable, enter N/A.";
+  const ask = (given: typeof profile) => proposals([field(label, { kind: "textarea", options: [] })], given)[0]?.value;
+  assert.equal(ask({ ...profile, dateOfBirth: "", age18OrOlder: "Yes" }), "N/A");
+  assert.equal(ask({ ...profile, dateOfBirth: "1990-01-01", age18OrOlder: "" }), "N/A");
+  assert.equal(ask({ ...profile, dateOfBirth: "", age18OrOlder: "" }), undefined);
+  assert.equal(ask({ ...profile, dateOfBirth: "", age18OrOlder: "No" }), undefined);
 });

@@ -372,13 +372,13 @@ export async function trackTab(tabId: number) {
   if (!app.postingUrl && !app.postingText && !app.postingSought && context.observation &&
       !context.observation.fields.length && (context.observation.description.match(/\S+/g)?.length || 0) >= 40) {
     app.postingSought = true;
-    app.postingUrl = tab.url;
+    app.postingUrl = publicPostingUrl(tab.url || "");
   }
   if (!app.postingUrl && !app.postingText && !app.postingSought) {
     app.postingSought = true;
     const led = await leadingPage(tab, context.observation, app).catch(() => undefined);
     if (led) {
-      app.postingUrl = led.url;
+      app.postingUrl = publicPostingUrl(led.url);
       if (led.description) app.sourceDescription = `${led.description.slice(0, 12500)}\n${app.sourceDescription || ""}`;
     } else if (!app.postingText && guessedAgain(app)) app.postingUrl = postingGuess(app.url);
   }

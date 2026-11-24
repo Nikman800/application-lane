@@ -4,7 +4,7 @@ import { signatureField, signingAllowed, signatureLeftReason } from "../../engin
 import { tell, paylocityAddressBox, ripplingLocation, radioGroup, associatedNativeChoice, takesSeveralPicks } from "../content-dom";
 import { tdsDateBox, pickTdsDate } from "../../engine/page/tds-date-picker";
 import { pickOption } from "../../shared/answers";
-import { writable, isToggleChoice, toggleGroup } from "../semantics";
+import { writable, isToggleChoice, toggleGroup, wfnDropdown } from "../semantics";
 import { fillClick } from "../../engine/page/click-gate";
 import { type Proposal, normalize } from "../../shared/model";
 import { cs } from "./state";
@@ -59,6 +59,7 @@ export async function apply(command: Command) {
     }
     let selectedLabel = proposal.value;
     let typedDate = false;
+    let vdlFocused = false;
     const savesBefore = cs.savesFinished;
     tell({ type: "FILL_PROGRESS", applicationId: cs.applicationId, operation: cs.operation, documentId, label: record.label });
     cs.writing = true;
@@ -94,7 +95,7 @@ export async function apply(command: Command) {
         results.push({ id: proposal.fieldId, ok: true });
         continue;
       }
-      if ((element.getAttribute("role") === "combobox" && !(element instanceof HTMLSelectElement) && !calendarBox(element)) || element.closest(".pcty-input-select__input") || element.matches(legacyReactSelect) || listButton(element)) {
+      if ((element.getAttribute("role") === "combobox" && !(element instanceof HTMLSelectElement) && !calendarBox(element)) || element.closest(".pcty-input-select__input") || element.matches(legacyReactSelect) || listButton(element) || wfnDropdown(element)) {
         // A saved answer listing several values on a field that takes several
         // picks: each is picked in turn, the field read again between them.
         const several = proposal.also?.length && takesSeveralPicks(element, record.label);
@@ -279,6 +280,20 @@ export async function apply(command: Command) {
       ) {
         if (element.getAttribute("role") === "combobox" && !calendarBox(element))
           throw new Error("Custom autocomplete requires review.");
+        // ADP's vdl-textbox shows the parent's value, not its own, whenever
+        // it does not have focus: a value written to a box that was never
+        // focused was drawn back empty by the next render (Address Line 1,
+        // City, Zip Code and Middle Name, "Site did not retain the value").
+        // Focused first, as a person enters it; a page without the window's
+        // focus sends no focus event, so it is said too.
+        if (element.classList.contains("vdl-textbox") && document.activeElement !== element) {
+          element.focus({ preventScroll: true });
+          vdlFocused = document.activeElement === element;
+          if (!document.hasFocus()) {
+            element.dispatchEvent(new FocusEvent("focus"));
+            element.dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true }));
+          }
+        }
         Object.getOwnPropertyDescriptor(
           element instanceof HTMLInputElement
             ? HTMLInputElement.prototype
@@ -293,6 +308,12 @@ export async function apply(command: Command) {
         record.revision++;
         record.automationWritten = true;
       } else changed(record);
+      // The box is left by a real blur, once the site has drawn it again.
+      if (vdlFocused) {
+        await pause(60);
+        if (document.activeElement === element) element.blur();
+        vdlFocused = false;
+      }
       // Left as when typed into: Amazon's text questions keep their answer
       // only on blur, and showed it while Continue still called it required.
       if (

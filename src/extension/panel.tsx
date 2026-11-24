@@ -22,6 +22,7 @@ import { ConnectCard, OnboardingChecklist } from "./onboarding";
 import { computeProgress, DEFAULT_DAILY_GOAL } from "../shared/progress";
 import { ATTACHMENT_LIMIT, issueSummary, newIssueLink, replacedSummary, sharedFileName, type SharedReport } from "../shared/share";
 import {
+
   emptyProfile,
   type Application,
   type TailoringItem,
@@ -111,6 +112,10 @@ import { FixerPage } from "./panel/fixer-page";
 import { IssuesPage } from "./panel/issues-page";
 import { ProfilePage } from "./panel/profile-page";
 import { SettingsPage } from "./panel/settings-page";
+
+// A report being written, kept across reloads of the panel.
+const ISSUE_DRAFT_KEY = "issueDraft";
+type IssueDraft = { category: IssueCategory; note: string; images: IssueImage[] };
 export const agentNames: Record<FixerAgent, string> = { claude: "Claude", claude2: "Claude (separate login)", codex: "Codex", endpoint: "OpenAI-compatible endpoint" };
 // Suggestions only: any model name the agent's CLI takes is accepted.
 // "default" is the Codex CLI's own configured model; an empty endpoint model
@@ -621,6 +626,33 @@ function usePanel() {
       void chrome.runtime.sendMessage({ type: "REPORT_OPEN", open: false }).catch(() => { /* the background may be gone: nothing to tell */ });
     };
   }, [issueTarget]);
+  // The report being written is kept in the extension's storage, so a reload
+  // (which reopens the panel) or closing the dialog does not lose it: the
+  // applicant lost a typed note to a reload once. Cleared when captured.
+  const draftLoaded = useRef(false);
+  useEffect(() => {
+    void chrome.storage.local.get(ISSUE_DRAFT_KEY).then((stored) => {
+      const draft = stored[ISSUE_DRAFT_KEY] as IssueDraft | undefined;
+      if (draft) {
+        if (draft.category) setIssueCategory(draft.category);
+        if (draft.note) setIssueNote((current) => current || draft.note);
+        if (draft.images?.length)
+          setIssueImages((current) => current.length ? current : draft.images.map((image) => ({ ...image, url: `data:${image.mime};base64,${image.data}` })));
+      }
+    }).catch(() => { /* no draft to restore */ }).finally(() => { draftLoaded.current = true; });
+  }, []);
+  useEffect(() => {
+    if (!draftLoaded.current) return;
+    const timer = setTimeout(() => {
+      if (!issueNote.trim() && !issueImages.length) return void chrome.storage.local.remove(ISSUE_DRAFT_KEY).catch(() => undefined);
+      const draft: IssueDraft = { category: issueCategory, note: issueNote, images: issueImages.map(({ mime, data }) => ({ mime, data })) };
+      // Screenshots past the storage quota are dropped from the draft; the note is kept.
+      void chrome.storage.local.set({ [ISSUE_DRAFT_KEY]: draft })
+        .catch(() => chrome.storage.local.set({ [ISSUE_DRAFT_KEY]: { ...draft, images: [] } }))
+        .catch(() => undefined);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [issueCategory, issueNote, issueImages]);
   const addIssueImages = async (files: File[]) => {
     const images = files.filter((file) => /^image\/(png|jpeg|webp|gif)$/.test(file.type));
     if (!images.length) return false;

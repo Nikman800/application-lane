@@ -380,8 +380,49 @@ export function legacyLabels(element: Control): string[] {
   ].filter(Boolean);
 }
 
+// ADP Workforce Now's dropdown (<wfn-dropdown-list>) draws an sdf-select-simple
+// in its shadow root, whose own root holds the button that opens the list
+// (div.trigger-button, role="button"). The button is the control; the host
+// carries the question (label-text, required).
+export function wfnDropdown(element: Element): Element | undefined {
+  if (!element.matches('.trigger-button[role="button"][aria-expanded]')) return undefined;
+  let host = (element.getRootNode() as ShadowRoot).host as Element | undefined;
+  for (let depth = 0; host && depth < 3; depth++) {
+    if (host.localName === "wfn-dropdown-list") return host;
+    host = (host.getRootNode() as ShadowRoot).host as Element | undefined;
+  }
+  return undefined;
+}
+
+// The text ids name in a root: ADP repeats an id (a title-only span before
+// the label), so the first one with text counts.
+function textOfIds(root: ParentNode, ids: string[]): string {
+  return ids.map((id) => {
+    for (const node of root.querySelectorAll(`[id="${CSS.escape(id)}"]`)) {
+      const text = labelText(node);
+      if (text) return text;
+    }
+    return "";
+  }).filter(Boolean).join(" ");
+}
+
 function associatedLabel(element: Control): string {
   const root = element.getRootNode() as Document | ShadowRoot;
+  const dropdown = wfnDropdown(element);
+  if (dropdown) {
+    const hostRoot = dropdown.getRootNode() as Document | ShadowRoot;
+    return cleanLabel(
+      dropdown.getAttribute("label-text") ||
+      textOfIds(hostRoot, (dropdown.getAttribute("aria-labelledby") || "").split(/\s+/).filter(Boolean)),
+    );
+  }
+  // ADP's phone input (rrui PhoneInput) is named only "Phone Number"; the
+  // group around it is labelled "Home Phone Number" or "Mobile Number".
+  if (element instanceof HTMLInputElement && element.type === "tel") {
+    const group = element.closest('[role="group"][aria-labelledby]');
+    const named = group ? textOfIds(root, group.getAttribute("aria-labelledby")!.split(/\s+/).filter(Boolean)) : "";
+    if (/^(home|mobile|cell|cellular|work|office|primary|other|alternate|secondary)\b.*\b(phone|number|telephone)\b/i.test(named)) return named;
+  }
   // BambooHR's fabric select: its label is for the hidden select drawn
   // beside the toggle, and the toggle's own name is "State –Select–".
   if (element.matches("button.fab-SelectToggle[data-menu-id]")) {
@@ -1230,6 +1271,7 @@ export function isRequired(element: Control): boolean {
   }
   // BambooHR's fabric select: required on the hidden select beside it.
   if (element.matches("button.fab-SelectToggle[data-menu-id]") && element.closest(".fab-Select")?.querySelector("select[required]")) return true;
+  if (wfnDropdown(element)?.getAttribute("required") === "true") return true;
   if (element.getAttribute("role") === "combobox") {
     const shell = element.closest(".select__container");
     if (shell?.querySelector('input[required][aria-hidden="true"]'))
@@ -1324,6 +1366,9 @@ export function validationState(
 }
 
 export function selectedCustomValue(element: Control): string | undefined {
+  // ADP's dropdown shows its choice in the button's "selected-label"; until
+  // one is made it shows only "Select one...".
+  if (wfnDropdown(element)) return (element.getRootNode() as ShadowRoot).querySelector('[id="selected-label"]')?.textContent?.replace(/\s+/g, " ").trim() || "";
   const paylocity = element.closest(".pcty-input-select__input");
   if (paylocity) {
     const value = paylocity.parentElement?.querySelector(".input-select-input-single-value")?.textContent?.trim() || "";
@@ -1334,7 +1379,7 @@ export function selectedCustomValue(element: Control): string | undefined {
   // has a title, which is no part of the choice.
   // So does Pinpoint's, whose input has its own id: read as its empty search
   // box, its filled Country and State were called unanswered (report 25a9fc1b).
-  if (element.matches('input[id^="react-select-"][aria-autocomplete="list"],.dropdown-autocomplete input[aria-autocomplete="list"],input.react-select__input[aria-autocomplete="list"]')) {
+  if (element.matches('input[id^="react-select-"][aria-autocomplete="list"],.dropdown-autocomplete input[aria-autocomplete="list"],input.react-select__input[aria-autocomplete="list"],input.MDFSelectBox__input[aria-autocomplete="list"]')) {
     const container = element.closest('.dropdown-autocomplete,.react-select,[class*="-container"]:not([class*="input-container"])');
     const single = container?.querySelector('[class*="singleValue"],[class*="single-value"]');
     if (!single) return "";

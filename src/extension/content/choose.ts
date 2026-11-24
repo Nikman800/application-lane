@@ -4,7 +4,7 @@ import { requestMainWorld } from "../../engine/page/bridge";
 import { nameVariants } from "../../shared/matching";
 import { type Proposal, normalize } from "../../shared/model";
 import { controlledList, fabricToggle, fabricMenu, fabricOptions, fabricDrawn, pressFabric, ashbyToggle, successFactorsPicklist, ripplingSelect, shadowedOptions, deepOption, pressOutside, splChosen, picksOf, closeSuccessFactorsList, menuEntries } from "../content-dom";
-import { writable, rendered } from "../semantics";
+import { writable, rendered, wfnDropdown } from "../semantics";
 import { pickOption } from "../../shared/answers";
 import { searchSiteList } from "../../engine/runtime";
 import { fillClick } from "../../engine/page/click-gate";
@@ -437,8 +437,26 @@ export async function selectCustom(
       const icimsList = () => element.matches('a[id$="_icimsDropdown"]')
         ? document.getElementById(`${element.id}_ctnr`)?.querySelector<HTMLElement>('[role="listbox"]') || null
         : null;
+      // ADP's list is drawn in the shadow roots of the select around its button.
+      const wfnList = () => {
+        const visit = (scope: ShadowRoot | null, depth: number): HTMLElement | null => {
+          if (!scope || depth > 3) return null;
+          const own = [...scope.querySelectorAll<HTMLElement>('[role="listbox"]')].find(rendered);
+          if (own) return own;
+          for (const node of scope.querySelectorAll("*")) {
+            const found = visit(node.shadowRoot, depth + 1);
+            if (found) return found;
+          }
+          return null;
+        };
+        // A portal-enabled list is drawn in a portal in the page itself.
+        return visit(element.getRootNode() as ShadowRoot, 0) ||
+          [...document.querySelectorAll<HTMLElement>('sdf-floating-pane-portal [role="listbox"]')].find(rendered) || null;
+      };
       const list =
-        fabricToggle(element)
+        wfnDropdown(element)
+          ? wfnList()
+          : fabricToggle(element)
           ? fabricMenu(element)
           : listId && !/\s/.test(listId)
           ? root.querySelector(`#${CSS.escape(listId)}`) || controlledList(element)
