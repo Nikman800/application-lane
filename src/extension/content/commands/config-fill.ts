@@ -75,7 +75,7 @@ const signal = AbortSignal.any([
   // with three jobs and two schools the pass ended a minute in, with
   // "Master" typed into Highest Degree Achieved and never picked.
   // (configPassTimeout: SmartRecruiters' real-key picks too.)
-  AbortSignal.timeout(configPassTimeout(location.hostname)),
+  AbortSignal.timeout(configPassTimeout(location.hostname, Boolean(document.querySelector("form.tpt_wizard")))),
 ]);
 const locked = (element: Element) => {
   if (!valid(command)) return true;

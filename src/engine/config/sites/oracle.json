@@ -170,7 +170,20 @@
             [
               "major",
               [
-                ".//input[@name='major']"
+                {
+                  "path": ".//input[@name='major']",
+                  "fieldWordings": true,
+                  "actions": [
+                    {
+                      "method": "trustedType"
+                    },
+                    {
+                      "path": "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                      "method": "click",
+                      "time": 2500
+                    }
+                  ]
+                }
               ]
             ],
             [

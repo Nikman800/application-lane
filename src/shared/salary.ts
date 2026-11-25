@@ -101,3 +101,20 @@ export function salaryAnswer(
   if (question.numeric) return { value: String(salary.min), numeric: salary.min };
   return { value: formatSalary(salary, !asked), numeric: salary.min };
 }
+
+const currencyNames: Record<string, string[]> = {
+  USD: ["United States Dollar", "US Dollar"], CAD: ["Canada Dollar", "Canadian Dollar"], EUR: ["Euro"], GBP: ["United Kingdom Pound", "British Pound"],
+  AUD: ["Australia Dollar", "Australian Dollar"], INR: ["India Rupee", "Indian Rupee"], MXN: ["Mexico Peso", "Mexican Peso"],
+};
+
+// The names a currency list may give the applicant's pay currency, the list's
+// usual one first, then its code ("United States Dollar", "US Dollar",
+// "USD"); none when they gave no pay or a currency not known here. A bare
+// "$" is the dollar of the country the applicant lives in.
+export function currencyListNames(profile: { salary?: Salary; country?: string }): string[] {
+  if (profile.salary?.min === undefined) return [];
+  const given = (profile.salary.currency || "").trim().toUpperCase();
+  const code = given === "$" && /^(united states|usa?)\b/i.test((profile.country || "").trim()) ? "USD" : given;
+  const names = currencyNames[code];
+  return names ? [...names, code] : [];
+}

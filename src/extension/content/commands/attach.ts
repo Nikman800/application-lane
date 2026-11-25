@@ -2,11 +2,11 @@
 // Split out of executeCommand as it was.
 import { apply } from "../apply";
 import { Command, pause } from "../core";
-import { records, nodeRecords, fieldLabel, documentId } from "../tracking";
+import { records, nodeRecords, fieldLabel, documentId, lockedLabels, lockOrigins } from "../tracking";
 import { cs } from "../state";
 import { guardedRecord, valid, guard, changed } from "../guards";
 import { replacesForm, currentFileName, uploadError } from "../../semantics";
-import { valueOf, hasEditLock, markEngineWrite } from "../controls";
+import { valueOf, hasEditLock, markEngineWrite, elementLockKeys, applicantLock } from "../controls";
 import { inspect } from "../inspect";
 import { checkControl } from "../choose";
 import { configEngineEnabled } from "../../../engine/mode";
@@ -22,10 +22,21 @@ import { executeCommand } from "../commands";
 // resume), when the applicant asked for it to be replaced. One they
 // chose themselves stays theirs.
 const held = records.get(command.fieldId!);
-if (command.replaceExisting && held?.protected && held.protectedBy === "existing value") {
-  held.protected = false;
-  held.protectedBy = undefined;
-  held.siteValue = true;
+// A site that shows its own file again after a fill (iCIMS reloading the
+// account's resume) changed the value outside a fill, and that is locked
+// under the field's name: a file shown that way is the site's too, not one
+// the applicant chose.
+if (command.replaceExisting && held?.protected) {
+  const keys = held.element instanceof HTMLInputElement && held.element.type === "file" ? elementLockKeys(held.element, held.label) : [];
+  const siteLocked = keys.filter((key) => lockedLabels.has(key) && !applicantLock(key));
+  if (held.protectedBy === "existing value" ||
+    (siteLocked.length && /^(value changed outside a fill|edit lock)/.test(held.protectedBy || "") &&
+      !keys.some((key) => lockedLabels.has(key) && applicantLock(key)))) {
+    for (const key of siteLocked) { lockedLabels.delete(key); lockOrigins.delete(key); }
+    held.protected = false;
+    held.protectedBy = undefined;
+    held.siteValue = true;
+  }
 }
 // Focus an upload of ours left on a configured slot is no applicant's:
 // the résumé's upload in Workday's shared uploader ends on its "Select
@@ -68,7 +79,7 @@ if (
   artifact.applicationId !== cs.applicationId ||
   artifact.operation !== cs.operation
 )
-  throw new Error(`Stale or mismatched document attachment${guarded.reason ? ` (${guarded.reason})` : ""}.`);
+  throw new Error(`Stale or mismatched document attachment${guarded.reason ? ` (${guarded.reason} DBG ${JSON.stringify([command.replaceExisting, held?.protected, held?.protectedBy, record?.protectedBy])})` : ""}.`);
 // Paylocity exposes a separate "Apply with resume" shortcut and a
 // parsing checkbox beside the ordinary uploader. Use the ordinary
 // upload without letting the parser discard fields already filled.

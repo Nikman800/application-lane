@@ -5,7 +5,7 @@ import { schoolNames } from "../shared/schools";
 import { degreeAliases, graduated, highestRow, studying } from "../shared/education";
 import { askedCountry, authorizationAnswer, jobCountry } from "../shared/authorization";
 import { priorEmploymentAnswer, questionTopic } from "../shared/standing";
-import { formatSalary } from "../shared/salary";
+import { currencyListNames, formatSalary } from "../shared/salary";
 import { localDate, formatDate, profileDateFormat, MONTH_NAMES } from "../shared/dates";
 import { dialCountry, splitPhone } from "../shared/phone";
 import globalsData from "./config/globals.json" with { type: "json" };
@@ -287,6 +287,8 @@ export function canonicalValues(
   })();
   // Expected pay: the figure alone where a key asks for a number.
   const salaryText = profile.salary ? formatSalary(profile.salary) : "";
+  // The currency list beside the pay figure (Avature's).
+  if (key === "currency" || key === "salary_currency") return currencyListNames(profile);
   if (/(^|_)(salary|compensation|pay|wage)(_|$)/.test(key)) {
     if (/(^|_)(number|numeric|amount|figure)(_|$)/.test(key)) return profile.salary?.min !== undefined ? [String(profile.salary.min)] : [];
     return salaryText ? [salaryText] : [];
@@ -652,7 +654,7 @@ export function selectorValues(
   // Only where the rule checks them against the site's own list of options
   // (Workday's): a rule that clicks through a list waits on each one, and
   // SuccessFactors' Major took long enough to delay the resume upload.
-  if (selector.value === undefined && selector.optionsSource && /^(major|field_of_study|discipline)(_[234])?$/.test(selector.valueKey || key))
+  if (selector.value === undefined && (selector.optionsSource || selector.fieldWordings) && /^(major|field_of_study|discipline)(_[234])?$/.test(selector.valueKey || key))
     values = unique(values.flatMap(fieldOfStudyWordings));
   // A school saved with its campus ("Pennsylvania State University,
   // University Park") may be listed without it: Ashby's search offered
@@ -781,6 +783,15 @@ export function matchOption(
       const code = compact(coded[1]);
       const degreeCode = /^(bs|bsc|ba|ms|msc|ma|phd|mba|as|aa|meng|beng|mfa|bfa|bba)$/.test(code);
       return !degreeCode || values.some((candidate) => compact(candidate) === code);
+    },
+    // A currency written with its symbol and code: "$ United States Dollar -
+    // USD" is the "United States Dollar" asked for, when its code is asked
+    // for too ("$ United States Dollar (Next Day) - USN" is not).
+    (option, value) => {
+      const coded = option.label.match(/^(.+?)\s+[-–—]\s+([A-Z]{3})\s*$/);
+      if (!coded || !values.includes(coded[2]) || !normalize(value)) return false;
+      const name = coded[1].trim();
+      return [name, name.replace(/^\S{1,4}\s+/, "")].some((text) => normalize(text) === normalize(value));
     },
     // A list's own wording with a note after it: "Not Protected Veteran
     // (OFCCP)" is "not protected veteran".

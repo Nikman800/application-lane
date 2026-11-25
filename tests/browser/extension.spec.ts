@@ -21259,6 +21259,15 @@ test("Pause fill beside the running fill stops it, and the documents it was wait
   expect(await page.locator("[name=resume]").evaluate((input: HTMLInputElement) => input.files?.length || 0)).toBe(0);
   const app = (await state()).applications.find((item: { tabId?: number }) => item.tabId === tabId);
   expect([app?.status, app?.explicitFill]).toEqual(["paused", false]);
+  // The notice is about that tab's application: on another tab it is gone.
+  await expect(panel.locator(".notice.success")).toContainText("Fill paused");
+  const other = await context.newPage();
+  await other.goto(`${origin}/mark-submitted`);
+  await other.bringToFront();
+  await panel.getByRole("button", { name: "Scan current tab" }).click();
+  await expect(card).toContainText("mark-submitted");
+  await expect(panel.locator(".notice.success", { hasText: "Fill paused" })).toHaveCount(0);
+  await other.close();
   delete appConfig.tailorDir;
 });
 
@@ -24769,4 +24778,204 @@ test("with tab groups turned off, application tabs leave the stage groups", asyn
   await expect.poll(groupId, { timeout: 15_000 }).not.toBe(-1);
   await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, tabGroups: "off" } });
   await expect.poll(groupId, { timeout: 15_000 }).toBe(-1);
+});
+
+test("an Avature form whose Currency, Degree, Institution/Program and Specialization/Major are Select2 lists that load their choices from the site as they are opened and searched gets each one picked, a school not on the list 'Other / Not Listed'", async () => {
+  test.setTimeout(300_000);
+  // one employer's Avature Register page (fill capture + recording): the
+  // hidden selects hold no options, so the fill found "No exact select
+  // option" for Currency and Degree, and an Institution searched with four
+  // wordings that each ended "No results found" was left empty, its
+  // "Other / Not Listed" never tried.
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      country: "United States of America",
+      salary: { min: 100000, currency: "USD", period: "year" },
+      education: [
+        { organization: "Penn State", title: "Master of Science", fieldOfStudy: "Data Science", location: "", details: "", startDate: "2025-08", endDate: "2027-05" },
+        { organization: "Contoso University", title: "Bachelor of Science", fieldOfStudy: "Computer Science", location: "", details: "", startDate: "2015-09", endDate: "2019-06" },
+      ],
+    },
+  });
+  const list = (id: string, label: string, placeholder: string, cls: string) =>
+    `<div class="${cls}" id="fieldSpecContainer${id}"><label class="WizardFieldLabel tc_formLabel" for="${id}" id="${id}-label">${label}<span aria-hidden="true" class="labelRequiredIcon"> *</span><span id="${id}-labelValue" class="screenReaderVisibility" aria-hidden="true">${placeholder}</span></label><div id="ui-widget_${id}" class="ui-widget AutocompleteSelectFieldUIWidget tc_formField" lang="en"><select name="${id}" tabindex="-1" class="SelectFormField AutoCompleteField AutocompleteSelectFieldChildHtmlElement select2-hidden-accessible" id="${id}" data-select2-id="${id}" aria-hidden="true" aria-label="${label} *${placeholder}"><option data-select2-id="7" selected=""></option></select><span class="select2 select2-container WizardFieldInputContainer WizardFieldInput select2-container--default" dir="ltr" style="width: 100%;"><span class="selection"><span class="select2-selection select2-selection--single select2Container${id}" role="combobox" aria-labelledby="${id}-label" aria-haspopup="true" aria-expanded="false" aria-required="true" tabindex="0"><span class="select2-selection__rendered WizardFieldInput" id="select2-${id}-container" role="textbox" aria-readonly="true" tabindex="-1"><span class="select2-selection__placeholder WizardFieldInput">${placeholder}</span></span><span class="select2-selection__arrow" role="presentation"><b role="presentation"></b></span></span></span><span class="dropdown-wrapper" aria-hidden="true"></span></span></div></div>`;
+  const inRow = "datasetfieldSpec SelectFormField AutoCompleteField isRequired datasetfieldSpecPadder";
+  const entry = (row: string) =>
+    `<div id="multipleDatasetEntry_931_${row}"${row === "sample" ? ' class="TableSampleRow" aria-hidden="true"' : ""}>` +
+    [
+      [2, "Education (Degree, Certification, Training)", "Select an option"],
+      [8, "Institution/Program", 'If your school is not in the list, choose "Other / Not Listed".'],
+      [12, "Specialization/Major", "Select an option"],
+    ]
+      .map(([n, label, placeholder]) => `<div id="datasetFieldContainer931-${n}-${row}" class="datasetFieldContainer">${list(`931-${n}-${row}`, String(label), String(placeholder), inRow)}</div>`)
+      .join("") +
+    `</div>`;
+  await context.route(`${avatureOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Software Engineer</title><main><form class="tpt_wizard"><input type="hidden" name="entityData" value="1">
+        <fieldset class="Section Section2"><div class="fieldSpec"><label class="WizardFieldLabel" for="first">Preferred first name</label><input type="text" id="first" name="first" class="WizardFieldInput"></div>
+          <div class="fieldSpec NumberField fieldSpecPadder" id="fieldSpecContainer923"><label class="WizardFieldLabel tc_formLabel" for="923" id="923-label">Salary Requirements</label><input type="text" id="923" name="923" class="NumberField WizardFieldInputContainer WizardFieldInput" aria-labelledby="923-label" inputmode="decimal"></div>
+          ${list("924", "Currency", "Select an option", "fieldSpec SelectFormField AutoCompleteField fieldSpecPadder")}
+        </fieldset>
+        <fieldset class="Section Section8"><div class="Separator Separator8" id="fieldSpecContainer930"><legend class="WizardFieldLabel tc_formTitle" id="930">Education</legend></div>
+          <div class="fieldSpec MultipleDatasetEntryFormField fieldSpecPadder" id="fieldSpecContainer931"><p class="WizardEmptyLabel WizardFieldLabel tc_formLabel datasetField__label" id="931-label"></p><div class="multipleDatasetWrapper tc_formField" id="931" role="group" aria-labelledby="931-label"><div id="multipleDatasetRowsContainer_931">${entry("sample")}${entry("0")}</div><a href="#" id="addRowFor_931" class="addDatasetRow WizardFieldLink" tabindex="0" role="button">add another</a></div></div>
+        </fieldset>
+      </form></main><script>
+        let rows = 1;
+        document.querySelector('#addRowFor_931').addEventListener('click', (event) => {
+          event.preventDefault();
+          const sample = document.querySelector('#multipleDatasetEntry_931_sample');
+          const html = sample.outerHTML.replaceAll('sample', String(rows++)).replace(' aria-hidden="true"', '').replace(' class="TableSampleRow"', '');
+          event.target.insertAdjacentHTML('beforebegin', html);
+        });
+        // What the site's server lists, by the field it is asked for.
+        const lists = { 924: ["$ Canadian Dollar - CAD", "€ Euro - EUR", "$ United States Dollar - USD", "$ United States Dollar (Next Day) - USN"], 2: ["Associates of Science", "Bachelors of Science", "Masters of Science"], 8: ["A V College", "Penn State", "Virginia Tech", "Other / Not Listed"], 12: ["Accounting", "Actuarial Science", "Computer and Information Sciences, General", "Computer Science"] };
+        const namesFor = (select) => lists[select.id.startsWith("931-") ? Number(select.id.split("-")[1]) : Number(select.id)];
+        let open;
+        const close = () => { open?.list.remove(); open?.control.setAttribute("aria-expanded", "false"); open = undefined; };
+        document.addEventListener("mousedown", (event) => {
+          // As Select2 does: a press outside its list closes it, on another
+          // control too, which then opens; on its own control it only closes.
+          if (open?.list.contains(event.target)) return;
+          const control = event.target.closest(".select2-selection");
+          const own = open?.control === control;
+          if (open) close();
+          if (!control || own) return;
+          const select = control.closest(".select2-container").previousElementSibling;
+          const names = namesFor(select);
+          const list = document.createElement("span");
+          list.className = "select2-container select2-container--default select2-container--open";
+          list.style.position = "absolute";
+          list.innerHTML = '<span class="select2-dropdown bigdrop select2-dropdown--below"><span class="select2-search select2-search--dropdown"><input class="select2-search__field" type="search" role="searchbox"></span><span class="select2-results"><ul class="select2-results__options" role="listbox" id="select2-' + select.id + '-results" aria-expanded="true"></ul></span></span>';
+          document.body.append(list);
+          control.setAttribute("aria-expanded", "true");
+          open = { control, list };
+          const box = list.querySelector("input");
+          const results = list.querySelector("ul");
+          const show = (text) => {
+            results.innerHTML = '<li id="liLoading" role="option" class="select2-results__option WizardFieldInput loading-results">Searching…</li>';
+            setTimeout(() => {
+              const found = names.map((name, index) => [index, name]).filter(([, name]) => name.toLowerCase().includes(text.trim().toLowerCase()));
+              results.innerHTML = found.length
+                ? found.map(([index, name]) => '<li role="option" class="select2-results__option WizardFieldInput" aria-selected="false" data-id="' + (index + 1) + '">' + name + '</li>').join("")
+                : '<li role="alert" class="select2-results__option select2-results__message">No results found</li>';
+            }, 300);
+          };
+          show("");
+          let timer;
+          box.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => show(box.value), 100); });
+          results.addEventListener("mouseup", (up) => {
+            const item = up.target.closest("li[data-id]");
+            if (!item) return;
+            // The site's result objects are shared between rows: a choice
+            // lands in the select it was first picked in.
+            const key = String(namesFor(select)) + ":" + item.dataset.id;
+            const target = (pickedIn[key] ||= select);
+            const option = [...target.options].find((o) => o.value === item.dataset.id) || target.appendChild(new Option(item.textContent, item.dataset.id));
+            option.selected = true;
+            target.dispatchEvent(new Event("change", { bubbles: true }));
+            close();
+          });
+        });
+        // Select2 redraws a control from its select on a change.
+        document.addEventListener("change", (event) => {
+          const select = event.target.closest("select.select2-hidden-accessible");
+          if (!select) return;
+          select.nextElementSibling.querySelector(".select2-selection__rendered").textContent = select.selectedOptions[0]?.text || "";
+        });
+        // The first row once held Computer Science.
+        const pickedIn = { [String(lists[12]) + ":4"]: document.getElementById("931-12-0") };
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${avatureOrigin}/en_US/careers?jobId=1`);
+  await enqueue([page]);
+  const chosen = (id: string) => page.locator(`select[id="${id}"] option:checked`).textContent();
+  await expect.poll(() => chosen("924"), { timeout: 90000 }).toBe("$ United States Dollar - USD");
+  await expect.poll(() => Promise.all(["0", "1"].map((row) => Promise.all([2, 8, 12].map((n) => chosen(`931-${n}-${row}`).catch(() => ""))))), { timeout: 150000 }).toEqual([
+    // No "Data Science" on the list: the closest standard field it holds.
+    ["Masters of Science", "Penn State", "Computer and Information Sciences, General"],
+    // Its Computer Science landed in the first row and was put back.
+    ["Bachelors of Science", "Other / Not Listed", "Computer Science"],
+  ]);
+});
+
+test("an iCIMS resume the account kept, in a frame, is replaced on a refill and by Replace with tailored resume", async () => {
+  const frame = `<!doctype html><meta charset="utf-8"><title>Candidate Profile</title><form onsubmit="return false">
+    <div role="group"><h2 class="iCIMS_SubHeader">Resume</h2>
+      <label id="label_PortalProfileFields.Resume_File" for="PortalProfileFields.Resume_File">Resume</label>
+      <input type="file" id="PortalProfileFields.Resume_File" name="PortalProfileFields.Resume_File" accept=".pdf,.docx">
+      <div id="PortalProfileFields.Resume_FileNameLabel" class="iCIMS_CurrentFile"><span>Old_Account_Resume.pdf</span></div></div>
+    <div role="group"><h2 class="iCIMS_SubHeader">Enter your information</h2>
+      <label for="PersonProfileFields.FirstName">First Name</label><input type="text" id="PersonProfileFields.FirstName" name="PersonProfileFields.FirstName" autocomplete="given-name"></div>
+  </form><script>
+    window.replaced = [];
+    document.querySelector('[type=file]').addEventListener("change", (event) => {
+      const name = event.target.files[0].name;
+      window.replaced.push(name);
+      document.getElementById("PortalProfileFields.Resume_FileNameLabel").firstChild.textContent = name;
+    });
+  </script>`;
+  const site = "https://careers-acme.icims.com";
+  await context.route(`${site}/jobs/9/developer/candidate-frame**`, (route) => route.fulfill({ contentType: "text/html", body: frame }));
+  await context.route(`${site}/jobs/9/developer/candidate?**`, (route) => route.fulfill({ contentType: "text/html",
+    body: `<!doctype html><title>Candidate Profile</title><iframe name="icims_content_iframe" src="${site}/jobs/9/developer/candidate-frame?x=1" style="width:900px;height:600px"></iframe>` }));
+  const page = await context.newPage();
+  await page.goto(`${site}/jobs/9/developer/candidate?held=1`);
+  await enqueue([page]);
+  const app = async () => (await state()).applications.find((candidate: { url: string }) => candidate.url.includes("jobs/9/developer"))!;
+  const inFrame = () => page.frames().find((f) => f.url().includes("candidate-frame"))!;
+  const uploads = () => inFrame().evaluate(() => (window as any).replaced as string[]);
+  const showOldFile = () => inFrame().evaluate(() => {
+    (window as any).replaced = [];
+    (document.querySelector("input[type=file]") as HTMLInputElement).value = "";
+    document.getElementById("PortalProfileFields.Resume_FileNameLabel")!.firstChild!.textContent = "Old_Account_Resume.pdf";
+  });
+  try {
+    await expect.poll(async () => (await app()).status, { timeout: 60000 }).toMatch(/awaiting-user|ready/);
+    expect(await uploads()).toHaveLength(1);
+    expect((await uploads())[0]).not.toBe("Old_Account_Resume.pdf");
+    // And Replace with tailored resume from the card.
+    await showOldFile();
+    await ui({ type: "REPLACE_DOCUMENTS", id: (await app()).id });
+    await expect.poll(async () => (await uploads()).length, { timeout: 45000 }).toBe(1);
+    expect((await app()).missing.join(" ")).not.toContain("Review existing document");
+  } finally {
+    await page.close();
+  }
+});
+
+test("Oracle's Major list has the core of a long field of study chosen", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile,
+    education: [{ organization: "Example Polytechnic State University", title: "Master of Science", fieldOfStudy: "M.S. Data Science, Analytics & Engineering", startDate: "2025-08", endDate: "2027-12", location: "", details: "" }] } });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Education</title><main><div class="apply-flow-section" data-section-number="2">
+        <div class="standard-apply-flow-timeline-form">
+        ${oracleEducationInput("major-49", "major", "Major")}
+        </div>
+      </div></main><script>
+        window.picks = [];
+        ${oracleEducationScript("major-49", "() => ['Computer Science', 'Data Analytics Engineering', 'Data Science']", false, "option")}
+        const major = document.getElementById('major-49');
+        major.addEventListener('input', () => {
+          const toggle = document.getElementById('major-49-toggle-button');
+          if (major.getAttribute('aria-expanded') === 'true') toggle.click();
+          toggle.click();
+        });
+        major.addEventListener('click', () => { if (major.getAttribute('aria-expanded') !== 'true') document.getElementById('major-49-toggle-button').click(); });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect(page.locator("#major-49")).toHaveValue("Data Science", { timeout: 60000 });
 });

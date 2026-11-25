@@ -19,7 +19,7 @@ import { legalQuestion } from "./questions";
 import { degreeAliases, degreeLevel, graduated, highestRow, latestRow, levelRank, studying, thisMonth as currentMonth } from "./education";
 import { localDate, writtenDate } from "./dates";
 import { schoolNames } from "./schools";
-import { salaryAnswer } from "./salary";
+import { currencyListNames, salaryAnswer } from "./salary";
 import { dialCodes, dialCountry, splitPhone } from "./phone";
 import { isFluent, levelChoices, profileLanguages } from "./languages";
 import { profileFactAnswer, profileFactQuestion } from "./profile-facts";
@@ -106,7 +106,8 @@ const secondAddressLine = /^(street |mailing |home )?address( line)? (2|two)$|^(
 const firstAddressLine = /^(street |mailing |home )?address( line)?( 1| one)?$/;
 // "Country", or asked as a question: Amazon's "What country/region are you
 // currently located?".
-const countryLabel = /^country( (or )?region)?( of (residence|residency))?$|^(what|which) country( region)? (are|do) you( currently)? (located|based|live|reside)( in)?$/;
+// Avature's address block names it "Jurisdiction/Country".
+const countryLabel = /^(jurisdiction (or )?)?country( (or )?region)?( of (residence|residency))?$|^(what|which) country( region)? (are|do) you( currently)? (located|based|live|reside)( in)?$/;
 
 
 // Exact school-name prompts observed in real forms. Dates, GPA, status,
@@ -420,11 +421,6 @@ function phoneParts(profile: Profile): { code?: string; national: string } {
   if (profile.phoneCountryCode) return { code: profile.phoneCountryCode, national: profile.phone };
   return splitPhone(profile.phone || "");
 }
-
-const currencyNames: Record<string, string[]> = {
-  USD: ["United States Dollar", "US Dollar"], CAD: ["Canada Dollar", "Canadian Dollar"], EUR: ["Euro"], GBP: ["United Kingdom Pound", "British Pound"],
-  AUD: ["Australia Dollar", "Australian Dollar"], INR: ["India Rupee", "Indian Rupee"], MXN: ["Mexico Peso", "Mexican Peso"],
-};
 
 // A box that takes only a number: a number input, or one whose label says
 // so ("numbers only", "no commas or currency symbols").
@@ -1302,11 +1298,8 @@ function studyAndPayAnswer({ field, profile, label, saved, asked, educationRow }
   // Avature's reads "Currency" with its list's placeholder run on
   // ("CurrencySelect an option").
   if (/^(select |choose )?(a )?(the )?currency( type)?( ?select an option)?$/.test(label) && /^(combobox|select)$/.test(field.kind) && profile.salary?.min !== undefined) {
-    // A bare "$" is the dollar of the country the applicant lives in.
-    const given = (profile.salary.currency || "").trim().toUpperCase();
-    const code = given === "$" && /^(united states|usa?)\b/i.test((profile.country || "").trim()) ? "USD" : given;
-    const names = currencyNames[code];
-    if (names) return { value: names[0], choices: [...names.slice(1), code] };
+    const names = currencyListNames(profile);
+    if (names.length) return { value: names[0], choices: names.slice(1) };
   }
   // The pay period beside it, a radio group with no label of its own
   // (Avature's Hourly / Monthly / Annually): the period the applicant gave
@@ -1510,7 +1503,11 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
   // label carried them and was left.
   const definedAway = `${field.question || ""} ${field.label}`.replace(/\b(a person|all persons) (of|having origins in|who identify)\b[^.]*?(?=\b(hispanic|white|black|native hawaiian|asian|american indian|two or more)\b|$)/gis, " ")
     // Nor do its own category names ("American Indian" is not India's).
-    .replace(/\b(american indian|alaska(n)? native|native hawaiian|pacific islander)\b/gi, " ");
+    .replace(/\b(american indian|alaska(n)? native|native hawaiian|pacific islander)\b/gi, " ")
+    // Nor the U.S. veterans' law the veteran form quotes: the "Vietnam Era
+    // Veterans' Readjustment Assistance Act" is no Vietnamese question (a
+    // report: the veteran radios were left to the model).
+    .replace(/\bvietnam era\b/gi, " ");
   if (demographic && (
     countriesNamed(geography, definedAway).some((country) => country !== "US") ||
     /\b(equality act|employment equity|visible minorit\w*|aboriginal|torres strait|first nations|indigenous|metis|inuit|caste|scheduled (caste|tribe)|socio ?economic|religio\w*)\b/.test(normalize(`${field.question || ""} ${field.label}`)

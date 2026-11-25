@@ -20,8 +20,11 @@ export function transitionTiming(
 // description and Save never reached. Oracle Recruiting Cloud types each school
 // through a search that takes 25-30 s to settle (four wordings tried in
 // turn): two schools used the minute up, and the jobs after them were never
-// reached (240 s). Others: 60 s.
-export function configPassTimeout(hostname: string): number {
+// reached (240 s). Avature's lists search its server about a second after
+// each key: its schools and majors, several wordings tried each, took over a
+// minute for two rows (240 s). Others: 60 s.
+export function configPassTimeout(hostname: string, wizard = false): number {
+  if (wizard) return 240_000;
   if (/(^|\.)oraclecloud\.com$/.test(hostname)) return 240_000;
   return /(^|\.)(myworkday(jobs)?\.com|successfactors\.(com|eu)|sapsf\.(com|eu)|ns2cloud\.com|smartrecruiters\.com)$/.test(hostname) ? 150_000 : 60_000;
 }

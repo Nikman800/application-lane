@@ -928,6 +928,11 @@ test("unloaded remote screening menus receive confirmed binary answers without g
   assert.equal(ask("Are you authorized to work in the United States?", us(applicant, "", "No")), undefined);
 });
 
+test("an address block's Jurisdiction/Country list gets the profile's country", () => {
+  const options = ["Afghanistan", "Canada", "United States", "Zambia"];
+  assert.equal(proposals([field("Jurisdiction/Country", { kind: "select", options })], { ...profile, country: "United States" })[0]?.value, "United States");
+});
+
 test("demographic choices come from the profile, matched to each portal's option wording", () => {
   const applicant = profileSchema.parse({
     ...profile,
@@ -965,6 +970,13 @@ test("demographic choices come from the profile, matched to each portal's option
   const vevraaOptions = [veteran[0] + ".", veteran[1] + ".", "I choose not to self‐identify."];
   for (const [veteranStatus, index] of [["Yes", 0], ["No", 1], ["Decline", 2]] as const)
     assert.equal(pick(vevraa, vevraaOptions, { ...applicant, veteranStatus }), vevraaOptions[index], veteranStatus);
+  // iCIMS's veteran radios are labelled by the whole VEVRAA notice, which
+  // names the "Vietnam Era Veterans' Readjustment Assistance Act": a U.S.
+  // law, not another country's question (a report).
+  const notice =
+    "Why are you being asked to complete this form? 1. This employer is a Government contractor subject to the Vietnam Era Veterans' Readjustment Assistance Act of 1974, as amended by the Jobs for Veterans Act of 2002, 38 U.S.C. 4212 (VEVRAA).";
+  const upper = ["I IDENTIFY AS ONE OR MORE OF THE CLASSIFICATIONS OF PROTECTED VETERAN LISTED ABOVE", "I AM NOT A PROTECTED VETERAN", "I DON'T WISH TO ANSWER"];
+  assert.equal(pick(notice, upper, { ...applicant, veteranStatus: "I am not a veteran" }), upper[1]);
   // The OFCCP disability form; its decline option must not read as "No".
   const disability = [
     "Yes, I have a disability (or previously had a disability)",

@@ -18,6 +18,12 @@
   "trackedInputSelectors": [],
   "inputSelectors": [
     [
+      "currency",
+      [
+        ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'currency')]]//select"
+      ]
+    ],
+    [
       "experience",
       [
         {

@@ -219,6 +219,12 @@ test("matches options in ordered stages without choosing duplicates", () => {
   );
 });
 
+test("a currency written with its symbol and code is chosen for its name when its code is asked for too", () => {
+  const options = ["$ Canadian Dollar - CAD", "$ United States Dollar - USD", "$ United States Dollar (Next Day) - USN"].map((label) => ({ label, value: label }));
+  assert.equal(matchOption(["United States Dollar", "US Dollar", "USD"], options, globals)?.label, "$ United States Dollar - USD");
+  assert.equal(matchOption(["United States Dollar"], options, globals), undefined);
+});
+
 test("option matching never infers names from contained words", () => {
   assert.equal(
     matchOption(["No"], [{ label: "Not authorized", value: "x" }], globals),
@@ -565,6 +571,20 @@ test("a school is also tried by its other whole names, never by a sibling's", ()
   assert.equal(pick("Michigan State University"), undefined);
   assert.equal(pick("Virginia Commonwealth University"), undefined);
   assert.equal(pick("MSU"), undefined);
+});
+
+// Oracle's Major list holds "Data Science", not the saved wording: a rule that
+// sets fieldWordings gets the shorter wordings after the full one.
+test("a field of study is also tried by its shorter wordings only where the rule sets fieldWordings", () => {
+  const studied = profileSchema.parse({
+    ...profile,
+    education: [{ organization: "Penn State", title: "Master of Science", fieldOfStudy: "M.S. Data Science, Analytics & Engineering", startDate: "2025-08", endDate: "2027-12", location: "", details: "" }],
+  });
+  const context = { collection: "education" as const, index: 0 };
+  const values = selectorValues("major", { path: ".", fieldWordings: true }, studied, globals, context);
+  assert.equal(values[0], "M.S. Data Science, Analytics & Engineering");
+  assert.ok(values.includes("Data Science"));
+  assert.deepEqual(selectorValues("major", { path: "." }, studied, globals, context), ["M.S. Data Science, Analytics & Engineering"]);
 });
 
 test("a stripped job description holds no semicolon, which SmartRecruiters refuses", () => {

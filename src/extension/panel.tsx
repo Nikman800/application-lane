@@ -590,6 +590,9 @@ function usePanel() {
   const [draftingReady, setDraftingReady] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  // A notice from an action on one tab ("Replacing the site's document…") is
+  // about that tab's application: it shows only while that tab is in front.
+  const [noticeTab, setNoticeTab] = useState<number | undefined>();
   const [busy, setBusy] = useState(false);
   const [pairToken, setPairToken] = useState("");
   const [urls, setURLs] = useState("");
@@ -962,9 +965,13 @@ function usePanel() {
     setError("");
     setNotice("");
     setBusy(true);
+    const from = shownTab;
     try {
       await work();
-      if (success) setNotice(success);
+      if (success) {
+        setNoticeTab(from);
+        setNotice(success);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -1236,7 +1243,7 @@ function usePanel() {
     : !profile.confirmed
       ? "Confirm your profile before filling."
       : "";
-  return { page, showPage, setPage, queue, setQueue, profile, imports, dispatchProfile, conflicts, setConflicts, setProfile, connected, setConnected, draftingReady, setDraftingReady, error, setError, notice, setNotice, busy, setBusy, pairToken, setPairToken, urls, setURLs, tabs, setTabs, selected, setSelected, showTabs, setShowTabs, review, setReview, filter, setFilter, showArchived, setShowArchived, tabContext, setTabContext, scanError, setScanError, attachChoice, setAttachChoice, pickerQuery, setPickerQuery, search, setSearch, issueTarget, setIssueTarget, sharing, setSharing, issueCategory, setIssueCategory, issueNote, setIssueNote, issueConsent, setIssueConsent, issueImages, setIssueImages, issueImageError, setIssueImageError, addIssueImages, clipboardImages, pasteIssueImage, issues, setIssues, submissions, setSubmissions, fixer, setFixer, waitingBuild, setWaitingBuild, fixerSettings, setFixerSettings, recordings, setRecordings, activeRecordings, setActiveRecordings, clock, setClock, answerSuggestions, setAnswerSuggestions, deleteConfirm, setDeleteConfirm, deleteDocuments, setDeleteDocuments, dailyGoal, exportProfile, importProfile, loadBackend, rescan, scanned, switching, setSwitching, scanActive, shownTab, holder, submittedNow, refreshRecordings, markSubmitted, abandon, action, edit, cleanLines, importResumes, add, saveBlob, exportIssue, shareIssue, openSharedIssue, copyIssue, siteAccess, access, savePosting, checkFit, documents, download, documentLabel, copyPath, uploadFiles, listed, progressing, ready, attention, submittedCount, linkedApplication, linkedFilling, recordingHere, progress, fillRunning, onboardingSteps, fillPrerequisite };
+  return { page, showPage, setPage, queue, setQueue, profile, imports, dispatchProfile, conflicts, setConflicts, setProfile, connected, setConnected, draftingReady, setDraftingReady, error, setError, notice: noticeTab === undefined || noticeTab === tabContext?.tabId ? notice : "", setNotice: (value: string) => { setNoticeTab(undefined); setNotice(value); }, busy, setBusy, pairToken, setPairToken, urls, setURLs, tabs, setTabs, selected, setSelected, showTabs, setShowTabs, review, setReview, filter, setFilter, showArchived, setShowArchived, tabContext, setTabContext, scanError, setScanError, attachChoice, setAttachChoice, pickerQuery, setPickerQuery, search, setSearch, issueTarget, setIssueTarget, sharing, setSharing, issueCategory, setIssueCategory, issueNote, setIssueNote, issueConsent, setIssueConsent, issueImages, setIssueImages, issueImageError, setIssueImageError, addIssueImages, clipboardImages, pasteIssueImage, issues, setIssues, submissions, setSubmissions, fixer, setFixer, waitingBuild, setWaitingBuild, fixerSettings, setFixerSettings, recordings, setRecordings, activeRecordings, setActiveRecordings, clock, setClock, answerSuggestions, setAnswerSuggestions, deleteConfirm, setDeleteConfirm, deleteDocuments, setDeleteDocuments, dailyGoal, exportProfile, importProfile, loadBackend, rescan, scanned, switching, setSwitching, scanActive, shownTab, holder, submittedNow, refreshRecordings, markSubmitted, abandon, action, edit, cleanLines, importResumes, add, saveBlob, exportIssue, shareIssue, openSharedIssue, copyIssue, siteAccess, access, savePosting, checkFit, documents, download, documentLabel, copyPath, uploadFiles, listed, progressing, ready, attention, submittedCount, linkedApplication, linkedFilling, recordingHere, progress, fillRunning, onboardingSteps, fillPrerequisite };
 }
 export type PanelState = ReturnType<typeof usePanel>;
 

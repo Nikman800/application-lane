@@ -822,13 +822,15 @@ function labeledFallback(
 // back to the list's own "not found" entry when a school is missing from it.
 // A dropdown already searched in this pass is not searched again by another
 // configured path to the same control.
-const searchedDropdowns = new WeakMap<Element, "selected" | "no-match">();
+const searchedDropdowns = new WeakMap<Element, "selected" | "no-match" | `closest:${string}`>();
 
 // A Select2 list that has no options until something is typed: its choices
 // come from the site's server (Avature's University/School, an employer). Typing "Pennsylvania State University, University
 // Park" found nothing, so the second school was left empty.
 function remoteSelect2(target: Element) {
-  const container = target.closest(".select2-container") || target.querySelector(".select2-container");
+  // The hidden select itself is drawn by the container after it.
+  const beside = isTag(target, "select") && target.nextElementSibling?.matches(".select2-container") ? target.nextElementSibling : undefined;
+  const container = beside || target.closest(".select2-container") || target.querySelector(".select2-container");
   const control = container?.querySelector('.select2-selection[role="combobox"]');
   const select = container?.previousElementSibling;
   if (!control || !select || !isTag(select, "select")) return;
@@ -854,7 +856,8 @@ async function viaSearchDropdown(
   values: string[],
   globals: GlobalConfig,
   options: InterpreterOptions,
-): Promise<"selected" | "unsupported" | "no-match"> {
+  study = false,
+): Promise<"selected" | "unsupported" | "no-match" | `closest:${string}`> {
   // A configured path can resolve to the field's label; the dropdown is the
   // anchor in the same iCIMS row.
   const anchor = target.matches('a[id$="_icimsDropdown"]')
@@ -864,7 +867,7 @@ async function viaSearchDropdown(
   if (options.isLocked?.(anchor)) return "unsupported";
   const earlier = searchedDropdowns.get(anchor);
   if (earlier) return earlier;
-  const outcome = await searchDropdown(anchor, target, values, globals, options);
+  const outcome = await searchDropdown(anchor, target, values, globals, options, study);
   searchedDropdowns.set(anchor, outcome);
   setTimeout(() => searchedDropdowns.delete(anchor), 20_000);
   return outcome;
@@ -959,13 +962,24 @@ async function searchDropdown(
   values: string[],
   globals: GlobalConfig,
   options: InterpreterOptions,
-): Promise<"selected" | "no-match"> {
+  study = false,
+): Promise<"selected" | "no-match" | `closest:${string}`> {
   const row = anchor.closest(".iCIMS_TableRow") || anchor.parentElement;
   // Select2 opens its search box and results in a list of its own at the end
   // of the page, one at a time; "Searching…" and "No results found" are
   // messages there, not options.
   const select2 = anchor.matches(".select2-selection");
-  const list = () => anchor.ownerDocument.querySelector(".select2-container--open .select2-dropdown");
+  // Only this control's own list: one left open by another control (a
+  // Currency list nothing was picked from) took every later search, and
+  // each school, degree and major was searched among the currencies.
+  const list = () => {
+    const owned = ["aria-controls", "aria-owns"].map((name) => anchor.getAttribute(name)).find(Boolean);
+    const own = owned ? anchor.ownerDocument.getElementById(owned)?.closest(".select2-dropdown") : undefined;
+    if (own) return own;
+    return anchor.getAttribute("aria-expanded") === "true"
+      ? anchor.ownerDocument.querySelector(".select2-container--open .select2-dropdown")
+      : null;
+  };
   const search = () =>
     (select2
       ? list()?.querySelector<HTMLInputElement>("input.select2-search__field")
@@ -989,14 +1003,14 @@ async function searchDropdown(
   const isOpen = () =>
     anchor.getAttribute("aria-expanded") === "true" ||
     Boolean(search()?.getClientRects().length);
-  const event = (element: Element, type: string, eventOptions: Record<string, unknown> = {}) =>
+  const event = (element: Element, type: string, eventOptions: Record<string, unknown> = {}, values: string[] = []) =>
     execute({
       element,
       globals,
       method: "event",
       action: { event: type, eventOptions } as FillAction,
       signal: options.signal,
-      values: [],
+      values,
     });
   const open = async () => {
     if (!isOpen()) {
@@ -1013,17 +1027,64 @@ async function searchDropdown(
     }
     return isOpen();
   };
-  const choose = async (item: Element | undefined) => {
+  // The hidden select behind a Select2 control.
+  const selectOf = (control: Element) => {
+    const hidden = control.closest(".select2-container")?.previousElementSibling;
+    return hidden instanceof HTMLSelectElement ? hidden : undefined;
+  };
+  // `answers` names the entry as the answer: the list's "Other / Not Listed"
+  // is taken as a deliberate pick (a school missing from the list), which
+  // the executor otherwise refuses as an unconfirmed "Other".
+  const choose = async (item: Element | undefined, answers: string[] = []) => {
     if (!item) return false;
-    await event(item, "mousedown");
+    const own = select2 ? selectOf(anchor) : undefined;
+    // Select2 lists that share their result objects tie a choice to the
+    // select it was first picked in: picking it again from another row's list
+    // selects it in that first row (a master's and a bachelor's Major swapped).
+    const others = own
+      ? [...anchor.ownerDocument.querySelectorAll<HTMLSelectElement>("select.select2-hidden-accessible")]
+          .filter((other) => other !== own)
+          .map((other) => ({ other, value: other.value }))
+      : [];
+    await event(item, "mousedown", {}, answers);
     // Select2 takes the choice on the button's release.
-    if (select2) await event(item, "mouseup");
+    if (select2) await event(item, "mouseup", {}, answers);
     if (
       item.isConnected &&
-      !(await execute({ element: item, globals, method: "click", signal: options.signal, values: [] }))
+      !(await execute({ element: item, globals, method: "click", signal: options.signal, values: answers }))
     )
       return false;
     await sleep(200, options.signal);
+    if (own) {
+      const set = async (target: HTMLSelectElement, value: string, text?: string) => {
+        const option =
+          [...target.options].find((candidate) => candidate.value === value) ||
+          (text === undefined ? undefined : target.appendChild(new Option(text, value)));
+        if (!option) return;
+        option.selected = true;
+        // Select2 redraws its control from the select on a change.
+        await (options.execute || defaultExecute)({
+          element: target,
+          guardElement: target.parentElement || target,
+          globals,
+          method: "event",
+          action: { event: "change", eventOptions: {} } as FillAction,
+          signal: options.signal,
+          values: [],
+        });
+      };
+      let taken: { value: string; text: string } | undefined;
+      for (const { other, value } of others) {
+        if (other.value === value) continue;
+        // Only the crossed choice: a site clearing a dependent list stays.
+        const picked = other.selectedOptions[0];
+        if (!picked || normalize(picked.text) !== normalize(label(item))) continue;
+        taken = { value: picked.value, text: picked.text };
+        await set(other, value);
+      }
+      if (taken && own.value !== taken.value) await set(own, taken.value, taken.text);
+      if (taken) await sleep(100, options.signal);
+    }
     return textValue(anchor).trim() !== before || textValue(anchor).trim() === label(item);
   };
   // Search on the site: the list must change after typing (the site asks its
@@ -1057,7 +1118,9 @@ async function searchDropdown(
     for (let attempt = 0; attempt < 27 && !settled; attempt++) {
       await sleep(150, options.signal);
       const now = signature();
-      settled = now !== unfiltered && now === previous;
+      // Select2 shows "Searching…" until the site answers: not an answer.
+      const loading = select2 && Boolean(list()?.querySelector(".loading-results"));
+      settled = now !== unfiltered && now === previous && !loading;
       // Nothing found (an empty list, steady for over three seconds): iCIMS'
       // State list asks its server a second after the last key and takes
       // another half second to answer, so a shorter wait gave up just
@@ -1119,16 +1182,38 @@ async function searchDropdown(
   // A school missing from the list: the list's own entry for that ("*School
   // Not Found (enter into Other School)", "Other") says so, and "Other
   // School" (filled next) names it.
-  if (/school|institution|university|college/i.test(`${anchor.id} ${anchor.getAttribute("aria-label") || ""}`)) {
+  // (A Select2 list is named by its field's label: its control has no id.)
+  const named = select2 ? anchor.closest(".fieldSpec,.datasetfieldSpec")?.querySelector("label")?.textContent || "" : "";
+  if (/school|institution|university|college/i.test(`${anchor.id} ${anchor.getAttribute("aria-label") || ""} ${named}`)) {
     const notListed = (items: Element[]) =>
       items.find((item) => /not found|not listed|^\W*other\b/i.test(label(item)));
     if (!opened || !isOpen()) await open();
     opened = true;
-    if (await choose(notListed(results()))) return "no-match";
+    const pickNotListed = (items: Element[]) => {
+      const item = notListed(items);
+      return choose(item, item ? [label(item)] : []);
+    };
+    if (await pickNotListed(results())) return "no-match";
     for (const term of ["Not Found", "Other"]) {
-      if (await choose(notListed(await searchFor(term)))) break;
+      if (await pickNotListed(await searchFor(term))) return "no-match";
     }
   }
+  // A field of study the list does not hold (an Avature Specialization/Major
+  // list of standard program names has no "Data Science"): the closest
+  // standard field it does, as for Workday's (relatedFieldsOfStudy). A
+  // listing may add ", General" to the name. The fill says it was the closest.
+  if (study) {
+    const bare = (text: string) => normalize(text).replace(/\s*general$/, "").replace(/s$/, "");
+    for (const related of relatedFieldsOfStudy(values[0] || "")) {
+      if (!opened || !isOpen()) await open();
+      opened = true;
+      const item = (await searchFor(related)).find((option) => bare(label(option)) === bare(related));
+      if (item && (await choose(item))) return `closest:${label(item)}`;
+    }
+  }
+  // Nothing picked: close the list, as a press outside it does, so the next
+  // control opens its own.
+  if (select2 && isOpen()) await event(anchor.ownerDocument.body, "mousedown");
   return "no-match";
 }
 
@@ -3305,11 +3390,17 @@ async function applyChoice(
       state.completed = true;
       return "break";
     }
-    const searched = /^(school|major|degree|name|discipline|country|state|education)$/.test(key) || selector.valueKey === "street_listing"
-      ? await viaSearchDropdown(element, values, globals, options)
+    const searched = /^(school|major|degree|name|discipline|country|state|education|currency)$/.test(key) || selector.valueKey === "street_listing"
+      ? await viaSearchDropdown(element, values, globals, options, /^(major|field_of_study|discipline)(_[234])?$/.test(selector.valueKey || key))
       : "unsupported";
     if (searched === "selected") {
       results.push({ key, status: "filled" });
+      state.completed = true;
+      return "break";
+    }
+    if (searched.startsWith("closest:")) {
+      const asked = questionText(element).replace(/[*✱]/g, "").replace(/\s+/g, " ").trim().slice(0, 80) || key;
+      results.push({ key, status: "filled", caution: `${asked}: the site lists no "${values[0]}", so the closest field it lists, "${searched.slice(8)}", was picked. Change it if another fits better.` });
       state.completed = true;
       return "break";
     }

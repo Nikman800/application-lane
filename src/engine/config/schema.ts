@@ -95,6 +95,7 @@ export type SelectorConfig = {
   confirmAddedPath?: string[];
   containerPath?: string | string[];
   everyValue?: boolean;
+  fieldWordings?: boolean;
   hidden?: boolean;
   inputSelectors?: InputSelector[];
   limit?: number;
@@ -137,6 +138,7 @@ export const selectorObjectSchema: z.ZodType<SelectorConfig> = z.lazy(() =>
       confirmAddedPath: z.array(z.string()).optional(),
       containerPath: pathSchema.optional(),
       everyValue: z.boolean().optional(),
+      fieldWordings: z.boolean().optional(),
       hidden: z.boolean().optional(),
       inputSelectors: z.array(inputSelectorSchema).optional(),
       limit: z.number().int().positive().optional(),

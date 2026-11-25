@@ -1282,10 +1282,12 @@ async function fillByConfig(
       const attached = await frameCall(app, frame.frameId, { type: "ATTACHED", name: artifact.name }).catch(() => undefined);
       if (attached?.attached && app.uploadedDocuments?.[kind] === fingerprint) continue;
       const before = frame.observation.fields.length;
-      if (kind === "resume" && !app.resumeSent) {
+      const markedSent = kind === "resume" && !app.resumeSent;
+      if (markedSent) {
         app.resumeSent = true;
         await persist();
       }
+      let answered = true;
       const result = await frameCall(app, frame.frameId, {
         type: "CONFIG_FILL",
         documentId: frame.observation.documentId,
@@ -1293,9 +1295,20 @@ async function fillByConfig(
         profile,
         onlyKeys: [kind === "cover" ? "coverLetter" : "resume"],
         uploads: { [kind]: bytes },
-      }).catch((error: Error) => ({ statuses: [{ key: kind, status: "failed", reason: error.message }] }));
+      }).catch((error: Error) => {
+        answered = false;
+        return { statuses: [{ key: kind, status: "failed", reason: error.message }] };
+      });
       if (!alive(app, operation)) return "stop";
       const statuses = (result.statuses || []) as { key: string; status: string; reason?: string }[];
+      // The page answered and took no file (a frame with no upload of its
+      // own, or its slot locked): nothing was sent, so a resume the site
+      // holds in another frame (iCIMS keeps the account's in the form's
+      // iframe) is still this application's to replace.
+      if (markedSent && answered && !statuses.some((status) => status.status === "filled")) {
+        app.resumeSent = false;
+        await persist();
+      }
       app.configNotes = [
         ...(app.configNotes || []),
         ...statuses
