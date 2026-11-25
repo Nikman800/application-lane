@@ -14,8 +14,11 @@ import { handleStepCheck, handlePressStep } from "./commands/steps";
 import { handleConfigFill } from "./commands/config-fill";
 import { handleOptions } from "./commands/options";
 import { handleApply, handleAttach } from "./commands/attach";
+import { seedLookupCache } from "./lookup-cache";
 
 export async function executeCommand(command: Command): Promise<unknown> {
+  // Oracle's cached lists, readied for the page's next reload (lookup-cache.ts).
+  seedLookupCache();
   // The last line of defence for a draft-only site: whatever asked, this
   // page is not written to, opened or advanced.
   if (draftOnlySite(location.href) && /^(APPLY|ATTACH|CONFIG_FILL|PRESS_STEP|REMOVE_ROW|OPTIONS)$/.test(command.type))

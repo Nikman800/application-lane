@@ -145,3 +145,12 @@ test("the profile fingerprint is stable, follows answers, and ignores revision a
   assert.notEqual(profileFingerprint({ ...a, answers: [{ question: "Pronouns?", answer: "she/her" }] }), profileFingerprint(a));
   assert.notEqual(profileFingerprint({ ...a, city: "Acme City" }), profileFingerprint(a));
 });
+
+// "(ex. Contoso, Northwind, etc.)" is an abbreviation, not the end of a
+// sentence: split there, the question kept only "or who have pending
+// offers?", lost its "relatives" and was not read as a relatives question.
+test("a question with an \"(ex. …)\" list is asked as a whole", async () => {
+  const { askedPart } = await import("../src/shared/standing");
+  const question = "Do you have relatives who are currently employed by an Acme affiliated company (ex. Contoso, Northwind, etc.), or who have pending offers?";
+  assert.equal(askedPart(question), question);
+});

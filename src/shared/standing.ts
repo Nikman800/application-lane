@@ -128,7 +128,7 @@ function sentences(text: string): string[] {
   const joined: string[] = [];
   for (const part of parts) {
     const last = joined.at(-1);
-    if (last !== undefined && /(^|[\s(])(e\.g|i\.e|etc|vs|approx|incl|no|est|dept|inc|ltd|co)\.$/i.test(last)) joined[joined.length - 1] = `${last} ${part}`;
+    if (last !== undefined && /(^|[\s(])(e\.g|i\.e|etc|ex|vs|approx|incl|no|est|dept|inc|ltd|co)\.$/i.test(last)) joined[joined.length - 1] = `${last} ${part}`;
     else joined.push(part);
   }
   return joined;

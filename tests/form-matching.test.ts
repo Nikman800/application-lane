@@ -2631,6 +2631,8 @@ test("Riot Games' Greenhouse lists: Other as None of the above, a business-fluen
   assert.equal(pickListOption(heard, ["Company Website", "Linkedin", "Employee Referral", "Social Media", "None of the above / Other"], (option) => option), "None of the above / Other");
   // Adatum's list names its Other "Source not in list": the applicant picked it by hand.
   assert.equal(pickListOption(heard, ["Company Website", "Linkedin", "Employee Referral", "Source not in list"], (option) => option), "Source not in list");
+  // A list with no plain Other, only "Other Job Board" (and "Event Other", an event): the job board.
+  assert.equal(pickListOption(heard, ["Acme Careers", "I was referred by an Employee", "Event Other", "Glassdoor", "LinkedIn", "Other Job Board", "Zip Recruiter"], (option) => option), "Other Job Board");
   // A multi-select of languages: the fluent one, never the basic one.
   const fluent = field("In which language(s) are you business fluent?", { id: "fluent", kind: "combobox" });
   const languages = proposals([fluent], speaker)[0];

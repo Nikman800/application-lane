@@ -2475,7 +2475,9 @@ function hearAbout(field: Field, profile: Profile): Answer | "leave" | undefined
   // Other", and the list was left for no option matching.
   const others = ["Other", "Other (please specify)", "Other - please specify", "Other (Please Specify)", "Others", "None of the above / Other", "Other / None of the above",
     // Adatum's list: the applicant picked it.
-    "Source not in list", "Not in list", "Not listed", "Source not listed", "Not listed above"];
+    "Source not in list", "Not in list", "Not listed", "Source not listed", "Not listed above",
+    // A list with no plain Other, only "Other Job Board" (an Avature form).
+    "Other Job Board", "Other Job Site", "Other Website"];
   // One box of a "select all that apply" list: the applicant's source, or Other.
   if (field.kind === "checkbox" && field.question) {
     const option = normalize(field.label.startsWith(field.question) ? field.label.slice(field.question.length) : field.label);
