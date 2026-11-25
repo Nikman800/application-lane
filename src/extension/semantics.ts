@@ -556,7 +556,12 @@ export function profileImport(element: Control): boolean {
     element.getAttribute("aria-label"),
     associatedLabel(element),
   ].join(" ");
-  return /\bimport\b.{0,30}\bprofile\b|\bprofile[\s_-]*import/i.test(text);
+  if (/\bimport\b.{0,30}\bprofile\b|\bprofile[\s_-]*import/i.test(text)) return true;
+  // A site widget that matches jobs to a resume (Oracle's recommended-jobs
+  // box on its job pages): the site uploads, parses and leaves the
+  // application for its job search. Never part of an application.
+  return /recommended[\s_-]*jobs|jobs?[\s_-]*(?:match|recommend)/i.test(text) ||
+    Boolean(element.closest('[class*="recommended-jobs"],[class*="job-recommend"],[class*="jobs-recommend"]'));
 }
 
 export function fileKind(element: Control): DocumentKind | undefined {

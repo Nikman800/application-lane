@@ -10359,6 +10359,36 @@ test("Oracle's resume slot is filled beside its profile-import uploader, and hid
   await expect(page.locator("#gender-8")).toHaveValue("");
 });
 
+test("Oracle's recommended-jobs widget, a site uploader that parses a resume and leaves for its job search, is never given the resume", async () => {
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Personal Info</title><main>
+        <div class="recommended-jobs-widget">
+          <span id="rjLabel">Resume</span>
+          <input type="file" class="recommended-jobs-widget__upload-input" aria-labelledby="rjLabel" aria-label="Upload or drag and drop your resume here to get recommended jobs based on your skills" accept=".pdf" id="recommended-upload">
+        </div>
+        <div class="apply-flow-section" data-section-number="1">
+          <div class="input-row"><label class="input-row__label" for="namInformation15-43">Preferred Full Name</label>
+            <input class="input-row__control" id="namInformation15-43" name="namInformation15" aria-required="true" required></div>
+          <div class="file-form-element">
+            <input type="file" class="file-form-element__input upload-button" id="attachment-upload-4" name="attachment-upload" accept=".txt, .pdf">
+            <label class="file-form-element__label" for="attachment-upload-4"><span>Upload Resume</span></label>
+          </div>
+        </div>
+      </main>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/1`);
+  await enqueue([page]);
+  const chosen = (id: string) =>
+    page.locator(`#${id}`).evaluate((input: HTMLInputElement) => input.files?.[0]?.name || "");
+  await expect.poll(() => chosen("attachment-upload-4"), { timeout: 60000 }).toMatch(/\.pdf$/);
+  await expect(page.locator("#namInformation15-43")).toHaveValue(`${profile.firstName} ${profile.lastName}`);
+  expect(await chosen("recommended-upload")).toBe("");
+});
+
 test("answers an earlier application left are replaced, and the applicant's own edits are kept", async () => {
   // As a returning applicant's saved profile fills a form before the
   // extension does: an old email and name, another country.
