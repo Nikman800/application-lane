@@ -470,6 +470,9 @@ export type Observation = {
   // What paused it: the event and the control it landed on.
   pausedBy?: string;
   blockers: string[];
+  // Required controls the site is still resolving.
+  pendingFields?: string[];
+  applicationContainer?: boolean;
   // Document slots the page draws without a file box (SuccessFactors'
   // attachment widgets): "resume", "cover".
   documentSlots?: string[];
@@ -496,7 +499,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-25-oracle-lookup-cache";
+export const CONTENT_VERSION = "2026-11-25-repair-verification";
 export type Proposal = {
   fieldId: string;
   value: string;
@@ -792,7 +795,12 @@ export type FillAttempt = {
   status: "queued" | "filling" | "filled" | "needs-review" | "error" | "paused";
   filled: number;
   note: string;
+  repair?: boolean;
+  repairDocument?: string;
+  repairRootId?: string;
 };
+export type RowPick = { fieldId: string; value: string; label: string };
+export type OwnWrite = { label: string; value: string; section?: string; index?: number };
 export type Application = {
   id: string;
   tabId?: number;
@@ -828,7 +836,8 @@ export type Application = {
   // Enovation's Paylocity rows) was kept as if
   // the applicant had given it. A field still holding what was written here
   // is the extension's to correct.
-  ownWrites?: { label: string; value: string }[];
+  ownWrites?: OwnWrite[];
+  rowPicks?: { url: string; revision: number; entries: RowPick[] }[];
   assisting?: boolean;
   // The last automatic suggestion step: the fields it was given, on which
   // tab and profile, and whether it ran to the end. Its leftovers are only

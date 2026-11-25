@@ -273,6 +273,12 @@ export async function createApp(
   // The six-digit pairing code (pairing.ts), shown where the backend runs.
   const pairing = new Pairing(options.announcePairing || ((announcement) => console.log(pairingBanner(announcement))));
   const store = new Store(directory);
+  let repairAccess = Promise.resolve();
+  const withRepairs = <T>(action: () => Promise<T>): Promise<T> => {
+    const result = repairAccess.then(action);
+    repairAccess = result.then(() => undefined, () => undefined);
+    return result;
+  };
   await store.init();
   // The report fixer's routes, only where its script is in the tree.
   const devTools = devToolsEnabled(process.env, () => existsSync(fileURLToPath(new URL("../../scripts/fixer.ts", import.meta.url))));
@@ -617,6 +623,7 @@ export async function createApp(
             // "check": taken on the fixer's request (lane check), on a page
             // left to settle after a fill.
             trigger: z.enum(["fill", "check"]),
+            form: z.boolean().optional(),
             applicationId: z.string().uuid().optional(),
             application: z.record(z.unknown()).optional(),
             tab: z.object({
@@ -788,21 +795,32 @@ export async function createApp(
       // meanwhile. The transitions are the lane command's; this keeps the
       // records, and gives a repair whose owner went quiet back to the
       // queue with its defects still open.
-      if (path === "/v1/repairs" && req.method === "GET") return send(res, 200, await readRepairs(directory));
+      if (path === "/v1/repairs" && req.method === "GET")
+        return send(res, 200, await withRepairs(() => readRepairs(directory)));
       const repairMatch = path.match(/^\/v1\/repairs\/([^/]+)$/);
       if (repairMatch && req.method === "PUT") {
-        const repair = repairSchema.parse(await jsonBody(req, 1024 * 1024));
+        const body = await jsonBody(req, 1024 * 1024);
+        const repair = repairSchema.parse(body);
+        const { expectedUpdatedAt } = z.object({ expectedUpdatedAt: z.number().optional() }).parse(body);
         if (repair.applicationId !== decodeURIComponent(repairMatch[1])) throw new Error("The record is for another application.");
-        const repairs = await readRepairs(directory);
-        repairs[repair.applicationId] = repair;
-        await atomicJSON(join(directory, "repairs.json"), repairs);
-        return send(res, 200, repair);
+        return await withRepairs(async () => {
+          const repairs = await readRepairs(directory);
+          const current = repairs[repair.applicationId];
+          if (expectedUpdatedAt !== undefined && current?.updatedAt !== expectedUpdatedAt)
+            return send(res, 409, { error: "The repair changed during this command. Inspect the current repair before recording its result." });
+          const saved = { ...repair, updatedAt: Math.max(repair.updatedAt, (current?.updatedAt || 0) + 1) };
+          repairs[repair.applicationId] = saved;
+          await atomicJSON(join(directory, "repairs.json"), repairs);
+          return send(res, 200, saved);
+        });
       }
       if (repairMatch && req.method === "DELETE") {
-        const repairs = await readRepairs(directory);
-        delete repairs[decodeURIComponent(repairMatch[1])];
-        await atomicJSON(join(directory, "repairs.json"), repairs);
-        return send(res, 200, { removed: true });
+        return await withRepairs(async () => {
+          const repairs = await readRepairs(directory);
+          delete repairs[decodeURIComponent(repairMatch[1])];
+          await atomicJSON(join(directory, "repairs.json"), repairs);
+          return send(res, 200, { removed: true });
+        });
       }
       if (path === "/v1/inbox" && req.method === "GET") return send(res, 200, await readInbox());
       if (path === "/v1/inbox" && req.method === "POST") {

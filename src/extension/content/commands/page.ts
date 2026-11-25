@@ -6,9 +6,10 @@ import { Command, pause } from "../core";
 import { cs } from "../state";
 import { PAGE_TIMER_EVENT } from "../../../engine/page/timers";
 import { inspect } from "../inspect";
+import { documentId } from "../tracking";
 
   export async function handleEngineInfo(command: Command): Promise<unknown> {
-  return { version: CONTENT_VERSION, configEngine: configEngineEnabled };
+  return { version: CONTENT_VERSION, documentId, configEngine: configEngineEnabled };
 }
 
   // While a fill runs, a hidden page's own timers are run when due

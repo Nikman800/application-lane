@@ -6,14 +6,31 @@ import { extensionBuild } from "../../shared/build";
 import { redactURL } from "../workspace";
 import { canonicalURL, sameOpening } from "../../shared/matching";
 import { bg } from "./state";
-import { allFrames, api, frameCall, initial, persist } from "./core";
+import { allFrames, api, frameCall, frameDeadline, initial, persist } from "./core";
 import { captchaFrame } from "./badges";
 import { clearFieldFallback } from "./field-fallback";
 import { captureFill, recordings, saveRecording } from "./evidence";
-import { attachTab } from "./tabs";
+import { attachTab, inspectTab } from "./tabs";
 import { uiMessage } from "./ui";
 import { checkSteps, pressStepFor } from "./steps";
 import { enqueue } from "./queue";
+import { applicationForm, differentApplicationStep, knownNonApplication, postingMismatch } from "../application-form";
+import { buildKey } from "../../shared/repairs";
+
+const repairStarts = new Set<string>();
+const fillBusy = (app: Application) => ["queued", "inspecting", "preparing", "filling"].includes(app.status) ||
+  Boolean(app.assisting || app.explicitFill || app.continueAfterSiteFill);
+
+async function inspectApplication(app: Application) {
+  if (app.tabId === undefined) throw new Error("The application tab is closed.");
+  const page = await frameDeadline(inspectTab(app.tabId, false, true), 6_000);
+  const posting = app.postingUrl || app.sourceUrl;
+  const documents = page.frames.map(({ observation }) => observation);
+  const form = knownNonApplication(page.tab.url || app.url) ||
+    postingMismatch(page.tab.url || app.url, posting) || documents.some((document) => postingMismatch(document.url, posting))
+    ? undefined : documents.find(applicationForm);
+  return { page, documents, form };
+}
 
 export function syncQueueSoon() {
   if (bg.syncTimer) {
@@ -185,6 +202,42 @@ export async function liveCommand(message: { action?: string; applicationId?: st
   }
   const app = bg.state.applications.find((candidate) => candidate.id === message.applicationId);
   if (!app) throw new Error("No such application. It may have been removed.");
+  if (message.action === "inspect") {
+    const { page, documents, form } = await inspectApplication(app);
+    return JSON.stringify({
+      applicationId: app.id,
+      tabId: page.tab.id,
+      url: redactURL(page.tab.url || app.url),
+      form: Boolean(form),
+      inaccessible: page.inaccessible,
+      fields: documents.flatMap((document) => document.fields).slice(0, 300)
+        .map(({ label, kind, value, valueText, required, invalid, section, index }) =>
+          ({ label, kind, value: (valueText || value).slice(0, 500), required, invalid, section, index })),
+      blockers: [...new Set(documents.flatMap((document) => [...document.blockers,
+        ...(document.pendingFields || []).map((label) => `${label}: still loading on the site.`)]))],
+    });
+  }
+  if (message.action === "repair-fill") {
+    if (repairStarts.has(app.id) || fillBusy(app)) throw new Error("This application is already being filled.");
+    if (app.archivedAt || app.workflowStage === "submitted" || app.workflowStage === "abandoned" || app.status === "cancelled")
+      throw new Error("This application is closed.");
+    const expected = JSON.parse(message.data || "{}") as { build?: string; step?: string };
+    if (expected.build && expected.build !== buildKey(extensionBuild)) throw new Error("The extension build changed before refilling.");
+    repairStarts.add(app.id);
+    try {
+      const { page, form } = await inspectApplication(app);
+      if (!form || page.tab.id !== app.tabId) throw new Error("Open the tracked application's form before refilling.");
+      if (expected.step && differentApplicationStep(expected.step, page.tab.url || form.url))
+        throw new Error("The repair is on another application step. Open that step, or use --reason page if the target changed.");
+      if (fillBusy(app)) throw new Error("This application is already being filled.");
+      await uiMessage({ type: "FILL_STEP", id: app.id, repair: true, repairDocument: form.documentId });
+      const attempt = app.attempts.at(-1);
+      if (!attempt?.repair) throw new Error("The repair fill did not start.");
+      return JSON.stringify({ attemptId: attempt.repairRootId || attempt.id, tabId: attempt.tabId });
+    } finally {
+      repairStarts.delete(app.id);
+    }
+  }
   if (message.action === "switch") {
     const tab = app.tabId !== undefined ? await chrome.tabs.get(app.tabId).catch(() => undefined) : undefined;
     if (tab?.id !== undefined) {
@@ -210,17 +263,25 @@ export async function liveCommand(message: { action?: string; applicationId?: st
   // Its page loaded again, on the extension's current build (after a
   // reload, a page keeps the old one until refreshed). Never under a fill.
   if (message.action === "refresh") {
-    if (["inspecting", "preparing", "filling"].includes(app.status)) throw new Error("It is being filled. Try again when it finishes.");
+    if (fillBusy(app)) throw new Error("It is being filled. Try again when it finishes.");
     if (app.tabId === undefined) throw new Error("Its tab is closed. Switch to it first.");
     await refreshPast(app.tabId);
     return "Its page now runs the current build.";
+  }
+  if (message.action === "reload-page") {
+    if (fillBusy(app)) throw new Error("Wait until the fill finishes before checking persistence.");
+    if (reportOpen(bg.reportBeat, Date.now())) throw new Error("The applicant is writing a report. Check persistence after it is sent.");
+    const { page, form } = await inspectApplication(app);
+    if (!form || app.tabId !== page.tab.id) throw new Error("Open the tracked application's form before checking persistence.");
+    await chrome.tabs.reload(page.tab.id!);
+    return "Reloading the application page.";
   }
   // The fixer's checks before and after a refill (lane retry, lane check): which build runs, whether the page can be reached and on
   // which build, and a capture of the page as it stands, apart from a fill.
   if (message.action === "about") {
     const tab = app.tabId !== undefined ? await chrome.tabs.get(app.tabId).catch(() => undefined) : undefined;
-    const page = tab?.id !== undefined
-      ? await frameCall(app, 0, { type: "ENGINE_INFO" }).then((reply: { version?: string } | undefined) => reply, () => undefined)
+    const page = tab?.id !== undefined && message.data !== "brief"
+      ? await frameDeadline(frameCall(app, 0, { type: "ENGINE_INFO" }), 2_000).then((reply: { version?: string; documentId?: string } | undefined) => reply, () => undefined)
       : undefined;
     return JSON.stringify({
       build: extensionBuild,
@@ -228,14 +289,15 @@ export async function liveCommand(message: { action?: string; applicationId?: st
       tab: tab ? { open: true, url: redactURL(tab.url || ""), loading: tab.status === "loading", discarded: Boolean(tab.discarded) } : { open: false },
       // The page's own content script: absent on a page the extension cannot
       // reach (closed, signed out to another site, no access).
-      page: page ? { contentVersion: page.version } : undefined,
+      page: page ? { contentVersion: page.version, documentId: page.documentId } : undefined,
       status: app.status,
-      busy: ["inspecting", "preparing", "filling"].includes(app.status) || Boolean(app.assisting || app.explicitFill),
+      busy: fillBusy(app),
+      attempt: app.attempts.at(-1),
     });
   }
   if (message.action === "capture") {
     if (app.tabId === undefined) throw new Error("Its tab is closed.");
-    if (["inspecting", "preparing", "filling"].includes(app.status) || app.assisting) throw new Error("It is being filled. Check again when it finishes.");
+    if (fillBusy(app)) throw new Error("It is being filled. Check again when it finishes.");
     const id = await captureFill(app, app.tabId, "check");
     if (!id) throw new Error("The page shows no form fields to capture.");
     return id;

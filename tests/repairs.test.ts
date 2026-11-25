@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { findDefects, type Evidence } from "../scripts/repair-evidence";
+import { findDefects, summarizeEvidence, type Evidence } from "../scripts/repair-evidence";
 import {
   NO_PROGRESS_LIMIT,
   OWNER_LAPSE_MS,
@@ -20,6 +20,7 @@ import {
   outcome,
   published,
   recordAttempt,
+  recordCleanup,
   release,
   section,
   verifyLive,
@@ -33,6 +34,42 @@ const defect = (kind: Defect["kind"], field: string, detail = "x"): Defect => ({
 const found = (...defects: Defect[]): Found => ({ defects, userActions: [] });
 const city = defect("lost-value", "City");
 const degree = defect("widget", "Degree");
+
+test("repair evidence ties changes and loading controls to the capture without dumping request data", () => {
+  const capture: Evidence = { id: "check", applicationId: APP, frames: [{ observation: { pendingFields: ["Clearance"],
+    fields: [{ label: "Major", kind: "select", required: true, value: "Data Science" }] } }] };
+  const before: Evidence = { id: "before", applicationId: APP, frames: [{ observation: { fields: [{ label: "Major", kind: "select", required: true, value: "" }] } }] };
+  const summary = summarizeEvidence(capture, [], [
+    { request: { method: "GET", url: "https://careers.example/ExtraInformationDictionary?limit=1&secret=test-secret" }, response: { status: 400 } },
+    { request: { method: "POST", url: "https://careers.example/education" }, response: { status: 400, content: { text: "Validation Successful" } } },
+  ], "Major", before);
+  assert.equal(summary.captureId, "check");
+  assert.deepEqual(summary.loading, ["Clearance"]);
+  assert.equal(summary.changedAfterReload?.[0].after, "Data Science");
+  assert.equal(summary.requests[0].kind, "saved option lookup");
+  assert.equal(summary.requests[1].validation, "response says validation successful");
+  assert.doesNotMatch(JSON.stringify(summary), /secret/);
+  assert.equal(findDefects(capture).defects.find((item) => item.field === "Clearance")?.kind, "widget");
+});
+
+test("a manual cleanup stays open until a verified refill reproduces the fix", () => {
+  const open = claim(openRepair(undefined, { applicationId: APP, ...found(degree) }, 1), "fixer", 2, "fixing Degree");
+  const cleaned = recordCleanup(open, [degree.id], "manual", 3);
+  const check = { capture: "unchanged", settledMs: SETTLE_MS, codeChanged: true, found: found(), confirmed: [degree.id] };
+  const unchanged = verifyLive(cleaned, check, 4);
+  assert.equal(unchanged.ok, false);
+  assert.equal(unchanged.repair.defects[0].cleanedIn, "manual");
+  const handoff = release(cleaned, 4, "The repaired page is ready");
+  assert.equal(handoff.nextAction, undefined);
+  assert.equal(handoff.defects[0].status, "open");
+  const verified = verifyLive(handoff, { ...check, proven: [degree.id] }, 5);
+  assert.equal(verified.ok, true);
+  const repeated = verifyLive(verified.repair, { ...check, found: found(degree) }, 6);
+  assert.equal(repeated.ok, false);
+  assert.equal(repeated.repair.state, "needs-fixing");
+  assert.equal(repeated.repair.verification, undefined);
+  assert.equal(repeated.repair.defects[0].cleanedIn, undefined);
+});
 
 // What a fill's capture or a report shows, read the way the repair records
 // need it: a blank required field alone is no defect; the fill

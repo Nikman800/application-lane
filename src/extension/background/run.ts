@@ -1,7 +1,7 @@
 // Part of the extension's service worker (background.ts): one fill of an application's current step.
 // Split out of background.ts as it was; see background.ts for how it starts.
 import { bg } from "./state";
-import { type Application, type Profile, type GenerationJob, type Observation, type Proposal, normalize, type Field, type Artifact } from "../../shared/model";
+import { type Application, type Profile, type GenerationJob, type Observation, type Proposal, normalize, type Field, type Artifact, type RowPick } from "../../shared/model";
 import { genericTitle, singlePostingUrl } from "../../shared/titles";
 import { canonicalURL, postingGuess, proposals, historyRowMap } from "../../shared/matching";
 import { configEngineEnabled } from "../../engine/mode";
@@ -10,13 +10,14 @@ import { pickTranscript } from "../../shared/transcripts";
 import { storeBuild } from "../../shared/store-build";
 import { trustedTypingAvailable, releaseTrustedInput } from "../trusted-input";
 import { rowHolds } from "../row-holds";
-import { carryOnFailed, clearFit, fillable, forApplication, operationKey, resume, schedule, touch } from "./queue";
+import { carryOnFailed, clearFit, fillable, forApplication, operationKey, resume, schedule, touch, trackTab } from "./queue";
 import { type Frame, alive, answerRequests, api, applyFrame, configUploads, dirty, emptyFields, fieldFallbackRequests, frameCall, frameDeadline, loadingSince, pageTimers, persist, endOnStepChange, reinspectNavigation, reviewInterruptedWrite, signingPolicies } from "./core";
-import { guessedAgain, inspectTab, leadingPage, namedByPage, observations, postingFromOwnTab, useApply, wordCount } from "./tabs";
-import { interactedNote } from "./submissions";
+import { applicationForTab, attachTab, guessedAgain, inspectTab, leadingPage, namedByPage, observations, postingFromOwnTab, useApply, wordCount } from "./tabs";
+import { finishedStages, interactedNote } from "./submissions";
 import { assist, leftAsLegal, modelFills, noteAiFilled, readListOptions } from "./field-fallback";
 import { tailoringOf } from "./documents";
 import { broadcast, digest } from "./badges";
+import { applicationForm, postingMismatch, samePosting } from "../application-form";
 
 
 // A step with nothing for its documents, filled again until two passes
@@ -152,11 +153,55 @@ export async function run(app: Application, operation: number) {
     throw new Error("Profile changed. Choose Fill this step with the updated profile.");
   app.profileRevision = profile.revision;
   signingPolicies.set(app.id, profile.signatures ?? "never");
-  const { frames, inaccessible, accessOrigins, frameUrls } = await observations(
+  const { frames: observed, inaccessible, accessOrigins, frameUrls } = await observations(
     app,
     operation,
   );
   if (!alive(app, operation)) return;
+  const posting = app.postingUrl || app.sourceUrl;
+  const wrongPosting = [tab.url, ...observed.map(({ observation }) => observation.url)]
+    .some((url) => url && postingMismatch(url, posting));
+  if (wrongPosting && !app.attempts.at(-1)?.repair && app.tabId !== undefined && tab.url) {
+    // The applicant went on in this tab to another posting's form (a similar
+    // job on the same site) and chose Fill there: that posting is filled as
+    // its own application (the one tracking it, or a new one), with its own
+    // documents. This application keeps its posting and waits for its form.
+    const tabId = app.tabId;
+    const page = tab.url;
+    const owner = bg.state.applications.find((other) => other.id !== app.id && other.status !== "cancelled" &&
+      !other.submittedAt && !finishedStages.includes(other.workflowStage) &&
+      [other.postingUrl, other.sourceUrl, other.url].some((url) => samePosting(page, url)));
+    const note = "Its tab went on to another posting's form, which is filled as that application. Open this posting's form to fill it.";
+    await invalidate(app, "paused", note);
+    app.tabs = app.tabs.filter((related) => related.tabId !== tabId);
+    app.tabId = undefined;
+    app.missing = [];
+    touch(app, "awaiting-user", note);
+    if (owner) await attachTab(owner, tabId);
+    else await trackTab(tabId);
+    await persist();
+    const next = owner || applicationForTab(tabId);
+    if (next) await resume(next);
+    return;
+  }
+  if (wrongPosting) {
+    app.missing = ["This tab shows a different posting. Open the tracked application form."];
+    touch(app, "awaiting-user", app.missing[0]);
+    await persist();
+    return;
+  }
+  const eligible = observed.filter(({ observation }) => applicationForm(observation));
+  const repairAttempt = app.attempts.at(-1);
+  if (repairAttempt?.repairDocument) {
+    if (!eligible.some(({ observation }) => observation.documentId === repairAttempt.repairDocument)) {
+      app.missing = ["The application document changed after the repair check. Inspect it before refilling."];
+      touch(app, "awaiting-user", app.missing[0]);
+      await persist();
+      return;
+    }
+    delete repairAttempt.repairDocument;
+  }
+  const frames = eligible.length ? eligible : observed;
   app.accessOrigins = accessOrigins;
   if (frames.some((f) => f.observation.paused)) {
     touch(
@@ -193,7 +238,7 @@ export async function run(app: Application, operation: number) {
   // full-page SuccessFactors test, filled nothing).
   // A site rule's upload slot counts too: Apple's Add Resume step shows the
   // saved resume with a Remove button and no input until it is pressed.
-  const totalFields = frames.reduce(
+  const totalFields = eligible.reduce(
     (n, f) => n + fillable(f.observation) + (f.observation.foldedSections || 0) + (f.observation.documentSlots?.length || 0) + (f.observation.uploadSlots?.length || 0),
     0,
   );
@@ -201,7 +246,7 @@ export async function run(app: Application, operation: number) {
     // A posting with no form: its Apply leads to the form, and this request
     // carries on there (Amazon's posting). Used once per
     // posting, so a page that leads back here is never pressed again.
-    if (!accessOrigins.length && (primary.observation.description.match(/\S+/g)?.length || 0) >= 40 &&
+    if (!app.attempts.at(-1)?.repair && !accessOrigins.length && (primary.observation.description.match(/\S+/g)?.length || 0) >= 40 &&
         app.tabId !== undefined && !app.applyUsed?.from.includes(canonicalURL(app.url)) && (app.applyUsed?.from.length || 0) < 3) {
       const from = app.url;
       const used = await useApply(app, app.tabId, operation).catch(() => undefined);
@@ -382,17 +427,19 @@ export async function run(app: Application, operation: number) {
   for (const frame of resumeFirst ? [] : frames) {
     if (!alive(app, operation)) return;
     if (configEngineEnabled) {
+      const rowURL = canonicalURL(frame.observation.url);
       const result = await frameCall(app, frame.frameId, {
         type: "CONFIG_FILL",
         documentId: frame.observation.documentId,
         documentURL: frame.observation.url,
         profile,
+        rowPicks: app.rowPicks?.find((entry) => entry.url === rowURL && entry.revision === profile.revision)?.entries,
       }).catch(async (error: Error) => {
         // The page moved to another step while this fill was on the last
         // (the page script answers a command of the old document with
         // "The page document changed."): this fill is over, quietly. The new
         // step is the applicant's to fill; nothing of the old one is resumed on it.
-        if (/The page document changed/i.test(error.message)) return undefined;
+        if (/The (page document|application URL) changed/i.test(error.message)) return undefined;
         // A navigation can destroy a config response after its click already
         // happened. Rebind a fresh document on the same application URL, never
         // resend that config command (it might contain a click or upload).
@@ -404,6 +451,10 @@ export async function run(app: Application, operation: number) {
       });
       if (!alive(app, operation)) return;
       if (!result) return endOnStepChange(app);
+      if (result.rowPicks?.length && result.observation?.url && canonicalURL(result.observation.url) === rowURL) {
+        app.rowPicks = [...(app.rowPicks || []).filter((entry) => entry.url !== rowURL && entry.revision === profile.revision),
+          { url: rowURL, revision: profile.revision, entries: result.rowPicks as RowPick[] }].slice(-12);
+      }
       app.filled += result.statuses.filter(
         (status: { status: string }) => status.status === "filled",
       ).length;
@@ -1195,6 +1246,7 @@ async function fillByProfile(
       const result = await frameCall(app, frame.frameId, {
         type: "ATTACH",
         documentId: frame.observation.documentId,
+        documentURL: frame.observation.url,
         fieldId: now.id,
         expectedValue: now.value,
         revision: now.revision,

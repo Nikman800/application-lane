@@ -17,6 +17,8 @@
 // once more alone; default 1 for full, 0 otherwise), --timeout <minutes> for
 // each step, --label <text>, --without "<path>" (check the regression fails
 // without a change: those files are taken from HEAD in the snapshot).
+// --expect-failure "<assertion message>" identifies the intended failure.
+// --lock-timeout <minutes> bounds the browser lock wait (short checks default to 2).
 //
 // Every run tests a frozen copy of the tree as it is when the run starts
 // (tracked and new files, uncommitted changes included), built into that
@@ -36,6 +38,7 @@ import { holder, lockPath, tryLock, unlock } from "../tests/support/suite-lock";
 import {
   countOutcomes,
   exactTitles,
+  expectedRegressionFailure,
   mayTakeLock,
   nodeTestCounts,
   playwrightOutcomes,
@@ -95,6 +98,10 @@ const expected = kind === "full" ? 3 : kind === "site" ? 1 + (canReplay ? Math.m
 // --without: the tree with these files as committed, where the named tests
 // have to fail. The run succeeds when they do.
 const without = many("without");
+const assertion = option("expect-failure")?.trim();
+if (without.length && !assertion) fail("Name the assertion that should fail on the baseline with --expect-failure.");
+const lockMinutes = Number(option("lock-timeout") ?? (kind === "full" ? 90 : 2));
+if (!Number.isFinite(lockMinutes) || lockMinutes <= 0) fail("--lock-timeout must be a positive number of minutes.");
 
 function fail(message: string): never {
   console.error(message);
@@ -195,8 +202,7 @@ function run(name: string, stepKind: StepKind, command: string[], cwd: string, e
     child.on("close", (code, signal) => {
       clearTimeout(timer);
       if (child.pid) children.delete(child.pid);
-      out.end();
-      done({ name, kind: stepKind, command, exitCode: signal && code === null ? null : code, timedOut, ms: Date.now() - begun, log });
+      out.end(() => done({ name, kind: stepKind, command, exitCode: signal && code === null ? null : code, timedOut, ms: Date.now() - begun, log }));
     });
     child.on("error", (error) => {
       clearTimeout(timer);
@@ -249,7 +255,12 @@ async function takeLock(self: Waiter) {
       if (line !== announced) say((announced = line));
       phase = line;
       record();
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const left = lockMinutes * 60_000 - (Date.now() - begun);
+      if (left <= 0) {
+        timing.lockWaitMs += Date.now() - begun;
+        throw new Error(`Browser lock wait exceeded ${lockMinutes} min (${line}).`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, Math.min(1000, left)));
     }
   } finally {
     rmSync(mine, { force: true });
@@ -283,8 +294,13 @@ async function browser(dir: string, name: string, grep: { grep?: string; invert?
     ...(grep.grep ? ["--grep", grep.grep] : []), ...(grep.invert ? ["--grep-invert", grep.invert] : []), ...(shard ? [`--shard=${shard}`] : [])];
   const step = await run(name, "browser", command, dir, env, minutes(kind === "full" ? 60 : 20));
   timing.executionMs += Date.now() - begun;
-  const outcomes = existsSync(report) ? playwrightOutcomes(JSON.parse(readFileSync(report, "utf8"))) : [];
+  const parsed = existsSync(report) ? JSON.parse(readFileSync(report, "utf8")) : undefined;
+  const outcomes = parsed ? playwrightOutcomes(parsed) : [];
   if (existsSync(report)) step.counts = countOutcomes(outcomes);
+  const failedRuns = outcomes.filter((test) => test.status === "failed").flatMap(({ results }) => results);
+  step.errors = failedRuns.flatMap(({ errors }) => (errors || []).map((error) => (error.message || "").replace(/\x1b\[[0-9;]*m/g, "")));
+  step.unreportedFailures = Boolean(parsed?.errors?.length) ||
+    outcomes.some(({ status, results }) => status === "failed" && (!results.length || results.some((result) => result.status !== "failed" || !result.errors?.length)));
   if (wanted.length) step.unmatched = unmatchedTitles(wanted, outcomes);
   const failed = [...new Set(outcomes.filter((outcome) => outcome.status === "failed").map((outcome) => outcome.title))];
   // Failed tests run once more, alone: a test that passes then is reported
@@ -324,8 +340,8 @@ function finish(): never {
   // Without the change, the regression has to fail, and to fail as tests
   // (not a build that broke, or a name that matched nothing).
   const tested = steps.filter((step) => step.kind === "unit" || step.kind === "browser");
-  const failsWithout = without.length > 0 && tested.length > 0 && tested.every((step) => !step.unmatched?.length && !step.timedOut && step.exitCode !== null) &&
-    tested.some((step) => (step.counts?.failed || 0) > 0);
+  const failsWithout = Boolean(without.length && assertion && expectedRegressionFailure(tested, assertion));
+  if (without.length && !failsWithout) why.push("The baseline did not fail at the named assertion.");
   const result = record(without.length ? (failsWithout ? "fails-without-change" : "does-not-fail-without-change") : verdict, why);
   const counts = steps.filter((step) => step.counts).map((step) => `${step.name}: ${step.counts!.passed} passed, ${step.counts!.failed} failed${step.counts!.flaky ? `, ${step.counts!.flaky} flaky` : ""}${step.counts!.skipped ? `, ${step.counts!.skipped} skipped` : ""}`);
   const replays = steps.filter((step) => step.replays).map((step) => `${step.name}: ${step.replays!.reproduced}/${step.replays!.chosen} forms replayed`);
@@ -393,7 +409,10 @@ if (kind === "unit" || kind === "full") {
   const files = many("file");
   const step = await run("unit tests", "unit", [process.execPath, "--import", "tsx", "--test", ...(files.length ? files : readdirSync(join(dir, "tests")).filter((name) => name.endsWith(".test.ts")).sort().map((name) => `tests/${name}`))], dir, {}, minutes(15));
   timing.executionMs += Date.now() - begun;
-  step.counts = nodeTestCounts(readFileSync(step.log, "utf8"));
+  const log = readFileSync(step.log, "utf8");
+  step.counts = nodeTestCounts(log);
+  step.errors = [...log.matchAll(/^not ok \d+ - .*\n([\s\S]*?)(?=^\s{2}\.\.\.$)/gm)].map((match) => match[1]);
+  step.unreportedFailures = step.errors.length !== (step.counts?.failed || 0);
   steps.push(step);
   if (kind === "unit") finish();
 }

@@ -23,6 +23,8 @@ export type StepResult = {
   counts?: Counts;
   // Requested test titles that matched no test.
   unmatched?: string[];
+  errors?: string[];
+  unreportedFailures?: boolean;
   // Tests that failed, then passed when run again alone.
   retried?: { titles: string[]; passed: string[]; failed: string[]; ms: number };
   // Forms replayed offline: how many, and how many came back close enough
@@ -75,14 +77,16 @@ export function runVerdict(steps: StepResult[], expected: number): { verdict: Ve
 }
 
 // Playwright's JSON report: each test's title and its outcome.
-type JsonSuite = { title?: string; specs?: { title: string; tests: { status: string; results: { status: string }[] }[] }[]; suites?: JsonSuite[] };
-export function playwrightOutcomes(report: { suites?: JsonSuite[]; errors?: unknown[] }): { title: string; status: "passed" | "failed" | "flaky" | "skipped" }[] {
-  const out: { title: string; status: "passed" | "failed" | "flaky" | "skipped" }[] = [];
+type TestResult = { status: string; errors?: { message?: string }[] };
+type JsonSuite = { title?: string; specs?: { title: string; tests: { status: string; results: TestResult[] }[] }[]; suites?: JsonSuite[] };
+type TestOutcome = { title: string; status: "passed" | "failed" | "flaky" | "skipped"; results: TestResult[] };
+export function playwrightOutcomes(report: { suites?: JsonSuite[]; errors?: unknown[] }): TestOutcome[] {
+  const out: TestOutcome[] = [];
   const walk = (suite: JsonSuite) => {
     for (const spec of suite.specs || [])
       for (const test of spec.tests) {
         const status = test.status === "expected" ? "passed" : test.status === "flaky" ? "flaky" : test.status === "skipped" ? "skipped" : "failed";
-        out.push({ title: spec.title, status });
+        out.push({ title: spec.title, status, results: test.results });
       }
     for (const child of suite.suites || []) walk(child);
   };
@@ -127,8 +131,18 @@ export function unmatchedTitles(wanted: string[], ran: { title: string }[]): str
 // that has not started yet waits for every short check that is waiting.
 export type Waiter = { pid: number; kind: "short" | "full"; since: number; label?: string };
 export function mayTakeLock(self: Waiter, waiting: Waiter[]): boolean {
-  if (self.kind === "short") return true;
+  if (self.kind === "short") return !waiting.some((other) => other.kind === "short" &&
+    (other.since < self.since || (other.since === self.since && other.pid < self.pid)));
   return !waiting.some((other) => other.pid !== self.pid && other.kind === "short");
+}
+
+export function expectedRegressionFailure(tests: StepResult[], marker: string): boolean {
+  const failed = tests.filter((step) => (step.counts?.failed || 0) > 0);
+  return failed.length > 0 && tests.every((step) => !step.unmatched?.length && !step.timedOut &&
+    !step.unreportedFailures && step.exitCode !== null && step.exitCode < 126 && Boolean(step.counts)) &&
+    failed.every((step) => Boolean(step.errors?.length) &&
+      step.errors!.every((message) => message.includes(marker) &&
+        (step.kind === "unit" ? /ERR_ASSERTION/.test(message) : /expect\(|AssertionError/.test(message))));
 }
 
 // What a run took, by phase, for the record and the summary line.

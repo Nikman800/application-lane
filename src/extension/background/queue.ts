@@ -207,7 +207,7 @@ export async function carryOnFailed(app: Application, error: unknown) {
   app.note = `Could not carry on with this step automatically (${String((error as Error)?.message || error).slice(0, 160)}). Choose Fill this step.`;
   await persist();
 }
-export async function resume(app: Application, continuation?: { operation: number; tabId: number }) {
+export async function resume(app: Application, continuation?: { operation: number; tabId: number }, repairDocument?: string) {
   if (await draftOnlyTab(app.tabId, app.url)) throw new Error(DRAFT_ONLY_NOTE);
   await clearFieldFallback(app);
   // A delayed resume-upload continuation belongs to one request and one
@@ -258,6 +258,9 @@ export async function resume(app: Application, continuation?: { operation: numbe
     status: "queued",
     filled: 0,
     note: "Waiting for an available fill slot.",
+    ...(repairDocument || (continuation && previous?.repair) ? { repair: true } : {}),
+    ...(repairDocument ? { repairDocument } : {}),
+    ...(continuation && previous?.repair ? { repairRootId: previous.repairRootId || previous.id } : {}),
   });
   app.attempts = app.attempts.slice(-20);
   await broadcast(app, "RESUME");

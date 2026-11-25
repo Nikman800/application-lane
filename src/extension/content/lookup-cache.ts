@@ -9,9 +9,10 @@
 // finds the answer without asking the server.
 const FULL = /ExtraInformationDictionary\?.*&limit=500(#ceCacheLang=.*)$/;
 
-export function seedLookupCache(storage: Storage | undefined = globalThis.sessionStorage): number {
+export function seedLookupCache(storage?: Storage): number {
   let seeded = 0;
   try {
+    storage ??= globalThis.sessionStorage;
     if (!storage) return 0;
     for (let i = 0; i < storage.length; i++) {
       const key = storage.key(i);

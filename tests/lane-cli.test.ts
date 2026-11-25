@@ -250,10 +250,17 @@ test("the command line searches for openings and queues them by number", async (
     assert.match(marked, /being fixed\s+1/);
     assert.match(marked, /Being fixed \(leave these alone for now\):\n\s+\[f00dca\] Acme — Software Engineer\n\s+retrying the upload/);
     assert.doesNotMatch(marked, /Needs you:/);
+    const repairs = await (await fetch(`${url}/v1/repairs`, { headers: auth })).json();
+    const repair = Object.values(repairs)[0] as { applicationId: string; updatedAt: number };
+    const write = (note: string) => fetch(`${url}/v1/repairs/${repair.applicationId}`, {
+      method: "PUT", headers: auth, body: JSON.stringify({ ...repair, note, expectedUpdatedAt: repair.updatedAt }),
+    });
+    assert.deepEqual((await Promise.all([write("first"), write("second")])).map(({ status }) => status).sort(), [200, 409]);
     // No refill without a reason to expect progress.
     assert.match(await lane("retry", "f00dca"), /Not refilled\. Say why a refill should go differently now/);
-    // Given back with its defect open: the record keeps it.
-    assert.match(await lane("release", "f00dca", "the applicant attaches it by hand"), /back with the applicant; 1 defect\(s\) stay open/);
+    assert.match(await lane("release", "f00dca", "the applicant attaches it by hand"), /This repair has live defects/);
+    // Access requires the applicant. The record keeps the upload defect open.
+    assert.match(await lane("release", "f00dca", "sign in to reopen the application", "--blocked"), /back with the applicant; 1 defect\(s\) stay open/);
     assert.match(await lane("status"), /Needs you:\n\s+\[f00dca\] Acme/);
     assert.match(await lane("repairs", "--all"), /released, open/);
   } finally {
@@ -349,7 +356,10 @@ test("the full-screen view's live line opens again after the backend drops it", 
   const server = new WebSocketServer({ port: 0, host: "127.0.0.1" });
   await once(server, "listening");
   const port = (server.address() as { port: number }).port;
-  server.on("connection", (socket) => socket.send(JSON.stringify({ type: "queue", snapshot: { at: Date.now(), applications: [] } })));
+  server.on("connection", (socket) => socket.once("message", () => {
+    socket.send(JSON.stringify({ type: "ready", role: "cli", extension: true }));
+    socket.send(JSON.stringify({ type: "queue", snapshot: { at: Date.now(), applications: [] } }));
+  }));
   const heard: number[] = [];
   const events: string[] = [];
   const line = await liveLine(`ws://127.0.0.1:${port}`, async () => "token", `http://127.0.0.1:${port}`, (queue) => heard.push(queue.at), {

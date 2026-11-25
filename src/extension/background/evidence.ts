@@ -7,6 +7,7 @@ import { usableImages } from "../../shared/issue-images";
 import { installMonitor, removeMonitor } from "../../engine/page/monitor";
 import { bg } from "./state";
 import { applicationForTab, networkSummary, pageEvidence } from "./tabs";
+import { applicationForm, knownNonApplication, postingMismatch } from "../application-form";
 import { BACKEND_DOWN, allFrames, api, persist } from "./core";
 import { invalidate } from "./run";
 
@@ -38,7 +39,8 @@ export function scheduleFillCapture(app: Application, delayMs = 4000, tries = 0)
 }
 export async function captureFill(app: Application, tabId: number, trigger: "fill" | "check" = "fill"): Promise<string | undefined> {
   const { tab, frames } = await pageEvidence(tabId);
-  if (!frames.some((frame) => frame.observation?.fields.length)) return;
+  if (!frames.some(({ observation }) => observation &&
+    (observation.fields.length || observation.pendingFields?.length || observation.atReview || observation.canAdvance))) return;
   // The recording as of now, not as of its last checkpoint: a capture named a
   // recording that ended before the pause it was taken after, and the cause
   // could not be read (Woodgrove's Workday).
@@ -52,6 +54,9 @@ export async function captureFill(app: Application, tabId: number, trigger: "fil
     id: crypto.randomUUID(),
     createdAt: Date.now(),
     trigger,
+    form: !knownNonApplication(tab.url) && !postingMismatch(tab.url, app.postingUrl || app.sourceUrl) &&
+      frames.some(({ observation }) => observation && applicationForm(observation) &&
+        !postingMismatch(observation.url, app.postingUrl || app.sourceUrl)),
     applicationId: app.id,
     application: {
       title: app.title,

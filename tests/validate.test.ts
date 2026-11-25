@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   countOutcomes,
   exactTitles,
+  expectedRegressionFailure,
   mayTakeLock,
   nodeTestCounts,
   playwrightOutcomes,
@@ -74,4 +75,15 @@ test("a short check waiting goes before a full suite at the lock", () => {
   assert.equal(mayTakeLock(full, [full, short]), false);
   assert.equal(mayTakeLock(full, [full]), true);
   assert.equal(mayTakeLock(short, [full, short]), true);
+  const later = { ...short, pid: 3, since: 3 };
+  assert.equal(mayTakeLock(later, [full, short, later]), false);
+  assert.equal(mayTakeLock(short, [full, short, later]), true);
+});
+
+test("a baseline proof must reach the intended assertion", () => {
+  const failed = step({ exitCode: 1, counts: { passed: 0, failed: 1, flaky: 0, skipped: 0, total: 1 } });
+  const marker = "The school kept its own year";
+  assert.equal(expectedRegressionFailure([{ ...failed, errors: [`Error: ${marker}\nexpect(received).toBe(expected)`] }], marker), true);
+  assert.equal(expectedRegressionFailure([{ ...failed, errors: ["Error: expect(received).toBe(expected)"] }], marker), false);
+  assert.equal(expectedRegressionFailure([{ ...failed, errors: [`Test timeout: ${marker}`], unreportedFailures: true }], marker), false);
 });

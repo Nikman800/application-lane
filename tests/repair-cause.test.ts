@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -21,7 +21,7 @@ const repair = (applicationId: string): Repair => ({
   updatedAt: 1,
 });
 
-async function harness(words: string[], store: Record<string, Repair>, dataDirectory: string) {
+async function harness(words: string[], store: Record<string, Repair>, dataDirectory: string, live?: Partial<RepairContext>) {
   const printed: string[] = [];
   const ctx: RepairContext = {
     words,
@@ -39,6 +39,7 @@ async function harness(words: string[], store: Record<string, Repair>, dataDirec
     distBuild: async () => undefined,
     now: () => 5000,
     print: (line) => printed.push(line),
+    ...live,
   };
   return { commands: repairCommands(ctx), printed };
 }
@@ -64,4 +65,48 @@ test("lane cause keeps why it broke, and published waits for it", async () => {
   assert.equal(record.cause, "The City list loads its options only once opened.");
 
   await assert.rejects((await harness(["globex", "  "], store, dir)).commands.cause(), /Say why/);
+});
+
+test("repair refill waits for the exact build and uses its attempt's capture", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "lane-refill-"));
+  await mkdir(join(dir, "captures"));
+  const id = apps[0].id;
+  const record = repair(id);
+  record.defects[0].status = "open";
+  const store = { [id]: record };
+  const build = { commit: "abc1234", builtAt: 1234 };
+  let loaded = false;
+  let started = false;
+  let readyReads = 0;
+  const actions: string[] = [];
+  const { commands, printed } = await harness(["acme", "--reason", "repair", "--reload"], store, dir, {
+    json: true,
+    distBuild: async () => build,
+    now: () => 50_000,
+    sleep: async () => {},
+    send: async (action, applicationId, data) => {
+      actions.push(action);
+      assert.equal(applicationId, id);
+      if (action === "reload") { loaded = true; return { ok: true }; }
+      if (action === "about") {
+        if (loaded && readyReads++ === 0) return { ok: false, error: "The extension is not connected." };
+        return { ok: true, detail: JSON.stringify({ build: loaded ? build : { ...build, builtAt: 1000 }, contentVersion: "loaded",
+          tab: { open: true }, page: { contentVersion: "loaded" }, busy: false,
+          ...(started ? { attempt: { id: "attempt", status: "filled", completedAt: 2000 } } : {}) }) };
+      }
+      if (action === "repair-fill") {
+        assert.deepEqual(JSON.parse(data!), { build: "abc1234@1234" });
+        started = true;
+        return { ok: true, detail: JSON.stringify({ attemptId: "attempt", tabId: 2 }) };
+      }
+      assert.equal(action, "capture");
+      await writeFile(join(dir, "captures", "exact.json"), JSON.stringify({ id: "exact", applicationId: id, form: true,
+        createdAt: 20_000, tab: { tabId: 2 }, application: { attempts: [{ id: "attempt", completedAt: 2000 }] } }));
+      return { ok: true, detail: "exact" };
+    },
+  });
+  await commands.refill();
+  assert.equal(JSON.parse(printed[0]).captureId, "exact");
+  assert.equal(store[id].verification?.capture, "exact");
+  assert.equal(actions.filter((action) => action === "repair-fill").length, 1);
 });

@@ -160,13 +160,15 @@ export const valid = (command: Command) =>
   !cs.composing &&
   command.applicationId === cs.applicationId &&
   command.operation === cs.operation &&
-  command.documentId === documentId;
+  command.documentId === documentId &&
+  (!command.documentURL || command.documentURL === location.href);
 export function invalidCommandReason(command: Command): string | undefined {
   if (cs.paused) return "The application is paused.";
   if (cs.composing) return "Text composition is in progress.";
   if (command.applicationId !== cs.applicationId) return "The application binding changed.";
   if (command.operation !== cs.operation) return "The fill operation changed.";
   if (command.documentId !== documentId) return "The page document changed.";
+  if (command.documentURL && command.documentURL !== location.href) return "The application URL changed.";
 }
 export function guardedRecord(
   command: Command,

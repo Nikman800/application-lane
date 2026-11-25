@@ -286,22 +286,25 @@ export async function reinspectNavigation(app: Application, frameId: number, bef
 // document on the same application URL, and leave the interrupted writes for
 // review. Never replay the original APPLY or change missing-field scoring.
 export async function applyFrame(app: Application, frame: Frame, proposed: Proposal[], operation: number) {
-  const fields = new Map(frame.observation.fields.map((field) => [field.id, field.label]));
+  const fields = new Map(frame.observation.fields.map((field) => [field.id, field]));
   return frameCall(app, frame.frameId, {
-    type: "APPLY", documentId: frame.observation.documentId, proposals: proposed,
+    type: "APPLY", documentId: frame.observation.documentId, documentURL: frame.observation.url, proposals: proposed,
   // frameCall answers with whatever the page sent: typed loosely here as
   // before, and only its results read.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   }).then((result: any) => {
     // Each value written, kept with the application (see ownWrites).
+    const readBack = new Map((result?.observation?.fields || []).map((field: Field) => [field.id, field] as const)) as Map<string, Field>;
     for (const written of (result?.results || []) as { id: string; ok: boolean }[]) {
       const proposal = proposed.find((candidate) => candidate.fieldId === written.id);
-      const label = fields.get(written.id);
-      if (!written.ok || !proposal || !label || !proposal.value) continue;
-      // Rows share a label ("Start Date" in each job), so every value
-      // written under it is kept.
-      const entry = { label: label.slice(0, 300), value: proposal.value.slice(0, 1000) };
-      app.ownWrites = [...(app.ownWrites || []).filter((other) => !(other.label === entry.label && other.value === entry.value)), entry].slice(-300);
+      const field = fields.get(written.id);
+      if (!written.ok || !proposal || !field?.label || !proposal.value) continue;
+      const held = readBack.get(written.id);
+      const value = held && !held.protected && !held.invalid && held.value ? held.value : proposal.value;
+      const row = field.section && field.index !== undefined ? { section: field.section, index: field.index } : {};
+      const entry = { label: field.label.slice(0, 300), value: value.slice(0, 1000), ...row };
+      app.ownWrites = [...(app.ownWrites || []).filter((other) => !(other.label === entry.label &&
+        other.value === entry.value && other.section === entry.section && other.index === entry.index)), entry].slice(-300);
     }
     return result;
   }).catch(async (error: Error) => {

@@ -6,16 +6,17 @@ import { pause, pickerBox, RecordEntry, requestTrustedType, Command } from "../c
 import { fillClick } from "../../../engine/page/click-gate";
 import { configPassTimeout } from "../../../shared/timing";
 import { valid } from "../guards";
-import { controlsWithin, trackLocalControls, hasEditLock, valueOf, markEngineWrite, lockReason, expectOwnedActivation } from "../controls";
-import { radioGroup, tell, menuEntries, entryPoint } from "../../content-dom";
-import { nodeRecords, fieldLabel, documentId, userAttention, attentionSpan, awaitSiteSave, records } from "../tracking";
+import { applicantLock, controlsWithin, elementLockKeys, trackLocalControls, hasEditLock, valueOf, markEngineWrite, lockReason, expectOwnedActivation } from "../controls";
+import { radioGroup, tell, controlledList, menuEntries, entryPoint } from "../../content-dom";
+import { nodeRecords, fieldLabel, documentId, userAttention, attentionSpan, awaitSiteSave, lockedLabels, records } from "../tracking";
 import { writable, type Control } from "../../semantics";
 import { siteInvalid } from "../../../engine/page/invalid";
 import { typeTrusted, reactSelectInput, reactSelect, listedPosition, checkControl } from "../choose";
 import { signatureField, signingAllowed } from "../../../engine/page/signatures";
 import { fillDocument } from "../../../engine/runtime";
 import { fetchSiteOptions } from "../../../engine/config/options-source";
-import { clicksAround } from "../../../engine/config/interpreter";
+import { clicksAround, restoreSwappedSelect2 } from "../../../engine/config/interpreter";
+import type { RowPick } from "../../../shared/model";
 import { pickMonth } from "../../../engine/page/month-picker";
 import { requestMainWorld } from "../../../engine/page/bridge";
 
@@ -23,6 +24,38 @@ import { requestMainWorld } from "../../../engine/page/bridge";
 if (!command.profile?.confirmed)
   throw new Error("A confirmed profile is required.");
 const pass = `${cs.operation}:${command.profile.revision}:${command.fieldId || ""}:${(command.onlyKeys || []).join(",")}`;
+const rowPicks = new Map(command.rowPicks?.map((pick) => [pick.fieldId, pick]));
+const rowOptions = {
+  rowPicks,
+  canRestoreRowPick(select: HTMLSelectElement) {
+    if (!valid(command) || userAttention() || select.disabled || !select.isConnected) return false;
+    const visible = select.nextElementSibling?.querySelector('[role="combobox"]');
+    return [select, ...(visible ? [visible as Control] : [])].every((control) =>
+      !elementLockKeys(control, fieldLabel(control)).some((key) => lockedLabels.has(key) && applicantLock(key)));
+  },
+  restoreRowPick(select: HTMLSelectElement, pick: RowPick) {
+    if (!rowOptions.canRestoreRowPick(select)) return false;
+    const option = [...select.options].find(({ value }) => value === pick.value) ||
+      select.appendChild(new Option(pick.label, pick.value));
+    cs.writing = true;
+    try {
+      markEngineWrite(select);
+      option.selected = true;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      const record = nodeRecords.get(select);
+      if (record) {
+        record.last = valueOf(select);
+        record.revision++;
+        record.automationWritten = true;
+      }
+      cs.stopRecording?.note({ config: "restore-row-pick", id: select.id, label: fieldLabel(select) });
+      return select.value === pick.value;
+    } finally {
+      cs.writing = false;
+    }
+  },
+};
+restoreSwappedSelect2(document, rowOptions);
 if (cs.configPass === pass) return { statuses: cs.configCautions, observation: inspect() };
 cs.configPass = pass;
 cs.configCautions = [];
@@ -196,6 +229,7 @@ for (const wrapper of document.querySelectorAll(
 }
 const result = await fillDocument(command.profile, {
   signal,
+  ...rowOptions,
   onlyKeys: command.onlyKeys,
   // Without documents yet, an upload step would only open its dialog.
   skipKeys: command.uploads ? undefined : ["resume", "coverLetter"],
@@ -281,55 +315,68 @@ const result = await fillDocument(command.profile, {
         return picked;
       }
       if (method === "trustedType" || method === "trustedSearch" || method === "trustedChoose") {
-        const typed = await trustedType(
-          element,
-          values[0] ?? "",
-          safe,
-          signal,
-          true,
-          method === "trustedSearch",
-          // Oracle's lists (cx-select) load results only while the box
-          // keeps focus and close when it blurs: typed for a pick, not
-          // committed (Higher's School).
-          method === "trustedChoose" || element.matches("input.cx-select-input"),
+        const oracle = element.matches("input.cx-select-input");
+        const major = oracle && element.matches('[name="major"]');
+        const search = () => trustedType(
+          element, values[0] ?? "", safe, signal, true, method === "trustedSearch",
+          // Oracle closes its list on blur. A separate configured click picks the answer.
+          method === "trustedChoose" || oracle,
         );
-        // Oracle's searched lists (Major) fetch their matches from the
-        // server, one to four seconds after the typing. The box has to keep
-        // its focus until they are drawn: it was left 0.5 s after the typing,
-        // before any list came, and the site then cleared what was typed.
-        // Waited for here, ended by the options or by a "no results" state.
-        if (typed && method === "trustedType" && element.matches("input.cx-select-input")) {
-          const optionSelector = '[role="option"],[role="gridcell"].cx-select__list-item,[role="row"] .cx-select__list-item,.cx-select__list-item';
-          const drawn = () => {
-            const root = element.ownerDocument;
-            if ([...root.querySelectorAll(optionSelector)].some((entry) => entry.getClientRects().length > 0)) return true;
-            return [...root.querySelectorAll('[class*="cx-select"]')].some((box) =>
-              box.children.length === 0 && /\b(no (matching |matches|results|items)|nothing found)/i.test(box.textContent || ""));
+        const oracleSearch = async () => {
+          const allowed = () => safe() && !userAttention() && !signal.aborted;
+          const options = () => {
+            const list = controlledList(element) ||
+              element.closest(".cx-select-container")?.querySelector(".cx-select__list") ||
+              element.ownerDocument;
+            return [...list.querySelectorAll(".cx-select__list-item")]
+              .filter((entry) => entry.getClientRects().length)
+              .map((entry) => (entry.textContent || "").trim());
           };
-          const waitDrawn = async () => {
-            for (let waited = 0; !drawn() && waited < 6_000 && safe() && !userAttention() && !signal.aborted; waited += 100) {
-              // The box lost its focus before any list came: Oracle's
-              // Degree box, picked just before, takes the focus back
-              // ~0.4 s after it is left, and the site clears the Major
-              // typed meanwhile. Not waited out: typed again below.
+          const query = (values[0] ?? "").trim().toLowerCase();
+          const opened = () => element.getAttribute("aria-expanded") === "true" || options().length > 0;
+          const typeAndWait = async () => {
+            const before = options().join("\n");
+            if (!(await search())) return false;
+            for (let waited = 0; allowed() && waited < 6_000; waited += 100) {
               if (element.ownerDocument.activeElement !== element) return false;
+              const current = options();
+              // The list can hold its unfiltered options while the search runs.
+              if (current.includes("No results") || current.some((entry) => entry.toLowerCase() === query) ||
+                  (current.length && current.join("\n") !== before)) return true;
+              if (waited >= 1_500 && !opened()) return false;
               await pause(100);
             }
-            return true;
+            return false;
           };
-          if (!drawn() && !(await waitDrawn()) && safe() && !userAttention() && !signal.aborted) {
-            // Nothing listed, or the focus was taken. Oracle loads a new
-            // entry's Major list only once the box is opened (a click):
-            // typing into it before finds nothing and no search is sent.
-            // Opened, its list waited for, then typed again.
-            await pause(1_500);
-            if (!drawn()) {
-              (element as HTMLInputElement).value = "";
+          if (!allowed()) return false;
+          // A new Major only starts searching after the control opens.
+          (element as HTMLElement).click();
+          if (await typeAndWait()) return true;
+          if (!allowed() || (element.ownerDocument.activeElement === element && !opened())) return false;
+          // Validation for the previous field can take focus once. Open the
+          // Major again and wait for this search rather than its old options.
+          await pause(500);
+          if (!allowed()) return false;
+          (element as HTMLElement).click();
+          return typeAndWait();
+        };
+        const typed = major && method === "trustedType" ? await oracleSearch() : await search();
+        if (major && method === "trustedType" && !typed) return false;
+        // Other Oracle pickers open from the keys, and their configured
+        // pick handles the site's own options after typing.
+        if (typed && oracle && !major && method === "trustedType") {
+          const allowed = () => safe() && !userAttention() && !signal.aborted;
+          const drawn = () => [...element.ownerDocument.querySelectorAll(".cx-select__list-item, [role='option']")]
+            .some((entry) => entry.getClientRects().length);
+          for (let waited = 0; !drawn() && allowed() && waited < 6_000; waited += 100) {
+            if (element.ownerDocument.activeElement !== element) {
+              await pause(1_500);
+              if (!allowed()) break;
               (element as HTMLElement).click();
-              for (let waited = 0; !drawn() && waited < 8_000 && safe() && !userAttention() && !signal.aborted; waited += 100) await pause(100);
+              await search();
+              break;
             }
-            if (safe() && !userAttention() && !signal.aborted && (await trustedType(element, values[0] ?? "", safe, signal, true, false, true)))
-              await waitDrawn();
+            await pause(100);
           }
         }
         // The entry the menu lists for it: the site's own one where it
@@ -612,5 +659,6 @@ const result = await fillDocument(command.profile, {
     ],
   };
 });
-return { ...result, observation: inspect() };
+restoreSwappedSelect2(document, { ...rowOptions, signal });
+return { ...result, observation: inspect(), rowPicks: [...rowPicks.values()].slice(-100) };
 }

@@ -670,10 +670,10 @@ const repairContext = (): RepairContext => ({
   find,
   name,
   short,
-  send: async (action, applicationId) => {
+  send: async (action, applicationId, data) => {
     const line = await connect();
     try {
-      return await line.send(action, applicationId);
+      return await line.send(action, applicationId, data);
     } finally {
       line.socket.close();
     }
@@ -700,6 +700,10 @@ const commands: Record<string, () => Promise<unknown>> = {
   repair: () => repairCommands(repairContext()).open(),
   fixing: () => repairCommands(repairContext()).own(),
   retry: () => repairCommands(repairContext()).retry(),
+  refill: () => repairCommands(repairContext()).refill(),
+  inspect: () => repairCommands(repairContext()).inspect(),
+  capture: () => repairCommands(repairContext()).capture(),
+  evidence: () => repairCommands(repairContext()).evidence(),
   check: () => repairCommands(repairContext()).check(),
   fixed: () => repairCommands(repairContext()).fixed(),
   release: () => repairCommands(repairContext()).release(),
@@ -729,9 +733,17 @@ if (!run) {
                       open a repair from what shows the problem (needs fixing)
   fixing [<application> [next action]]  the fixer owns it (being fixed); alone, list open repairs
   retry <application> --reason repair|profile|page  refill it on the newest build, with a reason
+  refill <application> --reason repair|profile|page [--reload] [--persist] [--json]
+                      start one repair refill and report its capture and verdict
+  inspect <application> [--json]  read the current form and blockers without a fill
+  capture <application> [--json]  save the current page as evidence and print its ID
+  evidence <application> --capture <id> [--before <id>] [--field <label>]
+                      summarize local field changes and failed site requests
   check <application> [--confirm <n>]  check the settled page; releases it once every defect is gone
+                      --cleanup records a manual correction
+                      --prove <n> --before <capture> [--field <label>] verifies a reproduced fix
   fixed <application> the same check
-  release <application> "<why>"  back to the applicant with defects open, saying why
+  release <application> "<why>" [--blocked]  return a corrected page or report the applicant's access step
   cause <application> "<why>"  why it broke, once found; kept on the record, needed before published
   repairs [--all] [--json]  repair records; published <commit> marks a pushed batch
   search [options]    find openings to apply for (see below); search add 1 2 queues them

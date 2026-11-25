@@ -425,6 +425,19 @@ export function inspect(): Observation {
         clip(b.textContent || b.getAttribute("value") || ""),
       ),
   );
+  const pendingFields = [...document.querySelectorAll('[role="progressbar"][aria-label], [aria-busy="true"][aria-label]')]
+    .filter(rendered)
+    .flatMap((widget) => {
+      const label = widget.getAttribute("aria-label") || "";
+      const row = widget.closest(".input-row, .field, .form-group, [role=group]");
+      const namedControl = row?.querySelector('label, legend, [aria-required="true"], [required]');
+      const field = label.match(/^(.+?)\s+loading(?: screen| indicator)?$/i)?.[1] ||
+        (widget.matches('[aria-busy="true"][aria-required="true"], [aria-busy="true"][required]') ? label : "");
+      if (/\boptional\b/i.test(label)) return [];
+      return field && (namedControl || widget.getAttribute("role") === "progressbar") ? [clip(field, 150)] : [];
+    });
+  const applicationContainer = [...document.querySelectorAll('form[id*="application" i], form[class*="application" i], [data-automation-id="applicationPage"], .apply-flow-section')]
+    .some(rendered);
   for (const field of fields) cs.seenFields.add(field.id);
   return {
     documentId,
@@ -442,6 +455,8 @@ export function inspect(): Observation {
     paused: cs.paused,
     ...(cs.paused && cs.pausedBy ? { pausedBy: cs.pausedBy } : {}),
     blockers,
+    ...(pendingFields.length ? { pendingFields: [...new Set(pendingFields)] } : {}),
+    ...(applicationContainer ? { applicationContainer } : {}),
     // SuccessFactors' Resume and Cover Letter are attachment widgets with
     // no file box: named here so a letter is drafted for its slot (an employer
     // drafted none).

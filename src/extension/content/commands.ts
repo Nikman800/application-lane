@@ -15,10 +15,10 @@ import { handleConfigFill } from "./commands/config-fill";
 import { handleOptions } from "./commands/options";
 import { handleApply, handleAttach } from "./commands/attach";
 import { seedLookupCache } from "./lookup-cache";
+import { applicationForm, knownNonApplication } from "../application-form";
+import { inspect } from "./inspect";
 
 export async function executeCommand(command: Command): Promise<unknown> {
-  // Oracle's cached lists, readied for the page's next reload (lookup-cache.ts).
-  seedLookupCache();
   // The last line of defence for a draft-only site: whatever asked, this
   // page is not written to, opened or advanced.
   if (draftOnlySite(location.href) && /^(APPLY|ATTACH|CONFIG_FILL|PRESS_STEP|REMOVE_ROW|OPTIONS)$/.test(command.type))
@@ -48,10 +48,21 @@ export async function executeCommand(command: Command): Promise<unknown> {
   // Which command, and which check, failed: three Workday fills ended on
   // this with nothing to say why (report 83effc7c).
   if (!valid(command)) throw new Error(`Operation is paused or stale (${command.type}: ${invalidCommandReason(command) || "unknown"})`);
+  if (["APPLY", "ATTACH", "CONFIG_FILL", "OPTIONS"].includes(command.type) && knownNonApplication(location.href))
+    throw new Error("This page is outside the application form.");
+  if ((command.type === "ATTACH" || (command.type === "CONFIG_FILL" && command.uploads)) && !applicationForm(inspect()))
+    throw new Error("Document attachment requires a recognized application form.");
   if (command.type === "AUTHORIZE_MAIN") return handleAuthorizeMain(command);
-  if (command.type === "CONFIG_FILL" && configEngineEnabled) return handleConfigFill(command);
-  if (command.type === "OPTIONS") return handleOptions(command);
-  if (command.type === "APPLY") return handleApply(command);
+  const write = command.type === "CONFIG_FILL" && configEngineEnabled ? handleConfigFill :
+    command.type === "OPTIONS" ? handleOptions : command.type === "APPLY" ? handleApply : undefined;
+  if (write) {
+    try {
+      return await write(command);
+    } finally {
+      // Prepare the next Oracle reload after the fill has had a chance to load lists.
+      if (/(^|\.)oraclecloud\.com$/i.test(location.hostname)) seedLookupCache();
+    }
+  }
   if (command.type === "ATTACH") return handleAttach(command);
   throw new Error("Unknown content operation.");
 }

@@ -31,15 +31,82 @@ type SavedField = {
   fillWarning?: string;
   protected?: boolean;
   protectedReason?: string;
+  section?: string;
+  index?: number;
 };
 export type Evidence = {
   id: string;
   applicationId?: string;
+  form?: boolean;
   createdAt?: number;
-  tab?: { url?: string; ats?: string };
-  application?: { missing?: string[]; attempts?: { status?: string; note?: string; completedAt?: number }[] };
-  frames?: { observation?: { fields?: SavedField[] } }[];
+  tab?: { url?: string; ats?: string; tabId?: number };
+  recordingId?: string;
+  application?: { missing?: string[]; attempts?: { id?: string; repairRootId?: string; status?: string; note?: string; completedAt?: number }[] };
+  frames?: { observation?: { fields?: SavedField[]; pendingFields?: string[] } }[];
 };
+
+export function persistedFieldChanges(before: Evidence, after: Evidence) {
+  const collect = (evidence: Evidence) => (evidence.frames || []).flatMap(({ observation }, frame) =>
+    (observation?.fields || []).filter((field) => field.kind !== "file" && !/password/i.test(field.kind))
+      .map((field) => ({
+        key: JSON.stringify([frame, field.section, field.index, labelKey(field.label)]),
+        label: field.label,
+        required: Boolean(field.required),
+        value: field.valueText || field.value || "",
+      })));
+  const next = collect(after);
+  const seen = collect(before);
+  return seen.flatMap((field) => {
+    const matches = next.filter(({ key }) => key === field.key);
+    if (!matches.length && field.required && before.tab?.url && before.tab.url === after.tab?.url &&
+        seen.filter(({ key }) => key === field.key).length === 1)
+      return [{ label: field.label, required: true, before: field.value, after: "" }];
+    if (matches.length !== 1 || seen.filter(({ key }) => key === field.key).length !== 1) return [];
+    const actual = matches[0];
+    return field.value === actual.value ? [] : [{ label: field.label, required: field.required, before: field.value, after: actual.value }];
+  });
+}
+
+type TraceEvent = { t?: number; kind?: string; data?: Record<string, unknown> };
+type HarEntry = {
+  startedDateTime?: string;
+  request?: { method?: string; url?: string };
+  response?: { status?: number; content?: { text?: string } };
+};
+
+export function summarizeEvidence(capture: Evidence, events: TraceEvent[], entries: HarEntry[], field = "", before?: Evidence) {
+  const reads = (capture.frames || []).flatMap(({ observation }) => observation?.fields || []);
+  const match = (text: string) => !field || text.toLowerCase().includes(field.toLowerCase());
+  return {
+    captureId: capture.id,
+    applicationId: capture.applicationId,
+    tab: capture.tab?.tabId,
+    attempt: capture.application?.attempts?.at(-1)?.id,
+    recordingId: capture.recordingId,
+    fields: reads.filter(({ label }) => match(label)).slice(0, 80)
+      .map(({ label, section, index, value, valueText, invalid }) => ({ label, section, index, value: (valueText || value)?.slice(0, 300), invalid })),
+    loading: (capture.frames || []).flatMap(({ observation }) => observation?.pendingFields || []),
+    changedAfterReload: before ? persistedFieldChanges(before, capture).filter(({ label }) => match(label)) : undefined,
+    changes: events.flatMap(({ t, kind, data }) => {
+      if (!kind || !["value", "write", "navigation"].includes(kind) || !data) return [];
+      const label = String(data.label || data.id || "");
+      if (!match(label)) return [];
+      const info = (key: string) => typeof data[key] === "string" ? data[key].slice(0, 180) : undefined;
+      return [{ ms: t, kind, label, from: info("before") || info("from"), to: info("value") || info("after") || info("to"), cause: info("cause") || info("source") }];
+    }).slice(-40),
+    requests: entries.flatMap(({ request, response, startedDateTime }) => {
+      if (!request?.url || !response?.status || response.status < 400) return [];
+      let url: URL;
+      try { url = new URL(request.url); } catch { return []; }
+      const text = (response.content?.text || "").slice(0, 10000);
+      const validation = /validation successful/i.test(text) ? "response says validation successful" :
+        /both end date and projected comp date are present/i.test(text) ? "response mentions both end and projected completion dates" : undefined;
+      const kind = /ExtraInformationDictionary/i.test(url.pathname) && url.searchParams.get("limit") === "1"
+        ? "saved option lookup" : undefined;
+      return [{ at: startedDateTime, method: request.method, path: url.pathname, status: response.status, kind, validation }];
+    }).slice(-35),
+  };
+}
 
 const ruleKind: Partial<Record<Rule, DefectKind>> = {
   "fill-error": "fill-failed",
@@ -65,6 +132,8 @@ export function findDefects(evidence: Evidence): Found {
     if (!defects.has(id)) defects.set(id, { id, kind, ...(field ? { field: strip(field).slice(0, 300) } : {}), detail: strip(detail).slice(0, 600), status: "open", seenIn: evidence.id });
   };
   const missing = evidence.application?.missing || [];
+  for (const { observation } of evidence.frames || [])
+    for (const label of observation?.pendingFields || []) add("widget", label, "The site's control is still loading.");
   // Fields the fill said it had an answer for and could not write.
   const failedLabels = new Set<string>();
 

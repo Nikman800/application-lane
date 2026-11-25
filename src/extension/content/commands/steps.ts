@@ -27,7 +27,8 @@ return {
   submit: label("submit"),
   submitCount: controls.submit.length,
   // An invisible CAPTCHA runs when Submit is pressed: not a reason to hold it.
-  blockers: snapshot.blockers.filter((blocker) => blocker !== INVISIBLE_CAPTCHA),
+  blockers: [...snapshot.blockers.filter((blocker) => blocker !== INVISIBLE_CAPTCHA),
+    ...(snapshot.pendingFields || []).map((label) => `${label}: still loading on the site.`)],
   unfinished: snapshot.fields
     .filter((f) => (f.required && !f.value) || f.invalid || f.validationWarning)
     .map((f) => (f.required && !f.value ? `${f.label}: empty` : `${f.label}: ${f.validationWarning || "not accepted"}`).slice(0, 160))
@@ -45,6 +46,7 @@ const kind = command.step === "submit" ? "submit" : "next";
 const snapshot = inspect();
 const blocker = snapshot.blockers.find((entry) => entry !== INVISIBLE_CAPTCHA);
 if (blocker) throw new Error(blocker);
+if (snapshot.pendingFields?.length) throw new Error(`${snapshot.pendingFields[0]}: still loading on the site.`);
 if (snapshot.fields.some((f) => (f.required && !f.value) || f.invalid || f.validationWarning))
   throw new Error("Some fields on this step are empty or not accepted. Finish them first.");
 const controls = stepControls(document, adapterFor(location.href).next || undefined)[kind];

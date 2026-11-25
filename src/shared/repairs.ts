@@ -35,6 +35,9 @@ const defectSchema = z.object({
   // Where it was seen, and the capture that showed it gone.
   seenIn: z.string().max(100).optional(),
   resolvedIn: z.string().max(100).optional(),
+  // The current page was corrected by hand. A later refill that leaves
+  // those values alone does not prove the automation defect was fixed.
+  cleanedIn: z.string().max(100).optional(),
 });
 export type Defect = z.infer<typeof defectSchema>;
 
@@ -65,7 +68,8 @@ export const repairSchema = z.object({
   nextAction: z.string().max(400).optional(),
   attempts: z.array(attemptSchema).max(50),
   // A refill started (lane retry) whose outcome no capture has shown yet.
-  refill: z.object({ at: z.number(), reason: z.enum(["repair", "profile", "page"]), build: z.string().max(100).optional() }).optional(),
+  refill: z.object({ at: z.number(), reason: z.enum(["repair", "profile", "page"]), build: z.string().max(100).optional(),
+    attemptId: z.string().max(100).optional(), tabId: z.number().optional() }).optional(),
   // A refill that made no progress after this many tries stops here.
   blocker: z.string().max(400).optional(),
   verification: z.object({ capture: z.string().max(100), build: z.string().max(100).optional(), at: z.number(), settledMs: z.number() }).optional(),
@@ -118,9 +122,9 @@ export function openRepair(existing: Repair | undefined, found: Found & { applic
     if (same < 0) {
       defects.push({ ...defect, status: "open" });
       added++;
-    } else if (defects[same].status === "resolved") {
+    } else if (defects[same].status === "resolved" || defects[same].cleanedIn) {
       // Seen again after it was fixed: open again.
-      defects[same] = { ...defects[same], status: "open", resolvedIn: undefined, seenIn: defect.seenIn };
+      defects[same] = { ...defects[same], status: "open", resolvedIn: undefined, cleanedIn: undefined, seenIn: defect.seenIn };
       added++;
     }
   }
@@ -203,12 +207,20 @@ export function mayRetry(repair: Repair, reason: Attempt["reason"] | undefined, 
 // A refill's outcome: what the capture after it still shows. A targeted
 // defect it no longer shows is resolved; one it shows that the record did
 // not have is added and opened.
-export function recordAttempt(repair: Repair, outcome: { reason: Attempt["reason"]; build?: string; capture?: string; found: Found; confirmed?: string[] }, now: number): Repair {
-  const ids = new Set(outcome.found.defects.map((defect) => defect.id));
+export function recordAttempt(repair: Repair, outcome: { reason: Attempt["reason"]; build?: string; capture?: string; found: Found; confirmed?: string[]; proven?: string[] }, now: number): Repair {
+  const found = new Map(outcome.found.defects.map((defect) => [defect.id, defect]));
   const confirmed = new Set(outcome.confirmed || []);
+  const proven = new Set(outcome.proven || []);
   const resolved: string[] = [];
+  const reopened: string[] = [];
   const defects = repair.defects.map((defect) => {
-    if (defect.status === "open" && !ids.has(defect.id) && (!defect.manual || confirmed.has(defect.id))) {
+    const seen = found.get(defect.id);
+    if (seen && (defect.status === "resolved" || defect.cleanedIn)) {
+      reopened.push(defect.id);
+      return { ...defect, status: "open" as const, resolvedIn: undefined, cleanedIn: undefined, seenIn: seen.seenIn };
+    }
+    if (defect.status === "open" && !seen && (!defect.manual || confirmed.has(defect.id) || proven.has(defect.id)) &&
+        (!defect.cleanedIn || proven.has(defect.id))) {
       resolved.push(defect.id);
       return { ...defect, status: "resolved" as const, resolvedIn: outcome.capture };
     }
@@ -223,7 +235,7 @@ export function recordAttempt(repair: Repair, outcome: { reason: Attempt["reason
     capture: outcome.capture,
     resolved,
     remaining: all.filter((defect) => defect.status === "open").map((defect) => defect.id),
-    added: added.map((defect) => defect.id),
+    added: [...reopened, ...added.map((defect) => defect.id)],
     progress: resolved.length > 0,
   };
   const attempts = [...repair.attempts, attempt].slice(-50);
@@ -235,6 +247,7 @@ export function recordAttempt(repair: Repair, outcome: { reason: Attempt["reason
     defects: all,
     attempts,
     refill: undefined,
+    verification: reopened.length || added.length ? undefined : repair.verification,
     userActions: [...new Set([...repair.userActions, ...outcome.found.userActions])].slice(0, 50),
     // A later check that resolves something is progress again: the block
     // named defects that are no longer all open.
@@ -248,18 +261,19 @@ export function recordAttempt(repair: Repair, outcome: { reason: Attempt["reason
 // defect fixed of several is progress, not a verified repair.
 export function verifyLive(
   repair: Repair,
-  check: { capture: string; build?: string; settledMs: number; found: Found; codeChanged: boolean; confirmed?: string[] },
+  check: { capture: string; build?: string; settledMs: number; found: Found; codeChanged: boolean; confirmed?: string[]; proven?: string[] },
   now: number,
 ): { ok: true; repair: Repair } | { ok: false; repair: Repair; why: string } {
   if (check.settledMs < SETTLE_MS)
     return { ok: false, repair, why: `The page had settled ${Math.round(check.settledMs / 1000)} s; take the capture at least ${SETTLE_MS / 1000} s after the fill.` };
-  const after = recordAttempt(repair, { reason: repair.refill?.reason || "repair", build: check.build, capture: check.capture, found: check.found, confirmed: check.confirmed }, now);
+  const after = recordAttempt(repair, { reason: repair.refill?.reason || "repair", build: check.build, capture: check.capture, found: check.found,
+    confirmed: check.confirmed, proven: check.proven }, now);
   const open = after.defects.filter((defect) => defect.status === "open");
   if (open.length) {
     const added = after.attempts.at(-1)!.added;
     return {
       ok: false,
-      repair: { ...after, state: repair.state === "released" ? "needs-fixing" : repair.state },
+      repair: { ...after, state: repair.state === "released" && open.some((defect) => !defect.cleanedIn) ? "needs-fixing" : repair.state },
       why: `${open.length} still open${added.length ? ` (${added.length} newly found)` : ""}: ${open.slice(0, 4).map((defect) => defect.field || defect.detail).join("; ")}`,
     };
   }
@@ -281,7 +295,13 @@ export function verifyLive(
 // or not: when the rest is theirs (an answer the profile lacks), or a
 // blocked repair the fixer cannot take further now. Open defects stay open.
 export function release(repair: Repair, now: number, why: string): Repair {
-  return { ...repair, state: "released", owner: undefined, note: why.slice(0, 500), updatedAt: now };
+  return { ...repair, state: "released", owner: undefined, nextAction: undefined, refill: undefined, note: why.slice(0, 500), updatedAt: now };
+}
+
+export function recordCleanup(repair: Repair, ids: string[], capture: string, now: number): Repair {
+  return { ...repair, defects: repair.defects.map((defect) =>
+    defect.status === "open" && ids.includes(defect.id) ? { ...defect, cleanedIn: capture } : defect),
+    verification: undefined, updatedAt: now };
 }
 
 // The cause, as the fixer found it from the evidence.

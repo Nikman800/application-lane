@@ -94,6 +94,7 @@ export async function observations(
 export async function inspectTab(
   tabId: number,
   snapshot = false,
+  quick = false,
 ): Promise<{ tab: chrome.tabs.Tab; frames: Frame[]; inaccessible: string[]; frameOrigins: string[] }> {
   const tab = await chrome.tabs.get(tabId);
   if (!tab.url || !/^https?:/.test(tab.url))
@@ -104,9 +105,9 @@ export async function inspectTab(
   // Greenhouse form inside an employer's careers page).
   const frameOrigins = new Set<string>();
   let hiddenOnly: ((origin: string) => boolean) | undefined;
-  for (const frame of await allFrames(tabId)) {
-    if (!/^https?:/.test(frame.url)) continue;
-    if (frame.frameId !== 0 && captchaFrame(frame.url)) continue;
+  const inspect = async (frame: { frameId: number; url: string }) => {
+    if (!/^https?:/.test(frame.url)) return;
+    if (frame.frameId !== 0 && captchaFrame(frame.url)) return;
     const origin = new URL(frame.url).origin;
     if (!(await chrome.permissions.contains({ origins: [`${origin}/*`] }))) {
       inaccessible.push(origin);
@@ -114,7 +115,7 @@ export async function inspectTab(
         hiddenOnly ??= await hiddenFrames(tabId);
         if (!hiddenOnly(origin)) frameOrigins.add(accessPattern(origin));
       }
-      continue;
+      return;
     }
     try {
       // A frame that never finishes loading (a stalled third-party embed)
@@ -125,6 +126,7 @@ export async function inspectTab(
           .executeScript({
             target: { tabId, frameIds: [frame.frameId] },
             files: ["content.js"],
+            ...(quick ? { injectImmediately: true } : {}),
           })
           .then(() =>
             chrome.tabs.sendMessage(
@@ -133,7 +135,7 @@ export async function inspectTab(
               { frameId: frame.frameId },
             ),
           ),
-        frame.frameId === 0 ? 20_000 : 6_000,
+        quick ? 3_000 : frame.frameId === 0 ? 20_000 : 6_000,
       );
       if (!result?.ok) throw new Error(result?.error || "Inspection failed.");
       frames.push({
@@ -144,7 +146,11 @@ export async function inspectTab(
     } catch (error) {
       inaccessible.push(`${origin}: ${(error as Error).message.slice(0, 180)}`);
     }
-  }
+  };
+  const descriptions = await allFrames(tabId);
+  if (quick) await Promise.all(descriptions.map(inspect));
+  else for (const frame of descriptions) await inspect(frame);
+  if (quick) frames.sort((a, b) => a.frameId - b.frameId);
   return { tab, frames, inaccessible: [...new Set(inaccessible)], frameOrigins: [...frameOrigins] };
 }
 

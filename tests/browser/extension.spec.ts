@@ -10389,6 +10389,73 @@ test("Oracle's recommended-jobs widget, a site uploader that parses a resume and
   expect(await chosen("recommended-upload")).toBe("");
 });
 
+test("a repair refill refuses the Oracle job page and a different application for the same site", async () => {
+  const form = (job: number) => `${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/${job}/apply/section/1`;
+  const listing = `${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/jobs`;
+  await context.route(`${oracleOrigin}/**`, (route) => route.fulfill({ contentType: "text/html",
+    body: `<!doctype html><title>Applicant</title><form><label>First name<input name="firstName"></label>
+      <label>Resume<input type="file" name="resume" accept=".pdf"></label><button>Submit application</button></form>` }));
+  const page = await context.newPage();
+  await page.goto(form(401));
+  const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, page.url());
+  await ui({ type: "TRACK_TAB", tabId });
+  const { liveLine } = await import("../../scripts/lane-live");
+  const port = (backend.address() as { port: number }).port;
+  const line = await liveLine(`ws://127.0.0.1:${port}/v1/live`, async () => token, `http://127.0.0.1:${port}`);
+  try {
+    const id = (await state()).applications[0].id;
+    for (const url of [listing, form(402)]) {
+      await page.goto(url);
+      const inspected = await line.send("inspect", id);
+      expect(inspected.ok, inspected.error).toBe(true);
+      expect(JSON.parse(inspected.detail!).form, "tracked application form identity").toBe(false);
+      const refill = await line.send("repair-fill", id);
+      expect(refill.error, "refill rejected outside the tracked form").toContain("Open the tracked application's form");
+      await expect(page.locator('[name="firstName"]')).toHaveValue("");
+    }
+    await page.goto(form(401).replace("section/1", "section/2"));
+    const otherStep = await line.send("repair-fill", id, JSON.stringify({ step: form(401) }));
+    expect(otherStep.error).toContain("another application step");
+    await page.goto(form(401));
+    const sameStep = await line.send("repair-fill", id, JSON.stringify({ step: form(401) }));
+    expect(sameStep.ok, sameStep.error).toBe(true);
+    expect(JSON.parse(sameStep.detail!).attemptId).toBeTruthy();
+    await expect(page.locator('[name="firstName"]')).toHaveValue(profile.firstName, { timeout: 45000 });
+  } finally {
+    line.close();
+  }
+});
+
+test("Oracle's saved lookup failure blocks handoff and cached list answers survive a reload", async () => {
+  const form = `${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/404/apply/section/1`;
+  await context.route(form, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html>
+    <form><label>First name<input name="firstName"></label><div class="input-row">
+      <label for="clearance">Clearance</label><div id="lookup"></div></div><button>Submit application</button></form>
+    <script>
+      const prefix = '/ExtraInformationDictionary?question=clearance';
+      const lang = '#ceCacheLang=en';
+      const full = prefix + '&limit=500' + lang;
+      const one = prefix + '&limit=1&q=LookupCode%3D%27NONE%27' + lang;
+      if (!sessionStorage.getItem(full)) sessionStorage.setItem(full, JSON.stringify({items:[{listOfValues:[{lookupCode:'NONE',meaning:'None'}]}]}));
+      const cached = JSON.parse(sessionStorage.getItem(one) || 'null');
+      document.querySelector('#lookup').innerHTML = cached
+        ? '<select id="clearance" required><option>None</option></select>'
+        : '<div role="progressbar" aria-label="Clearance Loading screen">Loading</div>';
+    </script>` }));
+  const page = await context.newPage();
+  await page.goto(form);
+  const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, form);
+  await ui({ type: "TRACK_TAB", tabId });
+  const id = (await state()).applications[0].id;
+  expect((await ui({ type: "STEP_CHECK", id })).blockers, "loading lookup blocks submit").toContain("Clearance: still loading on the site.");
+  await ui({ type: "FILL_STEP", id });
+  await expect(page.locator('[name="firstName"]')).toHaveValue(profile.firstName, { timeout: 45000 });
+  await expect.poll(async () => (await state()).applications[0].attempts.at(-1)?.completedAt).toBeTruthy();
+  await page.reload();
+  await expect(page.locator("#clearance"), "saved lookup restored after reload").toHaveValue("None");
+  expect((await ui({ type: "STEP_CHECK", id })).blockers).toEqual([]);
+});
+
 test("answers an earlier application left are replaced, and the applicant's own edits are kept", async () => {
   // As a returning applicant's saved profile fills a form before the
   // extension does: an old email and name, another country.
@@ -11486,9 +11553,14 @@ test("Oracle's Major, a searched list whose matches come seconds after the typin
           // clears the text.
           const major = form.querySelector('#major-37');
           let loading;
+          let opened = false;
+          major.addEventListener('click', () => {
+            opened = true;
+            showList(major, ['Other field']);
+          });
           major.addEventListener('input', (event) => {
             clearTimeout(loading);
-            if (!event.isTrusted || !major.value) return;
+            if (!opened || !event.isTrusted || !major.value) return;
             const typed = major.value;
             loading = setTimeout(() => {
               if (document.activeElement !== major) return;
@@ -11496,7 +11568,7 @@ test("Oracle's Major, a searched list whose matches come seconds after the typin
               for (const item of lists.children) item.setAttribute('role', 'option');
             }, 3000);
           });
-          major.addEventListener('focusout', () => { clearTimeout(loading); if (!major.dataset.picked) major.value = ''; if (lists.owner === major) lists.innerHTML = ''; });
+          major.addEventListener('focusout', () => { opened = false; clearTimeout(loading); if (!major.dataset.picked) major.value = ''; if (lists.owner === major) lists.innerHTML = ''; });
           // The Degree box, left with a value, takes the focus back once
           // 0.4 s later (its validation), out of the Major being typed.
           const degree = form.querySelector('#contentItemId-1');
@@ -11517,7 +11589,7 @@ test("Oracle's Major, a searched list whose matches come seconds after the typin
   await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/3`);
   await enqueue([page]);
   await expect.poll(() => page.evaluate(() => (window as any).saved.length), { timeout: 90000 }).toBeGreaterThan(0);
-  expect((await page.evaluate(() => (window as any).saved))[0]).toBe("major: Data Science / Data Science");
+  expect((await page.evaluate(() => (window as any).saved))[0], "Major selected after opening and waiting").toBe("major: Data Science / Data Science");
 });
 
 // Entries already saved show as timeline cards ("Creative Associate", the
@@ -25008,15 +25080,18 @@ test("an Avature form whose Currency, Degree, Institution/Program and Specializa
         // Once both rows hold a Major, the site's own handler on the Skills
         // search exchanges them (as one employer's did): the rows share their
         // result objects.
-        document.getElementById("skills-search").addEventListener("input", () => {
+        window.swapMajors = () => {
           const [a, b] = ["931-12-0", "931-12-1"].map((id) => document.getElementById(id));
-          if (!a.value || !b.value || a.value === b.value || window.swaps) return;
+          if (!a.value || !b.value || a.value === b.value) return;
           window.swaps = (window.swaps || 0) + 1;
           const [left, right] = [a, b].map((select) => [select.value, select.selectedOptions[0].text]);
           [[a, right], [b, left]].forEach(([select, [value, text]]) => {
             (([...select.options].find((o) => o.value === value)) || select.appendChild(new Option(text, value))).selected = true;
             select.dispatchEvent(new Event("change", { bubbles: true }));
           });
+        };
+        document.getElementById("skills-search").addEventListener("input", () => {
+          if (!window.swaps) window.swapMajors();
         });
       </script>`,
     }),
@@ -25036,12 +25111,15 @@ test("an Avature form whose Currency, Degree, Institution/Program and Specializa
   // leaves each row with its own Major.
   const majors = () => Promise.all(["0", "1"].map((row) => chosen(`931-12-${row}`)));
   await expect.poll(async () => (await state()).applications.at(-1)?.status, { timeout: 90000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.evaluate(() => (window as any).swapMajors());
+  expect(await majors()).toEqual(["Computer Science", "Computer and Information Sciences, General"]);
   await ui({ type: "FILL_STEP", id: (await state()).applications.at(-1)!.id });
   await page.waitForTimeout(500);
   await expect.poll(async () => (await state()).applications.at(-1)?.status, { timeout: 150000 }).toMatch(/^(awaiting-user|ready)$/);
   await page.waitForTimeout(3000);
   expect(await page.evaluate(() => (window as any).swaps)).toBeGreaterThan(0);
-  expect(await majors()).toEqual(["Computer and Information Sciences, General", "Computer Science"]);
+  expect(await majors(), "refill restores earlier automation-owned picks to their education rows")
+    .toEqual(["Computer and Information Sciences, General", "Computer Science"]);
 });
 
 test("an iCIMS resume the account kept, in a frame, is replaced on a refill and by Replace with tailored resume", async () => {

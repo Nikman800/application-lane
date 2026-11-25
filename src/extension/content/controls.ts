@@ -248,7 +248,9 @@ export const adoptSiteValue = (record: RecordEntry) => {
   // A file Apple lists in the uploader's own list stays: the list only grows,
   // and replacing it would add the document a second time.
   if (listedFileName(record.element)) return;
-  const ownWritten = cs.ownWrites.some((entry) => entry.label === record.label && entry.value === record.last);
+  const { section, index } = sectionFor(record.element);
+  const ownWritten = cs.ownWrites.some((entry) => entry.label === record.label && entry.value === record.last &&
+    (entry.section === undefined || (entry.section === section && entry.index === index)));
   if ((cs.replaceSiteValues || placeholder(record.last) || ownWritten) && record.protectedBy === "existing value") {
     record.protected = false;
     record.protectedBy = undefined;

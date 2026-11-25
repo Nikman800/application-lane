@@ -319,7 +319,7 @@ export async function uiMessage(message: any) {
     answerRequests.delete(app.id);
     if (app.answerSession)
       await api(`/v1/jobs/${app.answerSession.jobId}`, "DELETE").catch(() => { /* the backend job is only cleanup: it expires on its own */ });
-    await resume(app);
+    await resume(app, undefined, message.repair === true ? message.repairDocument : undefined);
     return bg.state;
   }
   if (message.type === "SET_WORKFLOW") {

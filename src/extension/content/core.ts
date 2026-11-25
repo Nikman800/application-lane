@@ -123,6 +123,7 @@ export type Command = {
   applicationId: string;
   operation: number;
   documentId?: string;
+  documentURL?: string;
   proposals?: Proposal[];
   fieldId?: string;
   expectedValue?: string;
@@ -143,7 +144,8 @@ export type Command = {
   session?: string;
   startedAt?: number;
   replaceSiteValues?: boolean;
-  ownWrites?: { label: string; value: string }[];
+  ownWrites?: import("../../shared/model").OwnWrite[];
+  rowPicks?: import("../../shared/model").RowPick[];
   section?: string;
   index?: number;
   groupLoop?: boolean;

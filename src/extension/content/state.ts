@@ -27,7 +27,7 @@ export const cs = {
   replaceSiteValues: false,
   // Values this extension wrote on the application's pages before (see
   // Application.ownWrites): a field still holding one is not the applicant's.
-  ownWrites: [] as { label: string; value: string }[],
+  ownWrites: [] as import("../../shared/model").OwnWrite[],
   // Until when value changes nobody made by hand are the site filling the
   // form from an uploaded resume (set when such an upload is attached).
   siteFillUntil: 0,
