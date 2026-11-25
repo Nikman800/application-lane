@@ -10426,6 +10426,68 @@ test("a repair refill refuses the Oracle job page and a different application fo
   }
 });
 
+test("Fill on a tab that went on to another Oracle posting's form fills that posting as its own application", async () => {
+  // The applicant opened one posting, went on in the same tab to a similar
+  // job's form and chose Fill there. That form is filled as the application
+  // tracking its posting (or a new one), never refused as "a different posting".
+  const form = (job: number) => `${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/${job}/apply/section/1`;
+  await context.route(`${oracleOrigin}/**`, (route) => route.fulfill({ contentType: "text/html",
+    body: `<!doctype html><title>Applicant</title><form><label>First name<input name="firstName"></label>
+      <button>Submit application</button></form>` }));
+  const tabOf = (url: string) => panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, url);
+  const other = await context.newPage();
+  await other.goto(form(502));
+  await ui({ type: "TRACK_TAB", tabId: await tabOf(form(502)) });
+  await other.close();
+  const page = await context.newPage();
+  await page.goto(form(501));
+  const tabId = await tabOf(form(501));
+  await ui({ type: "TRACK_TAB", tabId });
+  const byPosting = async (job: number) => (await state()).applications.find((a: { sourceUrl?: string }) => a.sourceUrl === form(job))!;
+  for (const [job, tracked] of [[502, true], [503, false]] as const) {
+    // Fill this step on the tab: the application holding the tab, whose
+    // posting is not the one now shown.
+    const holder = (await state()).applications.find((a: { tabId?: number }) => a.tabId === tabId)!;
+    expect(holder.url).not.toBe(form(job));
+    await page.goto(form(job));
+    await ui({ type: "FILL_STEP", id: holder.id });
+    await expect(page.locator('[name="firstName"]'), `posting ${job} filled`).toHaveValue(profile.firstName, { timeout: 45000 });
+    await expect.poll(async () => (await state()).applications.find((a: { tabId?: number }) => a.tabId === tabId)?.attempts.at(-1)?.completedAt, { timeout: 45000 }).toBeTruthy();
+    const now = await state();
+    const owner = now.applications.find((a: { tabId?: number }) => a.tabId === tabId)!;
+    expect(owner.url, "the tab belongs to the application of its posting").toBe(form(job));
+    if (tracked) expect(owner.id).toBe((await byPosting(502)).id);
+    else expect(owner.sourceUrl, "a posting nothing tracked becomes its own application").toBe(form(job));
+    expect(now.applications.find((a: { id: string }) => a.id === holder.id)!.url, "the earlier application keeps its own posting").toBe(holder.sourceUrl);
+    expect(now.applications.find((a: { id: string }) => a.id === holder.id)!.note).not.toContain("different posting");
+    await page.evaluate(() => { (document.querySelector('[name="firstName"]') as HTMLInputElement).value = ""; });
+  }
+});
+
+test("a tab opened on another posting of the same site is not suggested for the first posting's application", async () => {
+  // The job finder opened two postings of one employer in their own tabs.
+  // The first, tracked and named only by the employer, was suggested (and
+  // preset to attach) for the second tab: same site, its name in the page
+  // title. Attaching put the second posting's form under the first. Both
+  // pages here carry one title, and the second tab opens from the first,
+  // so only the posting tells them apart.
+  const job = (id: number) => `${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/${id}`;
+  await context.route(`${oracleOrigin}/**`, (route) => route.fulfill({ contentType: "text/html",
+    body: `<!doctype html><title>Intern (Summer) - Acme Careers</title><form><label>First name<input name="firstName"></label></form>` }));
+  const tabOf = (url: string) => panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, url);
+  const first = await context.newPage();
+  await first.goto(job(601));
+  await ui({ type: "TRACK_TAB", tabId: await tabOf(job(601)) });
+  const tracked = (await state()).applications.find((a: { sourceUrl?: string }) => a.sourceUrl === job(601))!;
+  const second = await context.newPage();
+  await second.goto(`${job(602)}/apply/section/1`);
+  const scanned = await ui({ type: "SCAN_TAB", tabId: await tabOf(`${job(602)}/apply/section/1`) });
+  expect(scanned.applicationId).toBeUndefined();
+  expect(scanned.suggestions.map((s: { applicationId: string; reason: string }) => `${s.applicationId} ${s.reason}`).join(" | "), "another posting's application is not suggested").not.toContain(tracked.id);
+  await first.close();
+  await second.close();
+});
+
 test("Oracle's saved lookup failure blocks handoff and cached list answers survive a reload", async () => {
   const form = `${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX/job/404/apply/section/1`;
   await context.route(form, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html>

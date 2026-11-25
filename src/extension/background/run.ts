@@ -175,6 +175,9 @@ export async function run(app: Application, operation: number) {
     await invalidate(app, "paused", note);
     app.tabs = app.tabs.filter((related) => related.tabId !== tabId);
     app.tabId = undefined;
+    // Its address had followed the tab: it goes back to its own posting, or
+    // it would be taken for the new posting's application.
+    app.url = app.sourceUrl || app.postingUrl || app.url;
     app.missing = [];
     touch(app, "awaiting-user", note);
     if (owner) await attachTab(owner, tabId);

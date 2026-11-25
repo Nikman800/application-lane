@@ -25,6 +25,10 @@ return inspect();
   export async function handleBind(command: Command): Promise<unknown> {
 if (cs.applicationId && command.applicationId !== cs.applicationId && !cs.paused)
   throw new Error("This tab belongs to another active application.");
+// The tab went to another application after the extension paused the old
+// one (its tab went on to another posting): that pause was the old
+// application's, not the applicant's (an edit names what paused it).
+if (cs.applicationId && command.applicationId !== cs.applicationId && !cs.pausedBy) cs.paused = false;
 if (
   command.applicationId === cs.applicationId &&
   command.operation < cs.operation

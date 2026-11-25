@@ -11,6 +11,7 @@ import { carryOnFailed, fillable, resume } from "./queue";
 import { invalidate } from "./run";
 import { clearFieldFallback } from "./field-fallback";
 import { startEvidence } from "./evidence";
+import { postingMismatch } from "../application-form";
 
 export async function observations(
   app: Application,
@@ -207,6 +208,12 @@ export async function tabContext(tabId: number): Promise<TabContext> {
     reason: string,
   ) => {
     if (!app || app.id === linked?.id || app.archivedAt || seen.has(app.id))
+      return;
+    // Another posting on the same site is another application, whatever
+    // opened its tab and however alike the titles: an entry named only by
+    // the employer ("Acme") was suggested, and preset to attach, for a tab
+    // the job finder opened on another of its postings.
+    if (url && [app.sourceUrl, app.postingUrl, app.url].some((known) => known && postingMismatch(url, known)))
       return;
     seen.add(app.id);
     suggestions.push({ applicationId: app.id, confidence, reason });
