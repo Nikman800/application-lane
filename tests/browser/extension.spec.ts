@@ -9154,6 +9154,34 @@ test("a confirmation drawn in a message box div marks the application submitted"
   await expect.poll(async () => (await state()).applications[0].workflowStage, { timeout: 20000 }).toBe("submitted");
 });
 
+// ADP Workforce Now: after Submit, its confirmation is an <sdf-alert>
+// "Application Submitted!" with the text as its own, and the page's
+// "Thank You! We have received your application." sits behind a modal offering
+// an account elsewhere, which marks the page behind it aria-hidden. Neither was
+// read, and the application stayed in progress.
+test("a confirmation in a custom alert element above a modal marks the application submitted", async () => {
+  await context.route(`${origin}/custom-alert-confirmation`, (route) =>
+    route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: `<!doctype html><title>Current Openings | Recruitment</title>
+        <div id="apply"><form onsubmit="return false"><label>Email<input name="email" type="email"></label><label>Phone<input name="phone"></label><button type="submit">Submit</button></form></div>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/custom-alert-confirmation`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect((await state()).applications[0].workflowStage).not.toBe("submitted");
+  await page.evaluate(() => {
+    document.getElementById("apply")!.outerHTML =
+      '<div class="page" aria-hidden="true"><div role="alert" class="alert-success"><i class="icon"></i><span>Thank You!</span><p>We have received your application.</p></div></div>' +
+      '<div id="wrapper" role="dialog" class="wrapper size-lg"><h2>Acme Talent</h2><sdf-alert status="success">Application Submitted!</sdf-alert>' +
+      '<h3>Join our talent pool to unlock your next opportunity.</h3><button type="button">Create My Account</button><a href="#">No, Thanks</a></div>';
+  });
+  await expect.poll(async () => (await state()).applications[0].workflowStage, { timeout: 20000 }).toBe("submitted");
+});
+
 // Found in review: an employer's page around a framed form has
 // no boxes of its own, and its job text may thank applicants. Only a frame
 // the fill wrote to may say the application went in by its words alone.

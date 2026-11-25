@@ -198,9 +198,11 @@ export function confirmationInPlace(): boolean {
     return true;
   // A message box drawn as a plain div or span (iCIMS' green "Your
   // application was submitted successfully. Thank you for applying.",
-  // General Dynamics): read by its own text, so a block
-  // holding a whole posting is never read as one message.
-  return [...document.querySelectorAll("div,span")].some((element) => {
+  // General Dynamics), or as a design system's own element (an
+  // <sdf-alert> "Application Submitted!" above a modal that hides the page
+  // behind it, the page's own thanks with it): read by its own text, so a
+  // block holding a whole posting is never read as one message.
+  return [...document.querySelectorAll("*")].filter((element) => /^(div|span)$|-/i.test(element.localName)).some((element) => {
     const own = [...element.childNodes].filter((node) => node.nodeType === Node.TEXT_NODE).map((node) => node.textContent || "").join(" ");
     return says(own.replace(/\s+/g, " ").trim()) && shown(element);
   });

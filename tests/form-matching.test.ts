@@ -2165,6 +2165,17 @@ test("a veteran list whose options load when it opens gets the answer in the wor
   assert.equal(ask("Decline to answer"), "Not disclosed");
 });
 
+// A self-disclosure page names its lists by id only: "…-gender-dropdown",
+// "…-ethnicity-dropdown" and "…-veteranstatus-dropdown", options drawn when
+// opened. Gender and race were read from the id; "veteranstatus", one word,
+// was not, and the veteran list was left empty.
+test("a veteran list named only by an id with 'veteranstatus' in it takes the answer", () => {
+  const options = ["I identify as one or more of the classifications of the protected veteran", "I am not a protected veteran", "I choose not to disclose"];
+  const proposal = proposals([field("selfdisclosure-veteranstatus-dropdown", { kind: "combobox", options: [] })], profileSchema.parse({ ...profile, veteranStatus: "I am not a protected veteran" }))[0];
+  assert.ok(proposal, "a proposal for the veteran list");
+  assert.equal(pickListOption(proposal, options, (option) => option), "I am not a protected veteran");
+});
+
 // A JazzHR page asks "Are you a U.S Citizen?" and the sponsorship question
 // with a Yes box and a No box under each: the box whose label answers the
 // question is ticked, the other left, a saved answer worded as the question

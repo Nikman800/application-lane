@@ -1456,7 +1456,7 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
         [/\bhispanic\b|\blatin[oa]x?\b/, "hispanic"],
         [/\brace\b|\bethnicit/, "ethnicity"],
         [/\bgender\b|^sex$/, "gender"],
-        [/\bveterans?\b/, "veteranStatus"],
+        [/\bveteran(?:s|status)?\b/, "veteranStatus"],
         [/\bdisabilit/, "disabilityStatus"],
       ] as const
     )
