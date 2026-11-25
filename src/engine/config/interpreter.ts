@@ -2948,6 +2948,14 @@ async function fillRowChoice(
         const end = monthYear(row.endDate) || (row.endDate ? "" : "present");
         return Boolean(end) && savedTiles.some((tile) => tile.includes(` ${start} ${end} `));
       };
+      const degreeLevel = (text: string) => {
+        const value = ` ${plainText(text)} `;
+        if (/ (masters?|ms|m s|msc|ma|mba|meng) /.test(value) || /master/.test(value)) return "master";
+        if (/bachelor|baccalaureate/.test(value) || / (bs|b s|bsc|ba|beng) /.test(value)) return "bachelor";
+        if (/associate/.test(value)) return "associate";
+        if (/doctor|phd|ph d/.test(value)) return "doctorate";
+        return "";
+      };
       const saved = new Set(
         rows.flatMap((row, index) => {
           if (!savedTiles.length) return [];
@@ -2955,6 +2963,22 @@ async function fillRowChoice(
           const subject = plainText(row.fieldOfStudy || row.title);
           const organization = plainText(row.organization);
           const year = row.startDate?.match(/\d{4}/)?.[0];
+          // Oracle's profile-item tile names only the degree level and the
+          // school ("Masters" / "Virginia Tech"): a tile naming a row's school
+          // and the level of its degree is that row.
+          const level = collection === "education" ? (degreeLevel(row.title || "") || degreeLevel(row.fieldOfStudy || "")) : "";
+          if (level && organization && savedTiles.some((tile) => tile.includes(` ${organization} `) && degreeLevel(tile) === level))
+            return [index];
+          // A school the site's list lacks is saved blank, and the tile then
+          // names the major alone ("Computer Science"): a tile that is only a
+          // row's major, which no other row shares, is that row.
+          if (
+            collection === "education" &&
+            subject &&
+            savedTiles.includes(` ${subject} `) &&
+            rows.filter((other) => plainText(other.fieldOfStudy || other.title) === subject).length === 1
+          )
+            return [index];
           // The same school or employer from the same year is that row,
           // however the tile names the subject: one employer's tile said "Data
           // Science" for the profile's "M.S. Data Science, Analytics &

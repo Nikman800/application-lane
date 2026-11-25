@@ -2243,6 +2243,7 @@ test("a race list whose label carries the U.S. category definitions takes the ra
 test("a site rule's pass gets the longer time on sites whose picks are slow", () => {
   assert.equal(configPassTimeout("jobs.smartrecruiters.com"), 150_000);
   assert.equal(configPassTimeout("acme.wd1.myworkdayjobs.com"), 150_000);
+  assert.equal(configPassTimeout("acme.fa.us2.oraclecloud.com"), 240_000);
   assert.equal(configPassTimeout("jobs.lever.co"), 60_000);
 });
 

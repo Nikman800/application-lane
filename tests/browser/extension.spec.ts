@@ -10882,6 +10882,161 @@ test("Oracle entries already saved to the candidate profile are kept, not added 
   expect(saved.filter((entry) => entry.includes("Sample Corp"))).toHaveLength(1);
 });
 
+// Oracle's profile-item tile for a saved degree shows only its level and school ("Masters" / school), no major or dates.
+test("Oracle entries already saved to the candidate profile that name only the degree level and the school are kept, not added again", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        // Named more fully than the tile names it.
+        { organization: "Example State University", title: "Masters of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" },
+        { organization: "Example Polytechnic", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+      ],
+      work: [
+        { organization: "Sample Corp", title: "Software Engineer Intern", location: "Phoenix, AZ", details: "Built APIs.", startDate: "2023-07", endDate: "2023-09" },
+      ],
+    },
+  });
+  // egug.fa.us2.oraclecloud.com: entries saved
+  // to the candidate profile show as tiles with no fields, the major (or job
+  // title, employer) and dates. The fill added every profile row again.
+  const tile = (title: string, subtitle: string) =>
+    `<article class="apply-flow-profile-item-tile"><div class="apply-flow-profile-item-tile__summary" role="group" tabindex="0" aria-label="${title} ${subtitle}">
+      <div class="apply-flow-profile-item-tile__summary-content"><div class="apply-flow-profile-item-tile__summary-title"><span>${title}</span></div>
+      <div class="apply-flow-profile-item-tile__summary-subtitle text-color-secondary">${subtitle}</div></div>
+      <div class="apply-flow-profile-item-tile__actions-container"><button class="apply-flow-profile-item-tile__edit-item-icon" aria-label="Edit"></button><button class="apply-flow-profile-item-tile__delete-icon" aria-label="Delete"></button></div>
+    </div></article>`;
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Education and Experience</title><main>
+        <div class="apply-flow-section" data-section-number="2">
+          <h2 class="apply-flow-block__title"><span>Education</span></h2>
+          <div class="apply-flow-block__form-list" role="region" aria-label="Education " id="education">
+            <div class="profile-item-list" role="group">${tile("Masters", "Example State University")}</div>
+            <div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile" id="add-education"><span class="button__label">Add Education</span></button></div>
+          </div>
+          <h2 class="apply-flow-block__title"><span>Experience</span></h2>
+          <div class="apply-flow-block__form-list" role="region" aria-label="Experience " id="experience">
+            <div class="profile-item-list" role="group"></div>
+            <div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile" id="add-experience"><span class="button__label">Add Experience</span></button></div>
+          </div>
+        </div>
+      </main><script>
+        window.saved = [];
+        const open = (id, fields, label) => {
+          const block = document.getElementById(id);
+          block.querySelector('.profile-add-item').hidden = true;
+          const form = document.createElement('div');
+          form.className = 'profile-item-content';
+          form.innerHTML = fields + '<div class="app-dialog__footer"><button class="button app-dialog__footer-button save-btn">' + label + '</button></div>';
+          block.append(form);
+          form.querySelector('.save-btn').addEventListener('click', () => {
+            window.saved.push([...form.querySelectorAll('input')].map((input) => input.value).join(' / '));
+            setTimeout(() => { form.remove(); block.querySelector('.profile-add-item').hidden = false; });
+          });
+        };
+        document.getElementById('add-education').addEventListener('click', () => open('education',
+          '<div class="input-row"><label for="major">Major</label><input id="major" name="major"></div>'
+          + '<div class="input-row"><label for="school">School</label><input id="school" name="educationalEstablishment"></div>', 'Add Education'));
+        document.getElementById('add-experience').addEventListener('click', () => open('experience',
+          '<div class="input-row"><label for="employerName">Employer Name</label><input id="employerName" name="employerName" class="input-row__control"></div>'
+          + '<div class="input-row"><label for="jobTitle">Job Title</label><input id="jobTitle" name="jobTitle" class="input-row__control"></div>', 'Add Experience'));
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).saved), { timeout: 60000 })
+    .toContainEqual(expect.stringContaining("Example Polytechnic"));
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  const saved: string[] = await page.evaluate(() => (window as any).saved);
+  expect(saved.filter((entry) => /Example State|Data Science/.test(entry))).toEqual([]);
+  expect(saved.filter((entry) => entry.includes("Example Polytechnic"))).toHaveLength(1);
+});
+
+test("Oracle entries already saved to the candidate profile that name only the major, their school having been saved blank, are kept, not added again", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        // Named more fully than the tile names it.
+        { organization: "Example State University", title: "Masters of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" },
+        { organization: "Example Polytechnic", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+      ],
+      work: [
+        { organization: "Sample Corp", title: "Software Engineer Intern", location: "Phoenix, AZ", details: "Built APIs.", startDate: "2023-07", endDate: "2023-09" },
+      ],
+    },
+  });
+  // A school missing from the site's list is saved blank, and its tile names
+  // only the major. egug.fa.us2.oraclecloud.com: entries saved
+  // to the candidate profile show as tiles with no fields, the major (or job
+  // title, employer) and dates. The fill added every profile row again.
+  const tile = (title: string, subtitle: string) =>
+    `<article class="apply-flow-profile-item-tile"><div class="apply-flow-profile-item-tile__summary" role="group" tabindex="0" aria-label="${title} ${subtitle}">
+      <div class="apply-flow-profile-item-tile__summary-content"><div class="apply-flow-profile-item-tile__summary-title"><span>${title}</span></div>
+      ${subtitle ? `<div class="apply-flow-profile-item-tile__summary-subtitle text-color-secondary">${subtitle}</div>` : ""}</div>
+      <div class="apply-flow-profile-item-tile__actions-container"><button class="apply-flow-profile-item-tile__edit-item-icon" aria-label="Edit"></button><button class="apply-flow-profile-item-tile__delete-icon" aria-label="Delete"></button></div>
+    </div></article>`;
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Education and Experience</title><main>
+        <div class="apply-flow-section" data-section-number="2">
+          <h2 class="apply-flow-block__title"><span>Education</span></h2>
+          <div class="apply-flow-block__form-list" role="region" aria-label="Education " id="education">
+            <div class="profile-item-list" role="group">${tile("Masters", "Example State University")}${tile("Computer Science", "")}</div>
+            <div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile" id="add-education"><span class="button__label">Add Education</span></button></div>
+          </div>
+          <h2 class="apply-flow-block__title"><span>Experience</span></h2>
+          <div class="apply-flow-block__form-list" role="region" aria-label="Experience " id="experience">
+            <div class="profile-item-list" role="group"></div>
+            <div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile" id="add-experience"><span class="button__label">Add Experience</span></button></div>
+          </div>
+        </div>
+      </main><script>
+        window.saved = [];
+        const open = (id, fields, label) => {
+          const block = document.getElementById(id);
+          block.querySelector('.profile-add-item').hidden = true;
+          const form = document.createElement('div');
+          form.className = 'profile-item-content';
+          form.innerHTML = fields + '<div class="app-dialog__footer"><button class="button app-dialog__footer-button save-btn">' + label + '</button></div>';
+          block.append(form);
+          form.querySelector('.save-btn').addEventListener('click', () => {
+            window.saved.push([...form.querySelectorAll('input')].map((input) => input.value).join(' / '));
+            setTimeout(() => { form.remove(); block.querySelector('.profile-add-item').hidden = false; });
+          });
+        };
+        document.getElementById('add-education').addEventListener('click', () => open('education',
+          '<div class="input-row"><label for="major">Major</label><input id="major" name="major"></div>'
+          + '<div class="input-row"><label for="school">School</label><input id="school" name="educationalEstablishment"></div>', 'Add Education'));
+        document.getElementById('add-experience').addEventListener('click', () => open('experience',
+          '<div class="input-row"><label for="employerName">Employer Name</label><input id="employerName" name="employerName" class="input-row__control"></div>'
+          + '<div class="input-row"><label for="jobTitle">Job Title</label><input id="jobTitle" name="jobTitle" class="input-row__control"></div>', 'Add Experience'));
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).saved), { timeout: 60000 })
+    .toContainEqual(expect.stringContaining("Sample Corp"));
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60000 }).toMatch(/^(awaiting-user|ready)$/);
+  const saved: string[] = await page.evaluate(() => (window as any).saved);
+  expect(saved.filter((entry) => /Example State|Data Science|Example Polytechnic|Computer Science/.test(entry))).toEqual([]);
+});
+
 // (wingtip.fa.us2.oraclecloud.com): only one entry
 // form, work or education, can be open at a time, and the Add buttons of both
 // are gone while one is. The site had opened a work form; Add Education was

@@ -17,7 +17,11 @@ export function transitionTiming(
 // SmartRecruiters' titles, companies, schools and places are typed with real
 // keys and picked from their menus, about 3.5 s each: with three jobs and two
 // schools its pass was cut off a minute in, the second school's end date,
-// description and Save never reached. Others: 60 s.
+// description and Save never reached. Oracle Recruiting Cloud types each school
+// through a search that takes 25-30 s to settle (four wordings tried in
+// turn): two schools used the minute up, and the jobs after them were never
+// reached (240 s). Others: 60 s.
 export function configPassTimeout(hostname: string): number {
+  if (/(^|\.)oraclecloud\.com$/.test(hostname)) return 240_000;
   return /(^|\.)(myworkday(jobs)?\.com|successfactors\.(com|eu)|sapsf\.(com|eu)|ns2cloud\.com|smartrecruiters\.com)$/.test(hostname) ? 150_000 : 60_000;
 }
