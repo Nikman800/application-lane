@@ -98,3 +98,24 @@ test("a saved answer about holding a clearance does not answer whether one could
   // (What might prevent one is answered from the legal details, not the saved held-clearance answer.)
   assert.equal(ask("Are you aware of anything that may prevent you from obtaining a government security clearance?"), "No");
 });
+
+// A saved willingness to complete a background check answers a question
+// asking whether the applicant is willing to undergo one; the model answered
+// it from the saved words instead. Consent and authorization stay the applicant's.
+test("a saved willingness to complete a background check answers whether they are willing to undergo one", async () => {
+  const { profileSchema } = await import("../src/shared/model");
+  const { proposals } = await import("../src/shared/matching");
+  const ask = (label: string, options = ["Yes", "No"], screening = "Willing to complete a background check and drug screening") =>
+    proposals(
+      [{ id: "x", label, kind: options.length > 1 ? "radio" : "checkbox", required: true, value: "", options, revision: 1, protected: false }],
+      profileSchema.parse({ firstName: "A", lastName: "B", email: "a@example.test", confirmed: true, facts: [], legal: { screening } }),
+    )[0]?.value;
+  const willing = "Are you willing to undergo a background check, in accordance with local laws and regulations?";
+  assert.equal(ask(willing), "Yes");
+  assert.equal(ask(willing, ["Yes"]), "Yes");
+  assert.equal(ask("Would you be willing to submit to a drug screen?"), "Yes");
+  // Consent or authorization, or nothing saved: not this one's to say.
+  assert.notEqual(ask("Do you consent to a background check?"), "Yes");
+  assert.notEqual(ask("Are you willing to authorize a background check?"), "Yes");
+  assert.notEqual(ask(willing, ["Yes", "No"], ""), "Yes");
+});

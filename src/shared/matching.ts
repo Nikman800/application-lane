@@ -1659,6 +1659,17 @@ function screeningAnswer({ field, profile, label, qualified, saved, immigration,
     /^no\b/i.test((profile.legal?.criminal || "").trim())
   )
     return { value: "No" };
+  // A saved "Willing to complete a background check and drug screening"
+  // answers whether the applicant is willing to undergo one: Yes. Left to the
+  // model, it answered from the saved words. Consenting, authorizing or
+  // agreeing to one is the applicant's own act, and stays theirs.
+  const checkAsked = normalize(askedPart(field.label));
+  if (
+    /^willing\b/i.test((profile.legal?.screening || "").trim()) &&
+    /^(are|would) you\b.*\b(willing|able|prepared)\b.*\b(undergo|complete|submit to|pass|take)\b.*\b(background (check|investigation|screening)|drug (test|screen)\w*)\b/.test(checkAsked) &&
+    !/\b(consent\w*|authori[sz]\w*|agree\w*|sign\w*|acknowledg\w*)\b/.test(checkAsked)
+  )
+    return { value: "Yes" };
   const screening = screeningQuestion(normalize(askedPart(field.label)));
   // Remote menus have no options until opened. The confirmed binary answer
   // can reach that menu; the page still requires one exact matching option.
