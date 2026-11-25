@@ -7977,6 +7977,60 @@ test("Apple's parsed-résumé step fills each row by its legend's number, remove
   await expect(page.locator("#resume-supportlink-category-1")).toHaveValue("linkCategory-LNKD");
 });
 
+// Apple's Self-Disclosure step draws each list as a button (aria-expanded,
+// aria-controls) over a ul of options that is in the page before it opens,
+// each option a li holding its own hidden radio and the label for it. The
+// fill opened the list, found the radio "an action control", and closed the
+// list again: nothing was chosen. A click on the option itself does nothing
+// there either: the pick is the radio's change, and only that is kept here.
+test("Apple's Self-Disclosure lists made of option items with a hidden radio are chosen from", async () => {
+  test.setTimeout(120000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, gender: "Male", veteranStatus: "No" } });
+  const list = (id: string, name: string, choices: string[]) =>
+    `<div class="form-dropdown"><div class="form-dropdown-multiline"><button type="button" id="${id}" class="form-dropdown-select form-dropdown-selectnone" aria-haspopup="listbox" aria-expanded="false" aria-controls="${id}_options-container" required><span class="visuallyhidden">${name}</span></button><span class="form-dropdown-label" aria-hidden="true">${name}</span><div><ul id="${id}_options-container" class="form-dropdown-options" role="listbox" aria-label="${name}">${choices.map((choice, index) =>
+      `<li class="form-dropdown-option" role="option" tabindex="-1" aria-selected="false" aria-label="${choice}"><input type="radio" id="${id}_option_${index}" class="visuallyhidden" title="${choice}" name="${name}" value="${choice}"><label for="${id}_option_${index}" aria-hidden="true"><span class="form-dropdown-option-title">${choice}</span><span class="form-dropdown-option-text"></span></label></li>`).join("")}</ul></div></div></div>`;
+  await context.route(`${appleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Self-Disclosure - Software Engineer - Apply Jobs: Step 4 of 5 - Careers</title><style>.visuallyhidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}.form-dropdown-options{display:none}.open .form-dropdown-options{display:block}</style></head><body><main aria-label="Main App Content"><h1>Self-Disclosure</h1><form onsubmit="return false">${list("selfdisclosure-gender-dropdown", "Gender", ["Prefer Not To Disclose", "Male", "Female", "Non Binary"])}${list("selfdisclosure-veteranstatus-dropdown", "Veteran Status", ["I identify as one or more of the classifications of protected veteran", "I am not a protected veteran", "I do not wish to self-identify"])}</form></main><script>
+        window.kept = {};
+        for (const button of document.querySelectorAll('.form-dropdown-select')) {
+          const box = button.closest('.form-dropdown');
+          button.addEventListener('click', () => {
+            const open = button.getAttribute('aria-expanded') !== 'true';
+            button.setAttribute('aria-expanded', String(open));
+            box.classList.toggle('open', open);
+          });
+          button.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape') return;
+            button.setAttribute('aria-expanded', 'false');
+            box.classList.remove('open');
+          });
+          // The page keeps a pick only from its option's radio changing; a
+          // click on the option around it does nothing (as live).
+          for (const option of box.querySelectorAll('li[role="option"]')) {
+            option.querySelector('input[type="radio"]').addEventListener('change', () => {
+              window.kept[button.id] = option.getAttribute('aria-label');
+              button.textContent = option.getAttribute('aria-label');
+              button.setAttribute('aria-expanded', 'false');
+              box.classList.remove('open');
+            });
+          }
+        }
+      </script></body></html>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${appleOrigin}/app/en-us/apply/200000005-0365?stepName=selfdisclosure`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).kept), { timeout: 60000 }).toEqual({
+    "selfdisclosure-gender-dropdown": "Male",
+    "selfdisclosure-veteranstatus-dropdown": "I am not a protected veteran",
+  });
+  await page.close();
+});
+
 // The same step on a refill: the site lists a résumé from an earlier fill
 // (another file name than this one's, the uploader stays empty), and it is
 // not uploaded again.

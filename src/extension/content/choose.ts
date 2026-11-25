@@ -702,9 +702,20 @@ export async function selectCustom(
           const menuItem = successFactorsPicklist(element) && option.querySelectorAll("a,button,input").length === 1
             ? option.querySelector<HTMLAnchorElement>(':scope > a[role="menuitem"]')
             : null;
+          // An option that holds only its own hidden radio and the label for
+          // it (a list built from radios) is still just the option. Its pick
+          // is the radio's: the list keeps a click on the radio itself and
+          // ignores one on the option around it (seen live). The radio is
+          // clicked, not its label: a press on the label would make the
+          // browser fire a trusted change, read as the applicant's edit.
+          const ownRadio = !menuItem && option.matches('[role="option"]')
+            ? [...option.querySelectorAll("a,button,input")]
+            : [];
+          const radioOption = ownRadio.length === 1 && ownRadio[0].matches('input[type="radio"]') &&
+            Boolean(ownRadio[0].id) && Boolean(option.querySelector(`label[for="${CSS.escape(ownRadio[0].id)}"]`));
           if (
             (!plainButton && option.closest("a,button,input")) ||
-            (!menuItem && option.querySelector("a,button,input"))
+            (!menuItem && !radioOption && option.querySelector("a,button,input"))
           )
             throw new Error(
               "Dropdown option contains an action control; choose manually.",
@@ -717,7 +728,10 @@ export async function selectCustom(
           cs.writing = true;
           try {
             record.writePendingAt = performance.now();
-            fillClick(menuItem || option);
+            // The browser reports the radio's input and change as trusted:
+            // claimed, so they are not read as the applicant's edit.
+            if (radioOption) expectOwnedActivation(ownRadio[0], "click");
+            fillClick(menuItem || (radioOption ? ownRadio[0] : option));
             picked = true;
             // A SuccessFactors list still loading its next page when the
             // pick was made opens itself again once the page arrives (a
