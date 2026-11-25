@@ -41,6 +41,9 @@ export const bg = {
   // at most every ten seconds: the badge warns of one the applicant should leave
   // alone.
   repairStates: {} as Record<string, string>,
+  // What each repair puts the application under (section() in repairs.ts).
+  repairSections: {} as Record<string, "needs fixing" | "being fixed" | undefined>,
+  tabGroupTimer: undefined as ReturnType<typeof setTimeout> | undefined,
   repairsAsked: 0,
   // Applications submitted before the history existed, or while the backend
   // was unreachable, are added to it once it answers.

@@ -269,6 +269,22 @@ export function SettingsPage({ panel }: { panel: PanelState }) {
               <option value="keep">Keep it (Replace with tailored resume stays on the card)</option>
             </select>
           </label>
+          <label>
+            Tab groups
+            <select
+              value={queue.settings.tabGroups === "off" ? "off" : "on"}
+              onChange={(e) =>
+                setQueue((q) => ({ ...q, settings: { ...q.settings, tabGroups: e.target.value === "off" ? "off" : "on" } }))
+              }
+            >
+              <option value="on">Group application tabs by stage</option>
+              <option value="off">Leave tabs as they are</option>
+            </select>
+            <small className="help">
+              Application tabs sit in Chrome tab groups named for where they stand (Needs you, In progress,
+              Ready to review…), as the command line's tabs show them. Groups you make yourself are left alone.
+            </small>
+          </label>
           {!storeBuild && typeof chrome.debugger !== "undefined" && (
           <label>
             Network capture for reports

@@ -5,6 +5,7 @@ import { applicationWarning } from "../../shared/duplicates";
 import { type Application } from "../../shared/model";
 import { draftOnlySite } from "../../shared/matching";
 import { bg } from "./state";
+import { section, type Repair } from "../../shared/repairs";
 import { allFrames, api, frameCall } from "./core";
 
 // Each application page's badge (badge.ts): sent when what it says changes,
@@ -18,8 +19,9 @@ export async function repairState(): Promise<Record<string, string>> {
   if (Date.now() - bg.repairsAsked < 10_000) return bg.repairStates;
   bg.repairsAsked = Date.now();
   try {
-    const repairs: Record<string, { state?: string }> = await api("/v1/repairs");
+    const repairs: Record<string, Repair> = await api("/v1/repairs");
     bg.repairStates = Object.fromEntries(Object.entries(repairs).map(([id, repair]) => [id, repair.state || ""]));
+    bg.repairSections = Object.fromEntries(Object.entries(repairs).map(([id, repair]) => [id, section({ ...repair, defects: repair.defects || [] })]));
   } catch {
     /* The last answer stands. */
   }

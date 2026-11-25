@@ -16,10 +16,15 @@ import { recordHandAnswersSoon } from "./background/answers";
 import { assisting } from "./background/field-fallback";
 import { invalidate } from "./background/run";
 import { connectLive, pickUpInbox } from "./background/live";
+import { tabGroupsSoon } from "./background/tab-groups";
 
 // The fixer's records change on the backend, not in the extension: the badge
-// asks again every fifteen seconds (sendBadges sends only what changed).
-setInterval(() => badgesSoon(), 15_000);
+// asks again every fifteen seconds (sendBadges sends only what changed), and
+// the tab groups follow them, and any tab moved to another window.
+setInterval(() => {
+  badgesSoon();
+  tabGroupsSoon();
+}, 15_000);
 // A page that loads again draws its badge again.
 chrome.tabs.onUpdated.addListener((tabId, change) => {
   if (change.status !== "complete" || !badgeSent.has(tabId)) return;

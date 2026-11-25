@@ -24731,3 +24731,42 @@ test("ADP's Voluntary Self-ID: Man/Male, a lone Ethnicity as Hispanic or not, th
   });
   await page.close();
 });
+
+test("application tabs sit in Chrome tab groups by stage, leave them when submitted, and the applicant's own group is left alone", async () => {
+  const first = await context.newPage();
+  await first.goto(`${origin}/tab-groups-first`);
+  const second = await context.newPage();
+  await second.goto(`${origin}/tab-groups-second`);
+  const tabs = await panel.evaluate(async () => chrome.tabs.query({}));
+  const tabOf = (page: Page) => tabs.find((tab) => tab.url === page.url())!.id!;
+  // The second is in a group the applicant made before it was tracked.
+  await panel.evaluate(async (tabId) => {
+    const groupId = await chrome.tabs.group({ tabIds: [tabId] });
+    await chrome.tabGroups.update(groupId, { title: "My shortlist" });
+  }, tabOf(second));
+  await ui({ type: "TRACK_ITEMS", items: [first, second].map((page) => ({ url: page.url(), tabId: tabOf(page) })) });
+  const groupOf = (page: Page) =>
+    panel.evaluate(async (tabId) => {
+      const tab = await chrome.tabs.get(tabId);
+      return tab.groupId === -1 ? "" : (await chrome.tabGroups.get(tab.groupId)).title || "";
+    }, tabOf(page));
+  await expect.poll(() => groupOf(first), { timeout: 15_000 }).toMatch(/^(Needs you|In progress) · 1$/);
+  expect(await groupOf(second)).toBe("My shortlist");
+  const id = (await state()).applications.find((app) => app.tabId === tabOf(first))!.id;
+  await ui({ type: "SET_WORKFLOW", id, stage: "submitted" });
+  await expect.poll(() => groupOf(first), { timeout: 15_000 }).toBe("");
+  // Out of the group, still open.
+  expect(await first.evaluate(() => location.pathname)).toBe("/tab-groups-first");
+  expect(await groupOf(second)).toBe("My shortlist");
+});
+
+test("with tab groups turned off, application tabs leave the stage groups", async () => {
+  const page = await context.newPage();
+  await page.goto(`${origin}/tab-groups-off`);
+  const tabId = (await panel.evaluate(async () => chrome.tabs.query({}))).find((tab) => tab.url === page.url())!.id!;
+  await ui({ type: "TRACK_ITEMS", items: [{ url: page.url(), tabId }] });
+  const groupId = () => panel.evaluate(async (tabId) => (await chrome.tabs.get(tabId)).groupId, tabId);
+  await expect.poll(groupId, { timeout: 15_000 }).not.toBe(-1);
+  await ui({ type: "SETTINGS", settings: { concurrency: 4, generationConcurrency: 2, tabGroups: "off" } });
+  await expect.poll(groupId, { timeout: 15_000 }).toBe(-1);
+});

@@ -31,6 +31,7 @@ import { sameOpening } from "../src/shared/matching";
 import { liveLine } from "./lane-live";
 import { repairCommands, type RepairContext } from "./lane-repairs";
 import { section, type Repair } from "../src/shared/repairs";
+import { laneGroup } from "../src/shared/lane-groups";
 import { packageRoot } from "../src/server/paths";
 
 const base = process.env.LANE_URL || "http://127.0.0.1:4318";
@@ -75,19 +76,14 @@ const questions = (app: QueueSummaryItem, most = 10) =>
       ? [`${heading} (${items.length}):`, ...items.slice(0, most).map((item) => `  • ${item}`), ...(items.length > most ? [`  …and ${items.length - most} more`] : [])]
       : [],
   );
-// A fill that failed: the application failed, or its last fill ended in error.
-const failed = (app: QueueSummaryItem) => app.status === "failed" || app.lastFill?.status === "error";
 // Applications the fixer has a repair open on (src/shared/repairs.ts): shown
 // apart, as needing fixing or being fixed, so they are left alone until the
 // repair is seen working live (lane repair / fixing / check).
 let repairs: Record<string, Repair> = {};
-const group = (app: QueueSummaryItem) =>
-  app.stage === "submitted" ? "submitted"
-    : app.status === "cancelled" || app.stage === "abandoned" ? "closed"
-    : section(repairs[app.id]) || (failed(app) ? "failed"
-    : ["queued", "inspecting", "preparing", "filling"].includes(app.status) || app.assisting ? "in progress"
-    : app.status === "ready" ? "ready to review"
-    : "needs you");
+// A fill that failed: the application failed, or its last fill ended in error.
+const failed = (app: QueueSummaryItem) => app.status === "failed" || app.lastFill?.status === "error";
+// The same groups the browser's tab groups use (src/shared/lane-groups.ts).
+const group = (app: QueueSummaryItem) => laneGroup(app, section(repairs[app.id]));
 // What a repair says about it, for the lists: what is being done, or what is
 // waiting to be fixed.
 const repairLine = (app: QueueSummaryItem) => {

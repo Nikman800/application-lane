@@ -496,7 +496,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-25-replace-held-resume";
+export const CONTENT_VERSION = "2026-11-25-stage-tab-groups";
 export type Proposal = {
   fieldId: string;
   value: string;
@@ -934,6 +934,9 @@ export type Settings = {
   // posting's tailored one, so it is the only resume sent; keep: it stays,
   // and the panel offers Replace with tailored resume.
   existingResume?: "replace" | "keep";
+  // on (the default): application tabs sit in Chrome tab groups by stage
+  // (background/tab-groups.ts); off: they are left as they are.
+  tabGroups?: "on" | "off";
   // on: application tabs' network traffic is kept for issue reports.
   networkCapture?: "on" | "off";
   // What Fill this step lets the model do (default "auto"):
