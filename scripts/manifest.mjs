@@ -27,6 +27,8 @@ export function extensionManifest({ target, version, icons }) {
     permissions: [
       "storage",
       "tabs",
+      // Application tabs are grouped by stage (background/tab-groups.ts).
+      "tabGroups",
       "scripting",
       "sidePanel",
       "alarms",

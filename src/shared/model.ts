@@ -923,6 +923,9 @@ export type Settings = {
   // profile, an earlier application) give way to the profile's; keep: they
   // stay. Edits the applicant makes are kept either way.
   prefilled?: "replace" | "keep";
+  // on (the default): application tabs sit in Chrome tab groups by stage
+  // (background/tab-groups.ts); off: they are left as they are.
+  tabGroups?: "on" | "off";
   // on: application tabs' network traffic is kept for issue reports.
   networkCapture?: "on" | "off";
   // What Fill this step lets the model do (default "auto"):

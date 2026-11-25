@@ -172,6 +172,7 @@ export async function uiMessage(message: any) {
     const checking = message.settings.checking === "fast" ? "fast" : "thorough";
     const prefilled = message.settings.prefilled === "keep" ? "keep" : "replace";
     const networkCapture = message.settings.networkCapture === "on" ? "on" : "off";
+    const tabGroups = ["on", "off"].includes(message.settings.tabGroups) ? (message.settings.tabGroups as "on" | "off") : bg.state.settings.tabGroups;
     // A caller that says nothing about these (an older panel, a test's own
     // setting) leaves them as they are.
     const modelFill = ["auto", "review", "off", "written"].includes(message.settings.modelFill)
@@ -196,6 +197,7 @@ export async function uiMessage(message: any) {
     await api("/v1/settings", "PUT", { generationConcurrency, checking });
     bg.state.settings = {
       concurrency, generationConcurrency, checking, prefilled, networkCapture,
+      ...(tabGroups ? { tabGroups } : {}),
       ...(modelFill ? { modelFill } : {}),
       ...(legalQuestions ? { legalQuestions } : {}),
       ...(nextButton ? { nextButton } : {}),

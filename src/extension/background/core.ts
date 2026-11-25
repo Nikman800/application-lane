@@ -8,6 +8,7 @@ import { canonicalURL } from "../../shared/matching";
 import { bg } from "./state";
 import { connectLive, syncQueueSoon } from "./live";
 import { badgesSoon, broadcast } from "./badges";
+import { tabGroupsSoon } from "./tab-groups";
 import { syncSubmissions, tidyFinishedNotes } from "./submissions";
 import { observations, sameFormPage } from "./tabs";
 import { touch } from "./queue";
@@ -28,6 +29,7 @@ export const backoff = new Map<string, number>();
 export function persist() {
   syncQueueSoon();
   badgesSoon();
+  tabGroupsSoon();
   const snapshot = structuredClone({ queue: bg.state, locks: bg.locks });
   // Document text lives in the backend; avoid repeatedly copying resumes into
   // Chrome's quota-limited queue storage for every status transition.
