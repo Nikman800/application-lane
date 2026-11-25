@@ -330,6 +330,22 @@ export function emptyFields(fields: Field[]): Field[] {
     return [{ ...field, label: field.question! }];
   });
 }
+// The page moved on to another step while a fill was working on the last:
+// not a failure. The fill ends, and the new step waits for Fill this step.
+export async function endOnStepChange(app: Application) {
+  touch(app, "awaiting-user", "The page moved to another step. Choose Fill this step to fill it.");
+  app.completedAt = Date.now();
+  app.explicitFill = false;
+  app.continueAfterSiteFill = false;
+  const attempt = app.attempts.at(-1);
+  if (attempt && !attempt.completedAt) {
+    attempt.completedAt = Date.now();
+    attempt.status = "paused";
+    attempt.note = app.note?.slice(0, 350);
+    attempt.filled = app.filled;
+  }
+  await persist();
+}
 export async function reviewInterruptedWrite(app: Application, observation: Observation) {
   app.missing = [
     "The site reloaded during a field write. The interrupted write was not retried; review the remaining fields manually.",

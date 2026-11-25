@@ -4,7 +4,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { profileSchema } from "../src/shared/model";
-import { boardFor, isTracked, knownOpenings, openingKey, profileTargets, searchJobs, searchSettingsSchema } from "../src/server/job-search";
+import { boardFor, isTracked, knownOpenings, openingKey, profileTargets, schoolOnly, searchJobs, searchSettingsSchema } from "../src/server/job-search";
 import { sameOpening, workdayOpening } from "../src/shared/matching";
 
 const day = 86_400_000;
@@ -81,6 +81,22 @@ test("a search from the profile looks for its roles, where the applicant lives u
   const result = await searchJobs(searchSettingsSchema.parse({ fromProfile: true, companies: [] }), profile, { cacheDir, fetcher, now });
   assert.deepEqual(result.listings.map((listing) => listing.company), ["Acme", "Beta"]);
   assert.deepEqual(result.roles.slice(0, 2), ["software engineer", "data scientist"]);
+});
+
+test("a posting for another school's students is dropped, and one for the applicant's own school kept", () => {
+  const schools = ["Contoso State University", "Example Polytechnic"];
+  // Named by its initials, its name without "University", or in full.
+  assert.equal(schoolOnly("Software Engineer Intern - CSU", schools), undefined);
+  assert.equal(schoolOnly("Software Engineer Intern (Contoso State)", schools), undefined);
+  assert.equal(schoolOnly("Software Intern - Example Polytechnic", schools), undefined);
+  // Another school's.
+  assert.equal(schoolOnly("Software Engineer Intern - UCLA", schools), "UCLA");
+  assert.equal(schoolOnly("Software Engineer Intern (Penn State)", schools), "Penn State");
+  assert.equal(schoolOnly("Research Intern - University of Contoso", schools), "University of Contoso");
+  assert.equal(schoolOnly("Software Intern at Virginia Tech", schools), "Virginia Tech");
+  // Not a school.
+  for (const title of ["Software Engineer Intern - Ad Tech", "Software Engineer (AI/ML)", "Software Engineer Intern - Summer 2027", "Backend Engineer - United States", "SDE Intern (Remote, US)"])
+    assert.equal(schoolOnly(title, schools), undefined, title);
 });
 
 test("a company's job board is named by its address or as ats:slug", () => {

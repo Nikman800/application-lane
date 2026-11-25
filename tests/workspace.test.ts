@@ -99,6 +99,11 @@ test("company names come from the job board path or title, not the board host", 
     "Klaviyo Campus",
   );
   assert.equal(companyFor("https://jobs.lever.co/acme-labs/123"), "Acme Labs");
+  // Rippling serves every employer from ats.rippling.com: "ats" was filed as the company.
+  assert.equal(companyFor("https://ats.rippling.com/acme-labs/jobs/123"), "Acme Labs");
+  // One already filed as "ats" is named again when the queue loads.
+  const filed = migrateQueue({ schemaVersion: 2, settings: { concurrency: 4, generationConcurrency: 2 }, applications: [{ id: "a", url: "https://ats.rippling.com/acme-labs/jobs/123", company: "ats", title: "Intern", status: "awaiting-user" }] } as unknown as QueueState);
+  assert.equal(filed.applications[0].company, "Acme Labs");
   // Paylocity hosts every employer; its page title names this one.
   assert.equal(companyFor("https://recruiting.paylocity.com/Recruiting/Jobs/Apply/1234567", "Contoso Controls LLC - Embedded Software Engineer"), "Contoso Controls LLC");
   // Greenhouse's embedded form names its board in "for".

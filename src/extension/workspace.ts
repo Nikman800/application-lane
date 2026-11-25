@@ -1,8 +1,8 @@
 import type { Application, QueueState, RelatedTab } from "../shared/model";
 
 // Hosted job boards put the employer in the path, not the host.
-const sharedBoardHosts = /(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com|smartrecruiters\.com|workable\.com)$/;
-const genericCompany = /^(job-boards|boards|jobs|apply|careers|www|application)$/i;
+const sharedBoardHosts = /(^|\.)(greenhouse\.io|lever\.co|ashbyhq\.com|smartrecruiters\.com|workable\.com)$|^ats\.rippling\.com$/;
+const genericCompany = /^(job-boards|boards|jobs|apply|careers|www|application|ats)$/i;
 const titleCase = (slug: string) =>
   slug
     .replace(/[-_]+/g, " ")

@@ -439,14 +439,14 @@ function wfnRadioQuestion(element: Element): string {
 
 // A text box that takes digits alone: ADP's desired salary ("Invalid salary
 // range. Accepts up to 7 digits."), or any box whose description or alert
-// says it takes only digits.
+// says it takes only digits (Avature's "Enter numerals only").
 export function digitsOnlyBox(element: HTMLInputElement): boolean {
   if (element.type !== "text") return false;
   if (element.matches("input.additional-info-salary-textBox")) return true;
   const root = element.getRootNode() as Document | ShadowRoot;
   const told = (element.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean)
     .map((id) => root.querySelector(`#${CSS.escape(id)}`)?.textContent || "").join(" ");
-  return /\b(digits only|only digits|numbers? only|accepts (up to )?\d+ digits)\b/i.test(told);
+  return /\b(digits only|only digits|(numbers?|numerals?) only|accepts (up to )?\d+ digits)\b/i.test(told);
 }
 
 // The text ids name in a root: ADP repeats an id (a title-only span before

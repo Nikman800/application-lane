@@ -142,6 +142,18 @@ test("Paylocity graduation month/year uses the selected education row", () => {
   assert.deepEqual(canonicalValues("grad_date_slashes_MMYYYY", schools, { collection: "education", index: 1 }), ["06/2024"]);
 });
 
+test("Oracle's Date Acquired takes a finished degree's end date, and its Projected Completion Date one still in progress", () => {
+  const schools = profileSchema.parse({ ...profile, education: [
+    { organization: "Example University", title: "Master of Science", startDate: "2025-08", endDate: "2099-12" },
+    { organization: "Sample College", title: "Bachelor of Science", startDate: "2020-09", endDate: "2024-06" },
+  ] });
+  const at = (index: number, key: string) => canonicalValues(key, schools, { collection: "education", index });
+  assert.deepEqual([at(1, "acquired_month_text"), at(1, "acquired_year")], [["June"], ["2024"]]);
+  assert.deepEqual([at(1, "completion_month_text"), at(1, "completion_year")], [[], []]);
+  assert.deepEqual([at(0, "completion_month_text"), at(0, "completion_year")], [["December"], ["2099"]]);
+  assert.deepEqual([at(0, "acquired_month_text"), at(0, "acquired_year")], [[], []]);
+});
+
 test("applies selector value maps and global country aliases", () => {
   assert.ok(
     selectorValues(

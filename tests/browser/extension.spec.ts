@@ -9551,6 +9551,42 @@ test("a resume swapped for a filename chip does not count as the cover letter", 
 // Amazon keeps the account's resume and shows it beside a Replace input
 //. It gives way to this application's tailored one as answers
 // the site filled in do; with those kept, the card offers it instead.
+// iCIMS: a form that fills itself from the resume, already holding one the
+// site kept from the candidate's account. The fill marked the page as one the
+// site parses even though it kept that resume and sent nothing, and that mark
+// then barred the tailored resume from replacing it on every later fill.
+test("a resume held by a form that fills itself from the resume is replaced with the tailored one", async () => {
+  await context.route(`${origin}/held-parsed-resume`, (route) => route.fulfill({ contentType: "text/html",
+    body: `<!doctype html><title>Candidate Profile</title><main><form onsubmit="return false">
+      <div role="tabpanel" aria-label="Resume"><h2>Resume</h2>
+        <p>Provide your resume below to pre-fill your profile. Existing data in the form will be replaced.</p>
+        <div class="card document-block"><a class="document-block-title" href="/download">Download Old_Account_Resume.pdf</a>
+        <label for="document-replace-input" class="document-replace-link"><button type="button">Replace<span class="sr-only">Resume</span></button></label>
+        <input type="file" id="document-replace-input" class="file-upload" accept=".pdf,.docx"></div></div>
+      <label>First name<input name="firstName"></label></form></main>
+    <script>
+      window.replaced = [];
+      document.getElementById("document-replace-input").addEventListener("change", (event) => {
+        const name = event.target.files[0].name;
+        window.replaced.push(name);
+        document.querySelector(".document-block-title").textContent = "Download " + name;
+      });
+    </script>` }));
+  const page = await context.newPage();
+  await page.goto(`${origin}/held-parsed-resume`);
+  await enqueue([page]);
+  const app = async () => (await state()).applications.find((candidate: { url: string }) => candidate.url.includes("held-parsed-resume"))!;
+  await expect.poll(async () => (await app()).status, { timeout: 45000 }).toMatch(/awaiting-user|ready/);
+  // Filled again, as the applicant does on the next visit.
+  await ui({ type: "FILL_STEP", id: (await app()).id });
+  await expect.poll(async () => (await app()).attempts.length, { timeout: 15000 }).toBeGreaterThan(1);
+  await expect.poll(async () => (await app()).status, { timeout: 45000 }).toMatch(/awaiting-user|ready/);
+  const replaced: string[] = await page.evaluate(() => (window as any).replaced);
+  expect(replaced).toHaveLength(1);
+  expect(replaced[0]).not.toBe("Old_Account_Resume.pdf");
+  expect((await app()).missing.join(" ")).not.toContain("Review existing document");
+});
+
 test("a resume the site already held is replaced with the tailored one, or offered for replacing", async () => {
   const body = `<!doctype html><title>Apply to a Job</title><main><h1>Upload your resume</h1><form>
       <label for="name">Full name</label><input id="name">
@@ -9588,8 +9624,19 @@ test("a resume the site already held is replaced with the tailored one, or offer
     expect(await page.evaluate(() => (window as any).replaced)).toHaveLength(1);
     // It is this application's own resume now, not one to review.
     expect((await app()).missing.join(" ")).not.toContain("Review existing document");
-    // Kept: nothing is replaced until the applicant asks, from the card.
+    // Answers kept, but the resume on the form still gives way by default: each
+    // application sends only its tailored resume.
     await ui({ type: "SETTINGS", settings: { ...settings, prefilled: "keep" } });
+    const held = await context.newPage();
+    await held.goto(`${origin}/held-resume?held=1`);
+    await enqueue([held]);
+    const heldApp = async () => (await state()).applications.find((candidate: { url: string }) => candidate.url.includes("held=1"))!;
+    await expect.poll(async () => (await heldApp()).status, { timeout: 45000 }).toMatch(/awaiting-user|ready/);
+    await expect.poll(() => held.evaluate(() => (window as any).replaced.length)).toBe(1);
+    expect(await held.evaluate(() => (window as any).replaced[0])).not.toBe("Old_Account_Resume.pdf");
+    expect((await heldApp()).missing.join(" ")).not.toContain("Review existing document");
+    // Kept when the applicant chose to keep it: nothing is replaced until they ask, from the card.
+    await ui({ type: "SETTINGS", settings: { ...settings, prefilled: "keep", existingResume: "keep" } });
     const kept = await context.newPage();
     await kept.goto(`${origin}/held-resume?keep=1`);
     await enqueue([kept]);
@@ -9603,7 +9650,7 @@ test("a resume the site already held is replaced with the tailored one, or offer
     await expect.poll(async () => (await keptApp()).replaceDocuments, { timeout: 45000 }).toBe(false);
     expect((await keptApp()).missing.join(" ")).not.toContain("Review existing document");
   } finally {
-    await ui({ type: "SETTINGS", settings: { ...settings, prefilled: "replace" } });
+    await ui({ type: "SETTINGS", settings: { ...settings, prefilled: "replace", existingResume: "replace" } });
   }
 });
 
@@ -12592,7 +12639,7 @@ const oracleEducationInput = (id: string, name: string, label: string) => `<div 
     <div class="input-field-container__right"><button type="button" id="${id}-toggle-button" tabindex="-1" aria-label="Open the drop-down list for ${label}." aria-expanded="false" aria-controls="${id}-listbox" class="icon-dropdown-arrow"></button></div>
     <div id="${id}-cx-select__modal" class="cx-select__options"></div></div></div></div></div>`;
 
-const oracleEducationScript = (id: string, entries: string, emptyUntilTyped = false) => `
+const oracleEducationScript = (id: string, entries: string, emptyUntilTyped = false, role: "gridcell" | "option" = "gridcell") => `
     (() => {
       const box = document.getElementById('${id}');
       const modal = document.getElementById('${id}-cx-select__modal');
@@ -12602,10 +12649,10 @@ const oracleEducationScript = (id: string, entries: string, emptyUntilTyped = fa
         box.setAttribute('aria-expanded', 'true'); arrow.setAttribute('aria-expanded', 'true');
         const all = (${entries})();
         const shown = ${emptyUntilTyped} && !box.value ? [] : all.filter((entry) => entry.toLowerCase().includes(box.value.toLowerCase()));
-        modal.innerHTML = '<div class="cx-select-container cx-select-dropdown--open"><div class="cx-select__listbox"><div role="grid" id="${id}-listbox" tabindex="-1" class="cx-select__list">'
-          + shown.map((entry, index) => '<div role="row"><div tabindex="-1" role="gridcell" id="${id}-listitem-' + index + '" aria-selected="false" class="cx-select__list-item"><div class="cx-select__list-item-container"><span class="cx-select__list-item--content"><span>' + entry + '</span></span></div></div></div>').join('')
+        modal.innerHTML = '<div class="cx-select-container cx-select-dropdown--open"><div class="cx-select__listbox"><div role="${role === "option" ? "listbox" : "grid"}" id="${id}-listbox" tabindex="-1" class="cx-select__list">'
+          + shown.map((entry, index) => '${role === "option" ? "" : '<div role="row">'}<div tabindex="-1" role="${role}" id="${id}-listitem-' + index + '" aria-selected="false" class="cx-select__list-item"><div class="cx-select__list-item-container"><span class="cx-select__list-item--content"><span>' + entry + '</span></span></div></div>${role === "option" ? "" : "</div>"}').join('')
           + '</div></div></div>';
-        for (const cell of modal.querySelectorAll('[role="gridcell"]'))
+        for (const cell of modal.querySelectorAll('[role="${role}"]'))
           cell.addEventListener('click', () => { box.value = cell.textContent; (window.picks = window.picks || []).push(cell.textContent); close(); });
       };
       arrow.addEventListener('click', () => { if (box.getAttribute('aria-expanded') === 'true') close(); else open(); });
@@ -12643,6 +12690,50 @@ test("Oracle's School list is typed with real keys, and the entry naming the sch
     .toEqual(["Example State University - Arizona"]);
   await expect(page.locator("#educationalEstablishmentId-119")).toHaveValue("Example State University - Arizona");
   await expect(page.locator('[role="combobox"][aria-expanded="true"]')).toHaveCount(0);
+});
+
+// Another Oracle layout draws its School list as a listbox of options, not a
+// grid of cells: the school was typed, nothing was picked, and the entry was
+// saved with no school.
+test("Oracle's School and Date Acquired lists drawn as listboxes of options have the school, month and year chosen", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile,
+    education: [{ organization: "Example Polytechnic State University, Sample City", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" }] } });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Education</title><main><div class="apply-flow-section" data-section-number="2">
+        <div class="standard-apply-flow-timeline-form">
+        ${oracleEducationInput("educationalEstablishment-55", "educationalEstablishment", "School")}
+        ${oracleEducationInput("month-dateAcquired-44", "dateAcquired", "Month")}
+        ${oracleEducationInput("year-dateAcquired-44", "dateAcquired", "Year")}
+        </div>
+      </div></main><script>
+        window.picks = [];
+        ${oracleEducationScript("educationalEstablishment-55", "() => ['Example Polytechnic State University, Sample City (Example Poly)', 'Example Polytechnic Institute']", true, "option")}
+        // The date lists open on a click of their box, as the site's do.
+        ${oracleEducationScript("month-dateAcquired-44", "() => ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']", false, "option")}
+        ${oracleEducationScript("year-dateAcquired-44", "() => ['2026', '2025', '2024', '2023', '2022']", false, "option")}
+        for (const id of ['month-dateAcquired-44', 'year-dateAcquired-44'])
+          document.getElementById(id).addEventListener('click', () => document.getElementById(id + '-toggle-button').click());
+        const school = document.getElementById('educationalEstablishment-55');
+        school.addEventListener('input', (event) => {
+          if (!event.isTrusted) { school.value = ''; return; }
+          // Its own list (window.openList is the last list's).
+          const toggle = document.getElementById('educationalEstablishment-55-toggle-button');
+          if (school.getAttribute('aria-expanded') === 'true') toggle.click();
+          toggle.click();
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/2`);
+  await enqueue([page]);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).picks), { timeout: 60000 })
+    .toContain("Example Polytechnic State University, Sample City (Example Poly)");
+  await expect(page.locator("#month-dateAcquired-44")).toHaveValue("June", { timeout: 30000 });
+  await expect(page.locator("#year-dateAcquired-44")).toHaveValue("2024", { timeout: 30000 });
 });
 
 // A second Oracle layout (check fd65029f): its School list appends the place's
@@ -13451,6 +13542,121 @@ test("an Avature job's Responsibilities editor gets the job's description", asyn
   const written = (row: string) => page.frameLocator(`[id="172-6-${row}_ifr"]`).locator("body").innerText();
   await expect.poll(() => written("0"), { timeout: 30000 }).toContain("Ran the pager rotation.");
   await expect.poll(() => written("1"), { timeout: 30000 }).toContain("Built APIs.");
+});
+
+// One employer's Avature Register page (report b3da866f): its repeated
+// sections are div rows ("multipleDatasetEntry_929_0") in a wrapper whose
+// class is MultipleDatasetEntryFormField, titled by a legend above, the
+// fields' own labels are "datasetfieldSpec"s, and "Current?" is a radio group.
+async function avatureDivRows() {
+  const entry = (set: number, row: string, n: number, hidden: boolean, label: string, control: string, cls = "TextField") =>
+    `<div id="datasetFieldContainer${set}-${n}-${row}" class="datasetFieldContainer"><div class="datasetfieldSpec ${cls} isRequired datasetfieldSpecPadder" id="fieldSpecContainer${set}-${n}-${row}"${hidden ? ' hidden="1"' : ""}><label class="datasetrequiredField WizardFieldLabel tc_formLabel" for="${set}-${n}-${row}" id="${set}-${n}-${row}-label">${label}<span aria-hidden="true" class="labelRequiredIcon"> *</span></label>${control}</div></div>`;
+  const text = (set: number, row: string, n: number, label: string) =>
+    entry(set, row, n, false, label, `<input type="text" id="${set}-${n}-${row}" name="${set}-${n}-${row}" class="TextField WizardFieldInputContainer WizardFieldInput" aria-labelledby="${set}-${n}-${row}-label">`);
+  const month = (set: number, row: string, n: number, label: string) =>
+    entry(set, row, n, false, label, `<input type="month" id="${set}-${n}-${row}" name="${set}-${n}-${row}" class="DateFormField WizardFieldInputContainer WizardFieldInput" aria-labelledby="${set}-${n}-${row}-label">`, "DateFormField");
+  const radios = (set: number, row: string, n: number, label: string) =>
+    `<div id="datasetFieldContainer${set}-${n}-${row}" class="datasetFieldContainer"><div class="datasetfieldSpec RadioButtonListFormField isRequired datasetfieldSpecPadder" id="fieldSpecContainer${set}-${n}-${row}"><fieldset role="presentation"><legend class="requiredField WizardFieldLabel tc_formLabel" id="${set}-${n}-${row}-label">${label}<span aria-hidden="true" class="labelRequiredIcon"> *</span></legend><div id="${set}-${n}-${row}" class="RadioButtonListContainer tc_formField" aria-labelledby="${set}-${n}-${row}-label" role="radiogroup"><input type="hidden" name="${set}-${n}-${row}" value=""><div class="cb WizardFieldInput"><input type="radio" name="${set}-${n}-${row}" value="37" id="${set}-${n}-${row}_37" data-option-name="Yes" role="radio" aria-checked="false"><label class="WizardFieldInput" for="${set}-${n}-${row}_37">Yes</label></div><div class="cb WizardFieldInput"><input type="radio" name="${set}-${n}-${row}" value="38" id="${set}-${n}-${row}_38" data-option-name="No" role="radio" aria-checked="false"><label class="WizardFieldInput" for="${set}-${n}-${row}_38">No</label></div></div></fieldset></div></div>`;
+  const select = (set: number, row: string, n: number, label: string, options: [string, string][]) =>
+    entry(set, row, n, false, label, `<select id="${set}-${n}-${row}" name="${set}-${n}-${row}" class="SelectFormField WizardFieldInputContainer WizardFieldInput" aria-labelledby="${set}-${n}-${row}-label"><option value="">Select an option</option>${options.map(([value, name]) => `<option value="${value}">${name}</option>`).join("")}</select>`, "SelectFormField");
+  const wrapper = (set: number, rows: (id: string) => string) =>
+    `<div class="fieldSpec MultipleDatasetEntryFormField fieldSpecPadder" id="fieldSpecContainer${set}"><p class="WizardEmptyLabel WizardFieldLabel tc_formLabel datasetField__label" id="${set}-label"></p><div class="multipleDatasetWrapper tc_formField" id="${set}" role="group" aria-labelledby="${set}-label"><div id="multipleDatasetRowsContainer_${set}">` +
+    `<div id="multipleDatasetEntry_${set}_sample" class="TableSampleRow" aria-hidden="true">${rows("sample")}<a href="javascript:void(0)" name="removeRowFor_${set}" class="removeDatasetRow WizardFieldLink" role="button" data-row-index="sample">remove</a></div>` +
+    `<div id="multipleDatasetEntry_${set}_0">${rows("0")}<a href="javascript:void(0)" name="removeRowFor_${set}" class="removeDatasetRow WizardFieldLink" role="button" data-row-index="0">remove</a></div></div>` +
+    `<a href="#" id="addRowFor_${set}" class="addDatasetRow WizardFieldLink" tabindex="0" role="button">add another</a></div></div>`;
+  const work = (id: string) => `${text(929, id, 2, "Position Title")}${text(929, id, 1, "Company")}${month(929, id, 4, "Start Date")}${month(929, id, 5, "End Date")}${radios(929, id, 3, "Current?")}`;
+  const school = (id: string) =>
+    `${select(931, id, 2, "Education (Degree, Certification, Training)", [["1", "Bachelor's Degree"], ["2", "Master's Degree"]])}${radios(931, id, 6, "In Progress")}${text(931, id, 9, "Institution Name")}${month(931, id, 13, "Graduation Date (Completed or Anticipated)")}`;
+  await context.route(`${avatureOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Software Engineer</title><main><form>
+        <fieldset class="Section Section2"><div class="fieldSpec"><label class="WizardFieldLabel" for="first">Preferred first name</label><input type="text" id="first" name="first" class="WizardFieldInput"></div>
+          <div class="fieldSpec form__item--odd NumberField fieldSpecPadder" id="fieldSpecContainer923"><label class="WizardFieldLabel tc_formLabel" for="923" id="923-label">Salary Requirements</label><div class="description WizardFieldDescription tc_formDescription" id="923-description">Enter numerals only</div><input type="text" id="923" name="923" class="form__item--odd NumberField WizardFieldInputContainer WizardFieldInput" aria-labelledby="923-label" aria-describedby="923-description" step="any" inputmode="decimal"></div>
+          <div class="fieldSpec SelectFormField AutoCompleteField fieldSpecPadder" id="fieldSpecContainer924"><label class="WizardFieldLabel tc_formLabel" for="924" id="924-label">Currency<span class="screenReaderVisibility" aria-hidden="true">Select an option</span></label><select name="924" class="SelectFormField AutoCompleteField" id="924" aria-labelledby="924-label"><option value="">Select an option</option><option value="5">Canada Dollar</option><option value="9">United States Dollar</option></select></div>
+          <div class="fieldSpec RadioButtonListFormField fieldSpecPadder" id="fieldSpecContainer925"><fieldset role="presentation"><legend class="WizardEmptyLabel WizardFieldLabel tc_formLabel" id="925-label"></legend><div id="925" class="RadioButtonListContainer tc_formField" aria-labelledby="925-label" role="radiogroup"><input type="hidden" name="925" value="">${[["8105", "Hourly"], ["8106", "Monthly"], ["8107", "Annually"]].map(([value, name]) => `<div class="cb WizardFieldInput"><input type="radio" name="925" value="${value}" id="925_${value}" data-option-name="${name}" role="radio" aria-checked="false"><label class="WizardFieldInput" for="925_${value}">${name}</label></div>`).join("")}</div></fieldset></div></fieldset>
+        <fieldset class="Section Section7"><div class="Separator Separator7" id="fieldSpecContainer928"><legend class="WizardFieldLabel tc_formTitle" id="928">Employment History</legend></div>
+          <div class="fieldSpec TextField fieldSpecPadder" id="fieldSpecContainer10496"><div class="description WizardFieldDescription tc_formDescription"><div><strong>Please enter at least one employment history.</strong> If you do not have any formal work experience, please list relevant volunteer experience, if applicable.</div></div></div>
+          ${wrapper(929, work)}
+        </fieldset>
+        <fieldset class="Section Section8"><div class="Separator Separator8" id="fieldSpecContainer930"><legend class="WizardFieldLabel tc_formTitle" id="930">Education</legend></div>
+          ${wrapper(931, school)}
+        </fieldset>
+      </form></main><script>
+        for (const set of [929, 931]) {
+          let rows = 1;
+          document.querySelector('#addRowFor_' + set).addEventListener('click', (event) => {
+            event.preventDefault();
+            const sample = document.querySelector('#multipleDatasetEntry_' + set + '_sample');
+            const html = sample.outerHTML.replaceAll('sample', String(rows++)).replace(' aria-hidden="true"', '').replace(' class="TableSampleRow"', '');
+            event.target.insertAdjacentHTML('beforebegin', html);
+          });
+        }
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${avatureOrigin}/en_US/careers?jobId=1`);
+  await enqueue([page]);
+  const input = (id: string) => page.locator(`[id="${id}"]`);
+  return { page, input };
+}
+
+test("an Avature form that says numerals only gets the pay figure alone, its currency list the currency and its unlabelled radios the pay period", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, country: "United States of America", salary: { min: 100000, currency: "USD", period: "year" } } });
+  const { page, input } = await avatureDivRows();
+  await expect(input("923")).toHaveValue("100000", { timeout: 30000 });
+  await expect(input("924")).toHaveValue("9", { timeout: 30000 });
+  await expect(page.locator('[id="925_8107"]')).toBeChecked({ timeout: 30000 });
+});
+
+test("an Avature job row drawn as a div in a multiple-entry section gets each job, its start month and its current radio, added rows too", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      work: [
+        { organization: "Acme", title: "Software Engineer", location: "Tucson, AZ", details: "Built services.", startDate: "2026-03-27", endDate: "" },
+        { organization: "Contoso", title: "Founder", location: "Remote", details: "Built a site.", startDate: "2025-03-01", endDate: "2025-12-01" },
+        { organization: "Sample AI", title: "Intern", location: "Remote", details: "Built APIs.", startDate: "2023-07-03", endDate: "2023-09-08" },
+      ],
+    },
+  });
+  const { input } = await avatureDivRows();
+  await expect(input("929-1-2")).toHaveValue("Sample AI", { timeout: 60000 });
+  const rows = () => Promise.all(["0", "1", "2"].map((row) => Promise.all([2, 1, 4].map((n) => input(`929-${n}-${row}`).inputValue()))));
+  await expect.poll(rows, { timeout: 30000 }).toEqual([
+    ["Software Engineer", "Acme", "2026-03"],
+    ["Founder", "Contoso", "2025-03"],
+    ["Intern", "Sample AI", "2023-07"],
+  ]);
+  await expect(input("929-3-0_37")).toBeChecked();
+  await expect(input("929-3-1_38")).toBeChecked();
+  await expect(input("929-3-2_38")).toBeChecked();
+});
+
+test("an Avature school row drawn as a div in a multiple-entry section gets its degree, in-progress answer and graduation month", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [
+        { organization: "Penn State", title: "Master of Science", fieldOfStudy: "Data Science", location: "", details: "", startDate: "2025-08", endDate: "2019-06" },
+        { organization: "Contoso University", title: "Bachelor of Science", fieldOfStudy: "Computer Science", location: "", details: "", startDate: "2015-09", endDate: "2019-06" },
+      ],
+    },
+  });
+  const { input } = await avatureDivRows();
+  await expect(input("931-9-1")).toHaveValue("Contoso University", { timeout: 60000 });
+  await expect.poll(() => Promise.all(["0", "1"].map((row) => Promise.all([2, 13].map((n) => input(`931-${n}-${row}`).inputValue())))), { timeout: 30000 }).toEqual([
+    ["2", "2019-06"],
+    ["1", "2019-06"],
+  ]);
+  await expect(input("931-6-0_38")).toBeChecked();
 });
 
 test("an Avature skills box that searches as it is typed in gets each profile skill picked from its list, and is closed after", async () => {
@@ -18810,6 +19016,48 @@ test("a SmartRecruiters education entry chooses its Institution from under the h
   await expect.poll(() => page.evaluate(() => (document.querySelector("spl-checkbox")!.shadowRoot!.querySelector("input") as HTMLInputElement).checked), { timeout: 30_000 }).toBe(true);
 });
 
+// A recording of a SmartRecruiters one-click apply: the applicant pressed Next
+// while the fill's site rules were still on the first step, the single-page app
+// moved to /screening, and the old fill's pass came back on the new step and
+// ended "Couldn't complete".
+test("a SmartRecruiters step change during the fill ends it quietly and leaves the new step ready to fill", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, education: [{ organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Data Science", startDate: "2024-08", endDate: "2099-05", location: "", details: "" }] } });
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Easy apply - Engineer, Acme</title>
+        <main id="step"><label for="email">Email</label><input id="email" type="email"><oc-education><button type="button" data-test="add-education">Add</button><div id="entries"></div></oc-education></main><script>${smartRecruitersWidgets}
+        document.querySelector('[data-test="add-education"]').addEventListener("click", () => {
+          const entry = document.createElement("oc-education-entry");
+          entry.innerHTML = '<div data-test="education-edit-form"><oc-institution-autocomplete></oc-institution-autocomplete><button type="button" data-test="education-save">Save</button></div>';
+          document.getElementById("entries").append(entry);
+          // The school list offers nothing, so the pass waits on it; the applicant moves on.
+          splAutocomplete(entry.querySelector("oc-institution-autocomplete"), { label: "Institution", test: "institution-autocomplete", suggest: () => [] });
+          setTimeout(() => {
+            history.pushState({}, "", location.pathname + "/screening");
+            document.getElementById("step").innerHTML = '<label for="email2">Email</label><input id="email2" type="email"><label for="phone2">Phone</label><input id="phone2" type="tel">';
+          }, 2500);
+        }, { once: true });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/9`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect.poll(() => page.url(), { timeout: 60_000 }).toContain("/screening");
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60_000 }).toMatch(/^(paused|awaiting-user|ready)$/);
+  await page.waitForTimeout(8000);
+  const app = (await state()).applications[0];
+  expect(app.status).toMatch(/^(paused|awaiting-user|ready)$/);
+  expect(app.status).not.toBe("failed");
+  await expect(page.locator("#email2")).toHaveValue("");
+  await ui({ type: "FILL_STEP", id: app.id });
+  await expect(page.locator("#email2")).toHaveValue(profile.email, { timeout: 60_000 });
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 60_000 }).toMatch(/^(ready|awaiting-user)$/);
+});
+
 // SmartRecruiters' phone Country code: a <button
 // role="combobox"> of no type, in its spl-select's shadow root where no
 // form reaches, opening the list it names; refused as able to submit.
@@ -20967,6 +21215,51 @@ test("clicking Fill this step keeps the panel rendered", async () => {
     panel.getByRole("heading", { name: "Applications", exact: true }),
   ).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+// A fill under way could be paused only from the application list, not
+// beside the Fill this step button the applicant had just pressed.
+test("Pause fill beside the running fill stops it, and the documents it was waiting for are never attached", async () => {
+  const checkout = await scratch("lane-pause-");
+  await writeFile(join(checkout, "profile.md"), "## Experience\n- Built things.\n");
+  appConfig.tailorDir = checkout;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  runtimeGenerate = async (req, p) => {
+    await held;
+    return groundNarrative(
+      { resume: p.facts.map((f) => ({ factId: f.id, text: f.text })), coverLetter: [{ text: "", factIds: ["fact-1"] }], answers: [] },
+      p,
+      req,
+    );
+  };
+  runtimeTailor = async () => {
+    await held;
+    throw new Error("no tailoring in this test");
+  };
+  const page = await context.newPage();
+  await page.goto(`${origin}/early-answers`);
+  const tabId = await panel.evaluate(
+    async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!,
+    page.url(),
+  );
+  await ui({ type: "TRACK_TAB", tabId });
+  await page.bringToFront();
+  await panel.getByRole("button", { name: "Scan current tab" }).click();
+  const card = panel.getByRole("region", { name: "Current browser tab" });
+  await card.getByRole("button", { name: "Fill this step" }).click();
+  await expect(page.locator("[name=email]")).toHaveValue(profile.email, { timeout: 15000 });
+  await card.getByRole("button", { name: "Pause fill" }).click({ timeout: 10000 });
+  await expect.poll(async () => (await state()).applications.find((app: { tabId?: number }) => app.tabId === tabId)?.status).toBe("paused");
+  await expect(panel.getByRole("status")).toContainText("Fill paused");
+  await expect(card.getByRole("button", { name: "Pause fill" })).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Fill this step" })).toBeEnabled();
+  release();
+  await page.waitForTimeout(3000);
+  expect(await page.locator("[name=resume]").evaluate((input: HTMLInputElement) => input.files?.length || 0)).toBe(0);
+  const app = (await state()).applications.find((item: { tabId?: number }) => item.tabId === tabId);
+  expect([app?.status, app?.explicitFill]).toEqual(["paused", false]);
+  delete appConfig.tailorDir;
 });
 
 test("Mark submitted records the submission from the application card", async () => {

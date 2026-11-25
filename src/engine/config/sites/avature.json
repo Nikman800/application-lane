@@ -22,10 +22,11 @@
       [
         {
           "containerPath": [
-            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')] or preceding-sibling::div[contains(@class,'Separator')][1]//legend[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')]]//fieldset[contains(@class,'datasetField__row')][not(contains(@class,'datasetField__row--sample'))]"
+            ".//div[contains(@class,'datasetField') or contains(@class,'MultipleDatasetEntryFormField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')] or preceding-sibling::div[contains(@class,'Separator')][1]//legend[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')]]//fieldset[contains(@class,'datasetField__row')][not(contains(@class,'datasetField__row--sample'))]",
+            ".//div[contains(@class,'datasetField') or contains(@class,'MultipleDatasetEntryFormField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')] or preceding-sibling::div[contains(@class,'Separator')][1]//legend[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')]]//div[starts-with(@id,'multipleDatasetEntry_')][not(contains(@id,'_sample'))]"
           ],
           "addButtonPath": [
-            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')] or preceding-sibling::div[contains(@class,'Separator')][1]//legend[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')]]//a[starts-with(@id,'addRowFor_')]"
+            ".//div[contains(@class,'datasetField') or contains(@class,'MultipleDatasetEntryFormField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')] or preceding-sibling::div[contains(@class,'Separator')][1]//legend[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'work') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'employment') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'experience')]]//a[starts-with(@id,'addRowFor_')]"
           ],
           "inputSelectors": [
             [
@@ -43,7 +44,8 @@
             [
               "currently_working",
               [
-                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'current') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'is current')]]//select"
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'current') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'is current')]]//select",
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//legend[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'current') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'is current')]]//input[@type='radio'][@data-option-name='%VALUE%']"
               ]
             ],
             [
@@ -73,10 +75,11 @@
       [
         {
           "containerPath": [
-            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')] or preceding-sibling::div[contains(@class,'Separator')][1]//legend[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//fieldset[contains(@class,'datasetField__row')][not(contains(@class,'datasetField__row--sample'))]"
+            ".//div[contains(@class,'datasetField') or contains(@class,'MultipleDatasetEntryFormField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')] or preceding-sibling::div[contains(@class,'Separator')][1]//legend[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//fieldset[contains(@class,'datasetField__row')][not(contains(@class,'datasetField__row--sample'))]",
+            ".//div[contains(@class,'datasetField') or contains(@class,'MultipleDatasetEntryFormField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')] or preceding-sibling::div[contains(@class,'Separator')][1]//legend[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//div[starts-with(@id,'multipleDatasetEntry_')][not(contains(@id,'_sample'))]"
           ],
           "addButtonPath": [
-            ".//div[contains(@class,'datasetField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')] or preceding-sibling::div[contains(@class,'Separator')][1]//legend[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//a[starts-with(@id,'addRowFor_')]"
+            ".//div[contains(@class,'datasetField') or contains(@class,'MultipleDatasetEntryFormField')][*[contains(@class,'WizardFieldLabel')][contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')] or preceding-sibling::div[contains(@class,'Separator')][1]//legend[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]//a[starts-with(@id,'addRowFor_')]"
           ],
           "inputSelectors": [
             [
@@ -88,7 +91,7 @@
             [
               "school",
               [
-                ".//div[contains(@class,'fieldSpec')][label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'university') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]"
+                ".//div[contains(@class,'fieldSpec')][label[contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'institution/program') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'university') or contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'school')]]"
               ]
             ],
             [
@@ -112,6 +115,30 @@
               "end_year",
               [
                 ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'year received') or starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'graduation year')]]//input"
+              ]
+            ],
+            [
+              "degree",
+              [
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'education (')]]//select"
+              ]
+            ],
+            [
+              "currently_studying",
+              [
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//legend[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'in progress')]]//input[@type='radio'][@data-option-name='%VALUE%']"
+              ]
+            ],
+            [
+              "end_dashes_yyyymm",
+              [
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][.//label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'graduation date')]]//input[@type='month']"
+              ]
+            ],
+            [
+              "major",
+              [
+                ".//div[contains(@class,'fieldSpec')][not(contains(@class,'datasetField'))][label[starts-with(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'specialization/major')][not(contains(translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'name'))]]"
               ]
             ]
           ]

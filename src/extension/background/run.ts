@@ -1,5 +1,6 @@
 // Part of the extension's service worker (background.ts): one fill of an application's current step.
 // Split out of background.ts as it was; see background.ts for how it starts.
+import { bg } from "./state";
 import { type Application, type Profile, type GenerationJob, type Observation, type Proposal, normalize, type Field, type Artifact } from "../../shared/model";
 import { genericTitle, singlePostingUrl } from "../../shared/titles";
 import { canonicalURL, postingGuess, proposals, historyRowMap } from "../../shared/matching";
@@ -10,7 +11,7 @@ import { storeBuild } from "../../shared/store-build";
 import { trustedTypingAvailable, releaseTrustedInput } from "../trusted-input";
 import { rowHolds } from "../row-holds";
 import { carryOnFailed, clearFit, fillable, forApplication, operationKey, resume, schedule, touch } from "./queue";
-import { type Frame, alive, answerRequests, api, applyFrame, configUploads, dirty, emptyFields, fieldFallbackRequests, frameCall, frameDeadline, loadingSince, pageTimers, persist, reinspectNavigation, reviewInterruptedWrite, signingPolicies } from "./core";
+import { type Frame, alive, answerRequests, api, applyFrame, configUploads, dirty, emptyFields, fieldFallbackRequests, frameCall, frameDeadline, loadingSince, pageTimers, persist, endOnStepChange, reinspectNavigation, reviewInterruptedWrite, signingPolicies } from "./core";
 import { guessedAgain, inspectTab, leadingPage, namedByPage, observations, postingFromOwnTab, useApply, wordCount } from "./tabs";
 import { interactedNote } from "./submissions";
 import { assist, leftAsLegal, modelFills, noteAiFilled, readListOptions } from "./field-fallback";
@@ -387,6 +388,11 @@ export async function run(app: Application, operation: number) {
         documentURL: frame.observation.url,
         profile,
       }).catch(async (error: Error) => {
+        // The page moved to another step while this fill was on the last
+        // (the page script answers a command of the old document with
+        // "The page document changed."): this fill is over, quietly. The new
+        // step is the applicant's to fill; nothing of the old one is resumed on it.
+        if (/The page document changed/i.test(error.message)) return undefined;
         // A navigation can destroy a config response after its click already
         // happened. Rebind a fresh document on the same application URL, never
         // resend that config command (it might contain a click or upload).
@@ -397,6 +403,7 @@ export async function run(app: Application, operation: number) {
         return { statuses: [{ key: "navigation", status: "skipped", reason: "Document changed; the interrupted command was not retried." }], observation: fresh.observation, ats: fresh.observation.ats };
       });
       if (!alive(app, operation)) return;
+      if (!result) return endOnStepChange(app);
       app.filled += result.statuses.filter(
         (status: { status: string }) => status.status === "filled",
       ).length;
@@ -778,9 +785,12 @@ export async function run(app: Application, operation: number) {
     // blanked the typed address and zip 1.5 s after its resume_upload
     // returned). Those are answered again below.
     const resume: { filledBeforeResume?: Map<string, string>; fieldsBeforeResume?: Set<string> } = {};
-    const heldBySite = (f: Field) => fileKind(f) === "resume" && Boolean(f.value) && !f.attachmentId &&
-      !app.uploadedDocuments?.resume && !app.siteFillTried && !app.siteFillPending &&
-      (f.siteValue || (Boolean(app.replaceDocuments) && f.protectedReason === "existing value"));
+    // Replace with tailored resume, asked for on the card, replaces whatever
+    // the slot shows, a resume this application sent before included.
+    const heldBySite = (f: Field) => fileKind(f) === "resume" && Boolean(f.value) && !f.attachmentId && !app.siteFillPending &&
+      (Boolean(app.replaceDocuments) ||
+        (!app.uploadedDocuments?.resume && !app.resumeSent &&
+          (f.siteValue || (bg.state.settings.existingResume !== "keep" && f.protectedReason === "existing value"))));
     if ((await fillByProfile(resume, { app, fileKind, frame, heldBySite, issues, job, operation, profile, resumeFirst })) === "stop") return;
     if (!alive(app, operation)) return;
     if ((await fillByConfig({ app, configResumeFirst, fieldKinds, fileKind, frame, issues, job, operation, profile, resumeFirst })) === "stop") return;
@@ -1177,6 +1187,10 @@ async function fillByProfile(
       resume.filledBeforeResume = new Map(frame.observation.fields.filter((f) => f.kind !== "file" && f.value).map((f) => [f.id, f.value]));
       resume.fieldsBeforeResume = new Set(frame.observation.fields.map((f) => f.id));
     }
+    if (kind === "resume" && !app.resumeSent) {
+      app.resumeSent = true;
+      await persist();
+    }
     try {
       const result = await frameCall(app, frame.frameId, {
         type: "ATTACH",
@@ -1268,6 +1282,10 @@ async function fillByConfig(
       const attached = await frameCall(app, frame.frameId, { type: "ATTACHED", name: artifact.name }).catch(() => undefined);
       if (attached?.attached && app.uploadedDocuments?.[kind] === fingerprint) continue;
       const before = frame.observation.fields.length;
+      if (kind === "resume" && !app.resumeSent) {
+        app.resumeSent = true;
+        await persist();
+      }
       const result = await frameCall(app, frame.frameId, {
         type: "CONFIG_FILL",
         documentId: frame.observation.documentId,

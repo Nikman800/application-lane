@@ -251,6 +251,24 @@ export function SettingsPage({ panel }: { panel: PanelState }) {
               <option value="keep">Keep what the site filled in</option>
             </select>
           </label>
+          <label>
+            Resume already on a form
+            <select
+              value={queue.settings.existingResume || "replace"}
+              onChange={(e) =>
+                setQueue((q) => ({
+                  ...q,
+                  settings: {
+                    ...q.settings,
+                    existingResume: e.target.value === "keep" ? "keep" : "replace",
+                  },
+                }))
+              }
+            >
+              <option value="replace">Replace it with the resume tailored for the posting</option>
+              <option value="keep">Keep it (Replace with tailored resume stays on the card)</option>
+            </select>
+          </label>
           {!storeBuild && typeof chrome.debugger !== "undefined" && (
           <label>
             Network capture for reports

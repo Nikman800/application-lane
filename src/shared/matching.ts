@@ -399,6 +399,9 @@ export function deterministicAnswer(
       return name || undefined;
     return code;
   }
+  // iCIMS' "Phones (1)" section names its box only "Number", beside a Type list.
+  if (label === "number" && /^(text|tel)$/.test(field.kind) && /^(phones?|phone numbers?)( \d+)?$/.test(section))
+    return phone.national || undefined;
   // "Middle Name (Optional)": the same box, its note dropped.
   const bare = label.replace(/ optional$/, "");
   for (const [pattern, key] of keys)
@@ -1296,10 +1299,25 @@ function studyAndPayAnswer({ field, profile, label, saved, asked, educationRow }
   // The currency list beside the pay figure ("Select currency type", ADP's):
   // the one the applicant gave their pay in, as the list names it ("United
   // States Dollar ( USD )").
-  if (/^(select |choose )?(a )?(the )?currency( type)?$/.test(label) && /^(combobox|select)$/.test(field.kind) && profile.salary?.min !== undefined) {
-    const code = (profile.salary.currency || "").trim().toUpperCase();
+  // Avature's reads "Currency" with its list's placeholder run on
+  // ("CurrencySelect an option").
+  if (/^(select |choose )?(a )?(the )?currency( type)?( ?select an option)?$/.test(label) && /^(combobox|select)$/.test(field.kind) && profile.salary?.min !== undefined) {
+    // A bare "$" is the dollar of the country the applicant lives in.
+    const given = (profile.salary.currency || "").trim().toUpperCase();
+    const code = given === "$" && /^(united states|usa?)\b/i.test((profile.country || "").trim()) ? "USD" : given;
     const names = currencyNames[code];
     if (names) return { value: names[0], choices: [...names.slice(1), code] };
+  }
+  // The pay period beside it, a radio group with no label of its own
+  // (Avature's Hourly / Monthly / Annually): the period the applicant gave
+  // their pay in.
+  if (field.kind === "radio" && profile.salary?.min !== undefined && field.options.length >= 2) {
+    const periods = field.options.map((option) => normalize(option));
+    if (periods.every((option) => /^(hourly|daily|weekly|bi weekly|monthly|annual|annually|yearly)$/.test(option))) {
+      const wanted = { hour: /^hourly$/, month: /^monthly$/, year: /^(annual|annually|yearly)$/ }[profile.salary.period];
+      const option = field.options.find((candidate) => wanted.test(normalize(candidate)));
+      if (option) return { value: option };
+    }
   }
   // A GPA is its own row's, on that row's scale: the row asked about, or
   // the program held now or ended last.
@@ -1495,7 +1513,11 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
     .replace(/\b(american indian|alaska(n)? native|native hawaiian|pacific islander)\b/gi, " ");
   if (demographic && (
     countriesNamed(geography, definedAway).some((country) => country !== "US") ||
-    /\b(equality act|employment equity|visible minorit\w*|aboriginal|torres strait|first nations|indigenous|metis|inuit|caste|scheduled (caste|tribe)|socio ?economic|religio\w*)\b/.test(normalize(`${field.question || ""} ${field.label}`))
+    /\b(equality act|employment equity|visible minorit\w*|aboriginal|torres strait|first nations|indigenous|metis|inuit|caste|scheduled (caste|tribe)|socio ?economic|religio\w*)\b/.test(normalize(`${field.question || ""} ${field.label}`)
+      // A U.S. equal-opportunity statement lists religion among the grounds it
+      // does not discriminate on ("on the basis of race, religion, color…"):
+      // that names no religion question.
+      .replace(/\b(on the basis of|regardless of|because of|without regard to)\b[^.]*/gi, " "))
   )) return;
   // Workday lists each answer as its own checkbox ("No, I do not have a
   // disability…"): the box is ticked when its own label states the answer.
@@ -1546,6 +1568,9 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
   // into a list of "Not a Protected Veteran", "Not disclosed" and "Protected
   // Veteran", and matched none. The answer and the ways lists word it are
   // matched when it opens; only a wording equal to an option is taken.
+  // A veteran's discharge date (Oracle's "Newly Separated Veteran Discharge
+  // Date Month") is no veteran question: it was handed "I am not a veteran".
+  if (demographic === "veteranStatus" && /\b(date|month|day|year)\b/.test(label)) return;
   if (demographic === "veteranStatus" && !field.options.length && /combobox|listbox/.test(field.kind)) {
     const answer = canonicalAnswer("veteranStatus", profile.veteranStatus);
     const military = plainAnswer(profile.answers.find((saved) => questionTopic(saved.question) === "military")?.answer);
@@ -1554,7 +1579,11 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
       Yes: ["Protected Veteran", "I am a protected veteran", "I identify as one or more of the classifications of protected veteran"],
       // Never served: "not a veteran" is true too; a veteran outside the
       // protected groups is only "not a protected veteran".
-      No: military === "No" ? ["I am not a veteran", "Not a veteran", ...protectedNo] : protectedNo,
+      // A Yes/No list ("Are you a veteran or active member of the Armed
+      // Forces?") says it "No"; the typed "I am not a veteran" matched none
+      // of its options.
+      // Greenhouse words it "No, I am not a veteran or active member".
+      No: military === "No" ? ["I am not a veteran", "Not a veteran", ...protectedNo, "No", "No, I am not a veteran or active member", "No, I am not a veteran"] : protectedNo,
       Decline: ["Decline to answer", "Not disclosed", "I do not wish to self-identify", "I don't wish to answer", "Prefer not to say"],
     };
     const names = wordings[answer];
@@ -1924,6 +1953,14 @@ export function proposals(fields: Field[], profile: Profile): Proposal[] {
     ...proposalsFor(fields.filter((field) => !completedEducation(field)), profile),
     ...proposalsFor(fields.filter(completedEducation), { ...profile, education: top ? [top] : [] }),
   ];
+}
+
+// An unticked box the profile answers No to ("Disabled Veteran" for a saved
+// "not a veteran", "I am Hispanic or Latino." for a saved No) is answered as
+// it stands, though no write is planned for it: the model was asked them
+// and said No itself.
+export function untickedNo(field: Field, profile: Profile): boolean {
+  return field.kind === "checkbox" && !field.value && profileAnswer({ ...field, protected: false }, profile)?.value === "No";
 }
 
 function proposalsFor(fields: Field[], profile: Profile): Proposal[] {

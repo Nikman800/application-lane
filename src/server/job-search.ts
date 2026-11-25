@@ -345,6 +345,35 @@ function placeMatch(locations: string[], places: string[], remote: boolean, coun
   }
 }
 
+// A posting for one school's students names the school after a dash, in
+// brackets or after "at" ("Software Engineer Intern - Acme State",
+// "Intern (Penn State)"). Such a posting is kept only when that school is one
+// of the applicant's: its full name, its name without "University", or its
+// initials ("Contoso State University" is "CSU").
+const schoolAcronyms = new Set(["BU", "BYU", "CMU", "CSU", "FSU", "GT", "LSU", "MIT", "NCSU", "NYU", "OSU", "PSU", "RIT", "RPI", "SDSU", "SJSU", "TAMU", "UCB", "UCF", "UCI", "UCLA", "UCSB", "UCSD", "UF", "UGA", "UIUC", "UMD", "UNC", "USC", "USF", "UT", "UTD", "UVA", "UW", "VT", "WPI"]);
+const schoolWords = /\b(university|college|polytechnic|institute of technology|(georgia|virginia|texas|louisiana) tech|\w+ state)\b/;
+export function schoolOnly(title: string, schools: string[]): string | undefined {
+  const segments = [
+    ...title.split(/\s+[-\u2013\u2014|]\s+/).slice(1),
+    ...[...title.matchAll(/\(([^)]+)\)/g)].map((match) => match[1]),
+    ...[...title.matchAll(/\bat ([A-Z][^,;()]*)$/g)].map((match) => match[1]),
+  ].map((segment) => segment.trim()).filter(Boolean);
+  const named = segments.find((segment) =>
+    segment.split(/[\s/,]+/).some((token) => schoolAcronyms.has(token)) || schoolWords.test(normalize(segment)),
+  );
+  if (!named) return undefined;
+  const text = ` ${normalize(named)} `;
+  const tokens = new Set(named.split(/[\s/,]+/));
+  const own = schools.some((school) => {
+    const name = normalize(school);
+    if (!name) return false;
+    const initials = school.split(/[\s,-]+/).filter((word) => /^[A-Z]/.test(word)).map((word) => word[0]).join("");
+    const short = name.replace(/\b(the|university|of|at)\b/g, " ").replace(/\s+/g, " ").trim();
+    return text.includes(` ${name} `) || (short.length > 2 && text.includes(` ${short} `)) || (initials.length > 1 && tokens.has(initials));
+  });
+  return own ? undefined : named;
+}
+
 export async function searchJobs(
   settings: SearchSettings,
   profile: Profile,
@@ -403,6 +432,7 @@ export async function searchJobs(
     const role = roles.length ? roleMatch(job.title, roles) : "any role";
     if (!role) continue;
     if (settings.skipSenior && senior.test(normalize(job.title)) && !senior.test(normalize(role))) continue;
+    if (schoolOnly(job.title, profile.education.map((row) => row.organization))) continue;
     const place = placeMatch(job.locations, locations, settings.remote, country);
     if (!place) continue;
     seen.add(job.url);

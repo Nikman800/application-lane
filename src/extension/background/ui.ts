@@ -192,11 +192,13 @@ export async function uiMessage(message: any) {
     const nextButton = ["on", "off"].includes(message.settings.nextButton) ? (message.settings.nextButton as "on" | "off") : bg.state.settings.nextButton;
     const submitButton = ["on", "off"].includes(message.settings.submitButton) ? (message.settings.submitButton as "on" | "off") : bg.state.settings.submitButton;
     const agreeToTerms = ["on", "off"].includes(message.settings.agreeToTerms) ? (message.settings.agreeToTerms as "on" | "off") : bg.state.settings.agreeToTerms;
+    const existingResume = ["replace", "keep"].includes(message.settings.existingResume) ? (message.settings.existingResume as "replace" | "keep") : bg.state.settings.existingResume;
     const signatures = ["never", "self-id", "all"].includes(message.settings.signatures) ? (message.settings.signatures as SignaturePolicy) : bg.state.settings.signatures;
     await api("/v1/settings", "PUT", { generationConcurrency, checking });
     bg.state.settings = {
       concurrency, generationConcurrency, checking, prefilled, networkCapture,
       ...(modelFill ? { modelFill } : {}),
+      ...(existingResume ? { existingResume } : {}),
       ...(legalQuestions ? { legalQuestions } : {}),
       ...(nextButton ? { nextButton } : {}),
       ...(submitButton ? { submitButton } : {}),
@@ -274,6 +276,7 @@ export async function uiMessage(message: any) {
     app.siteFillPending = false;
     app.continueAfterSiteFill = false;
     app.siteFillTried = false;
+    app.resumeSent = false;
     app.configNotes = [];
     app.missing = [];
     app.filled = 0;

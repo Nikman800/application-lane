@@ -1,7 +1,7 @@
 // Part of the extension's service worker (background.ts): the AI step for fields the profile rules left open.
 // Split out of background.ts as it was; see background.ts for how it starts.
 import { type Application, type Field, type Profile, type FieldFallbackProblem, activeStatuses, type GenerationJob, normalize, type Proposal, type Observation, hasLegalDetails } from "../../shared/model";
-import { proposals, listAnswered, draftOnlySite, DRAFT_ONLY_NOTE } from "../../shared/matching";
+import { proposals, untickedNo, listAnswered, draftOnlySite, DRAFT_ONLY_NOTE } from "../../shared/matching";
 import { structuredFallbackField, leftReason, legalQuestion } from "../../shared/questions";
 import { releaseTrustedInput } from "../trusted-input";
 import { bg } from "./state";
@@ -64,7 +64,8 @@ export function fallbackProblems(
           .map((field) => field.label),
       );
     const fields = withRows(frame.observation.fields)
-      .filter((field) => structuredFallbackField(field, legalToo) && !(field.question && answeredLists.has(field.question)))
+      .filter((field) => structuredFallbackField(field, legalToo) && !(field.question && answeredLists.has(field.question)) &&
+        !untickedNo(field, profile))
       .slice(0, Math.max(0, 100 - problems.length));
     if (!fields.length) continue;
     frames.push({

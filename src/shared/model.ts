@@ -496,7 +496,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-25-oracle-major-tiles";
+export const CONTENT_VERSION = "2026-11-25-replace-held-resume";
 export type Proposal = {
   fieldId: string;
   value: string;
@@ -888,6 +888,12 @@ export type Application = {
   // once: if the site did not take the file (or the dialog stayed up), the
   // next fill goes on with the form instead of uploading and waiting again.
   siteFillTried?: boolean;
+  // This application has sent a resume to the page (confirmed or not). A
+  // resume shown afterwards may be the site's copy of it (iCIMS reloads before
+  // the upload is confirmed), so it is not replaced as one the site held.
+  // siteFillTried is no stand-in: it is set when the site may parse a resume
+  // even if a resume it already held was kept and nothing was sent.
+  resumeSent?: boolean;
   operation: number;
   profileRevision: number;
   jobId?: string;
@@ -923,6 +929,11 @@ export type Settings = {
   // profile, an earlier application) give way to the profile's; keep: they
   // stay. Edits the applicant makes are kept either way.
   prefilled?: "replace" | "keep";
+  // replace (default): a resume already on the form when the fill starts (one
+  // the site kept from a sign-in or an earlier application) gives way to this
+  // posting's tailored one, so it is the only resume sent; keep: it stays,
+  // and the panel offers Replace with tailored resume.
+  existingResume?: "replace" | "keep";
   // on: application tabs' network traffic is kept for issue reports.
   networkCapture?: "on" | "off";
   // What Fill this step lets the model do (default "auto"):

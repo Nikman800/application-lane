@@ -65,6 +65,7 @@
             {
               "path": [
                 "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                 "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
               ],
               "method": "click",
@@ -104,6 +105,7 @@
             {
               "path": [
                 "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                 "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
               ],
               "method": "click",
@@ -151,6 +153,7 @@
                     {
                       "path": [
                         "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                         "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
                       ],
                       "method": "click",
@@ -181,7 +184,8 @@
                     },
                     {
                       "path": [
-                        "//*[@role='gridcell' and contains(@class,'cx-select__list-item')]"
+                        "//*[@role='gridcell' and contains(@class,'cx-select__list-item')]",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')]"
                       ],
                       "rankedPick": true,
                       "method": "click",
@@ -203,6 +207,7 @@
                     {
                       "path": [
                         "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                         "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
                       ],
                       "method": "click",
@@ -224,6 +229,7 @@
                     {
                       "path": [
                         "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                         "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
                       ],
                       "method": "click",
@@ -245,6 +251,7 @@
                     {
                       "path": [
                         "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                         "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
                       ],
                       "method": "click",
@@ -266,6 +273,95 @@
                     {
                       "path": [
                         "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
+                      ],
+                      "method": "click",
+                      "time": 3000
+                    }
+                  ]
+                }
+              ]
+            ],
+            [
+              "acquired_month_text",
+              [
+                {
+                  "path": ".//input[starts-with(@id,'month-dateAcquired')]",
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": [
+                        "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
+                      ],
+                      "method": "click",
+                      "time": 3000
+                    }
+                  ]
+                }
+              ]
+            ],
+            [
+              "acquired_year",
+              [
+                {
+                  "path": ".//input[starts-with(@id,'year-dateAcquired')]",
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": [
+                        "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
+                      ],
+                      "method": "click",
+                      "time": 3000
+                    }
+                  ]
+                }
+              ]
+            ],
+            [
+              "completion_month_text",
+              [
+                {
+                  "path": ".//input[starts-with(@id,'month-projectedCompletionDate')]",
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": [
+                        "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
+                      ],
+                      "method": "click",
+                      "time": 3000
+                    }
+                  ]
+                }
+              ]
+            ],
+            [
+              "completion_year",
+              [
+                {
+                  "path": ".//input[starts-with(@id,'year-projectedCompletionDate')]",
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": [
+                        "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                         "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
                       ],
                       "method": "click",
@@ -370,6 +466,7 @@
                     {
                       "path": [
                         "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                         "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
                       ],
                       "method": "click",
@@ -391,6 +488,7 @@
                     {
                       "path": [
                         "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                         "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
                       ],
                       "method": "click",
@@ -412,6 +510,7 @@
                     {
                       "path": [
                         "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                         "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
                       ],
                       "method": "click",
@@ -433,6 +532,7 @@
                     {
                       "path": [
                         "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                         "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
                       ],
                       "method": "click",
@@ -454,6 +554,7 @@
                     {
                       "path": [
                         "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                         "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
                       ],
                       "method": "click",
@@ -549,6 +650,7 @@
                     {
                       "path": [
                         "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                         "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
                       ],
                       "method": "click",
@@ -671,6 +773,7 @@
             {
               "path": [
                 "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                 "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
               ],
               "method": "click",
@@ -692,6 +795,7 @@
             {
               "path": [
                 "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                 "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
               ],
               "method": "click",
@@ -713,6 +817,7 @@
             {
               "path": [
                 "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                 "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
               ],
               "method": "click",
@@ -734,6 +839,7 @@
             {
               "path": [
                 "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
                 "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
               ],
               "method": "click",

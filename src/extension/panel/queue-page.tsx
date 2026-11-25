@@ -269,6 +269,20 @@ export function QueuePage({ panel }: { panel: PanelState }) {
                   {linkedFilling ? "Filling…" : "Fill this step"}
                 </button>
               )}
+              {linkedFilling && linkedApplication && (
+                <button
+                  className="secondary"
+                  title="Stop this fill where it is. What it wrote stays on the page; choose Fill this step to carry on."
+                  onClick={() =>
+                    void action(
+                      async () => setQueue(await command({ type: "PAUSE_APP", id: linkedApplication.id })),
+                      "Fill paused. Choose Fill this step to carry on.",
+                    )
+                  }
+                >
+                  Pause fill
+                </button>
+              )}
               {linkedFilling && (
                 <p className="fill-blocker" role="status">
                   Filling now. Scroll and read freely; typing or clicking a field pauses it.

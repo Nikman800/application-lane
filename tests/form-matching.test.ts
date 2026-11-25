@@ -7,7 +7,7 @@ import {
   type Application,
 } from "../src/shared/model";
 import { canonicalAnswer, pickOption as pickListOption } from "../src/shared/answers";
-import { deterministicAnswer, nameVariants, postingGuess, proposals, publicPostingUrl } from "../src/shared/matching";
+import { deterministicAnswer, nameVariants, postingGuess, proposals, publicPostingUrl, untickedNo } from "../src/shared/matching";
 import { configPassTimeout, transitionTiming } from "../src/shared/timing";
 import { degreeAliases } from "../src/shared/education";
 import { profileFactQuestion } from "../src/shared/profile-facts";
@@ -2163,6 +2163,59 @@ test("a veteran list whose options load when it opens gets the answer in the wor
   assert.equal(ask("No"), "Not a Protected Veteran");
   assert.equal(ask("Yes"), "Protected Veteran");
   assert.equal(ask("Decline to answer"), "Not disclosed");
+});
+
+// A Greenhouse react-select "Are you a veteran or active member of the United
+// States Armed Forces? (select one)" lists its options only when opened; the
+// saved "I am not a veteran" matched none of its Yes/No options.
+test("Oracle's veteran category and Hispanic boxes are answered No as they stand, and its discharge date lists are no veteran question", () => {
+  const saved = profileSchema.parse({ ...profile, veteranStatus: "I am not a veteran", hispanic: "No", ethnicity: "South Asian" });
+  const box = (label: string) => field(label, { kind: "checkbox", options: ["Yes", "No"] });
+  for (const label of ["Disabled Veteran", "Recently Separated Veteran", "Armed Forces Service Medal Veteran", "Active Duty Wartime or Campaign Badge Veterans", "I am Hispanic or Latino."])
+    assert.equal(untickedNo(box(label), saved), true, label);
+  assert.equal(untickedNo({ ...box("Disabled Veteran"), value: "Yes" }, saved), false);
+  for (const part of ["Month", "Day", "Year"])
+    assert.deepEqual(proposals([field(`Newly Separated Veteran Discharge Date ${part}`, { kind: "combobox", options: [] })], saved), []);
+});
+
+// A race list whose label is the whole equal-opportunity preamble: it says the
+// employer does not discriminate "on the basis of race, religion, color…".
+// The religion named there was read as a non-U.S. religion question and the
+// list was left to the AI step.
+// iCIMS draws its phone as a "Phones (1)" section holding a Type list and a box
+// named only "Number"; the number the site had saved stayed.
+test("a Phones section's box named only Number gets the profile's phone", () => {
+  const saved = profileSchema.parse({ ...profile, phone: "5405550100" });
+  const number = { ...field("Number", { kind: "text" }), section: "Phones" };
+  assert.equal(proposals([number], saved)[0]?.value, "5405550100");
+  // A Number anywhere else is not the phone.
+  assert.deepEqual(proposals([{ ...field("Number", { kind: "text" }), section: "Addresses" }], saved), []);
+});
+
+test("a race list under an equal-opportunity statement that names religion among its grounds gets the race", () => {
+  const saved = profileSchema.parse({ ...profile, ethnicity: "South Asian" });
+  const label = "If you are applying for a job outside of U.S. and do not wish to participate, please select Decline to Self-Identify. Providing this information is voluntary. Acme is an Equal Opportunity Employer and does not discriminate in hiring or employment against any individual on the basis of race, religion, color, creed, gender, national origin, age, veteran status, or disability.";
+  const options = ["American Indian or Alaska Native", "Asian", "Black or African American", "Hispanic or Latino", "I do not wish to self identify", "White"];
+  assert.equal(proposals([field(label, { kind: "combobox", options })], saved)[0]?.value, "Asian");
+  // A religion question itself is still left.
+  assert.deepEqual(proposals([field("What is your religion or belief?", { kind: "combobox", options: ["Christian", "Hindu", "Muslim", "No religion"] })], saved), []);
+});
+
+test("a veteran Yes/No list whose options load when it opens gets No for a saved not-a-veteran", () => {
+  const options = ["Yes", "No", "I don't wish to answer"];
+  const label = "Are you a veteran or active member of the United States Armed Forces? (select one)";
+  const proposal = proposals([field(label, { kind: "combobox", options: [] })], profileSchema.parse({
+    ...profile,
+    veteranStatus: "I am not a veteran",
+    answers: [{ question: "Military status", answer: "No" }],
+  }))[0];
+  assert.ok(proposal, "a proposal for the veteran list");
+  assert.equal(pickListOption(proposal, options, (option) => option), "No");
+  const worded = ["Yes, I am a veteran or active member", "No, I am not a veteran or active member", "I prefer to self-describe", "I don't wish to answer"];
+  assert.equal(pickListOption(proposal, worded, (option) => option), "No, I am not a veteran or active member");
+  // Not known whether they served: nothing is said for them.
+  const unknown = proposals([field(label, { kind: "combobox", options: [] })], profileSchema.parse({ ...profile, veteranStatus: "I am not a veteran" }))[0];
+  assert.equal(unknown && pickListOption(unknown, options, (option) => option), undefined);
 });
 
 // A self-disclosure page names its lists by id only: "…-gender-dropdown",

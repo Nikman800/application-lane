@@ -175,6 +175,10 @@ function historyValue(
   }
   if (/^(start|from)(_date)?$/.test(key)) return row.startDate;
   if (/^(end|to)(_date)?$/.test(key)) return row.endDate;
+  // Oracle's school form asks for the date a degree was acquired, or for
+  // its projected completion while still studying: the end date, in the one
+  // that fits.
+  if (/^(acquired|completion)_/.test(key) && graduated(row) !== key.startsWith("acquired")) return;
   const date = /^(start|from)/.test(key) ? row.startDate : row.endDate;
   const match = date.match(/^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/);
   if (!match) return;
