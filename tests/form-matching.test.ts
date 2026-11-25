@@ -2929,8 +2929,8 @@ test("a gender identity combobox listing Man and Woman takes Male and Female fro
   // the wordings to look for, and each is a whole option.
   const closed = (gender: string) =>
     proposals([field("How would you describe your gender identity?", { kind: "combobox", options: [] })], profileSchema.parse({ ...rivera, gender }))[0]?.choices;
-  assert.deepEqual(closed("Male"), ["Man"]);
-  assert.deepEqual(closed("Female"), ["Woman"]);
+  assert.deepEqual(closed("Male"), ["Man", "Man/Male", "Male/Man"]);
+  assert.deepEqual(closed("Female"), ["Woman", "Woman/Female", "Female/Woman"]);
 });
 
 // Ashby lists graduation as combined seasons and the degree program under
@@ -3115,6 +3115,12 @@ test("a skill proficiency gauge takes the profile skill's level only when fillin
   assert.equal(deterministicAnswer(gauge("C Programming Language"), on), "1-Beginner");
   assert.equal(deterministicAnswer(gauge("pandas"), on), "3-Proficient");
   assert.equal(deterministicAnswer(gauge("API"), on), "2-Basic");
+  // A name in brackets after the skill, and the British spelling, are the same skill.
+  const more = profileSchema.parse({ ...on, skills: [...on.skills, "Augmented Reality (AR)", "Deep Learning", "Data Modeling"],
+    skillLevels: { ...on.skillLevels, "Augmented Reality (AR)": 3, "Deep Learning": 2, "Data Modeling": 4 } });
+  assert.equal(deterministicAnswer(gauge("Augmented Reality"), more), "3-Proficient");
+  assert.equal(deterministicAnswer(gauge("DL"), more), "2-Basic");
+  assert.equal(deterministicAnswer(gauge("Data Modelling"), more), "4-Advanced");
   // Never guessed: a skill the profile lacks, and Version Control without Git.
   assert.equal(deterministicAnswer(gauge("Rust"), on), undefined);
   assert.equal(deterministicAnswer(gauge("Version Control"), on), undefined);
@@ -3122,4 +3128,19 @@ test("a skill proficiency gauge takes the profile skill's level only when fillin
   // A listed skill with no level is left, and so is everything when off.
   assert.equal(deterministicAnswer(gauge("Python"), profileSchema.parse({ ...on, skillLevels: {} })), undefined);
   assert.equal(deterministicAnswer(gauge("Python"), withSkills(false)), undefined);
+});
+
+// ADP Workforce Now's Voluntary Self-ID: react-select lists whose options load
+// only when opened. Gender words it "Man/Male"; the lone "Ethnicity" list is the
+// Hispanic-or-not question; "Race" holds the groups.
+test("open-on-click self-ID lists: Man/Male, a lone Ethnicity as Hispanic or not, Race from the profile", () => {
+  const who = profileSchema.parse({ ...profile, gender: "Male", ethnicity: "South Asian", hispanic: "No" });
+  const ask = (label: string, p = who) => proposals([field(label, { kind: "combobox", options: [] })], p)[0];
+  assert.ok(ask("Gender")!.choices?.includes("Man/Male"));
+  assert.ok(ask("Gender", profileSchema.parse({ ...who, gender: "Female" }))!.choices?.includes("Woman/Female"));
+  const ethnicity = ask("Ethnicity")!;
+  assert.equal(ethnicity.value, "Not Hispanic or Latino");
+  assert.ok(ethnicity.choices?.includes("Not Hispanic or Latino"));
+  assert.equal(ask("Ethnicity", profileSchema.parse({ ...who, ethnicity: "Hispanic/Latinx", hispanic: "Yes" }))!.value, "Hispanic or Latino");
+  assert.ok(ask("Race")!.choices?.includes("Asian"));
 });

@@ -1510,6 +1510,17 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
   // ways US lists word it, matched when the list opens. A plain "Asian"
   // answers for East, South and Southeast Asian, as above; an exact option
   // still wins over it.
+  // ADP Workforce Now's "Ethnicity" list stands alone above a separate "Race"
+  // list and holds only "Hispanic or Latino" / "Not Hispanic or Latino": the
+  // Hispanic question, answered from the saved Hispanic answer, or from the
+  // ethnicity when that is all the profile holds.
+  if (demographic === "ethnicity" && !field.options.length && /combobox|listbox/.test(field.kind) && /^\s*ethnicity\s*(\(optional\))?\s*\*?\s*$/i.test(label)) {
+    const own = canonicalAnswer("hispanic", profile.hispanic);
+    const answer = own || (profile.ethnicity ? (canonicalAnswer("ethnicity", profile.ethnicity) === "Hispanic/Latinx" ? "Yes" : "No") : "");
+    if (answer === "Yes") return { value: "Hispanic or Latino", choices: ["Hispanic or Latino", "Hispanic/Latino", "Hispanic"] };
+    if (answer === "No") return { value: "Not Hispanic or Latino", choices: ["Not Hispanic or Latino", "Not Hispanic/Latino", "Non-Hispanic or Latino", "Not Hispanic"] };
+    if (answer === "Decline") return { value: "Decline to answer", decline: true };
+  }
   if (demographic === "ethnicity" && !field.options.length && /combobox|listbox/.test(field.kind)) {
     const answer = canonicalAnswer("ethnicity", profile.ethnicity);
     const wordings: Record<string, string[]> = {
@@ -1553,7 +1564,9 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
   // the other words for it ("Man" for Male, "Woman" for Female) are looked for.
   if (demographic === "gender" && !field.options.length && /combobox|listbox/.test(field.kind)) {
     const answer = canonicalAnswer("gender", profile.gender);
-    if (answer === "Male" || answer === "Female") return { value: answer, choices: choiceSynonyms[answer] };
+    // ADP Workforce Now words them "Man/Male" and "Woman/Female".
+    if (answer === "Male" || answer === "Female")
+      return { value: answer, choices: [...(choiceSynonyms[answer] || []), ...(answer === "Male" ? ["Man/Male", "Male/Man"] : ["Woman/Female", "Female/Woman"])] };
   }
   if (demographic && field.options.length) {
     const answer = canonicalAnswer(demographic, profile[demographic]);
@@ -2359,6 +2372,10 @@ const skillAliases: Record<string, string[]> = {
   c: ["c programming language", "c programming"],
   git: ["version control"],
   "rest apis": ["api", "apis", "rest api", "restful apis"],
+  "deep learning": ["dl"],
+  "machine learning": ["ml"],
+  "natural language processing": ["nlp"],
+  "data modeling": ["data modelling"],
 };
 function skillKey(name: string): string {
   return name.toLowerCase().replace(/c#/g, "c sharp").replace(/[^a-z0-9+ ]+/g, " ").replace(/\s+/g, " ").trim();
@@ -2369,7 +2386,8 @@ function skillLevel(profile: Profile, asked: string): number | undefined {
   for (const [skill, level] of Object.entries(profile.skillLevels || {})) {
     if (!profile.skills.includes(skill)) continue;
     const own = skillKey(skill);
-    if (own === wanted) return level;
+    // "Augmented Reality (AR)" is the skill a gauge names "Augmented Reality".
+    if (own === wanted || skillKey(skill.replace(/\s*\([^)]*\)\s*$/, "")) === wanted) return level;
     const aliases = Object.entries(skillAliases).find(([name]) => skillKey(name) === own)?.[1] || [];
     if (aliases.some((alias) => skillKey(alias) === wanted)) return level;
   }

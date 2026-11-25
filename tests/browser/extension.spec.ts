@@ -24181,3 +24181,23 @@ test("ADP's recruitment questions: digits-only salary with its currency, the lea
   expect(fields.find((field) => /^Select currency type/.test(field.label))).toMatchObject({ required: true });
   await page.close();
 });
+
+test("ADP's Voluntary Self-ID: Man/Male, a lone Ethnicity as Hispanic or not, then the Race list it draws", async () => {
+  test.setTimeout(120000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile,
+    gender: "Male", hispanic: "No", ethnicity: "South Asian" } });
+  const compiled = await build({
+    entryPoints: ["tests/browser/mdf-selfid-fixture.tsx"], bundle: true, write: false,
+    format: "iife", define: { "process.env.NODE_ENV": '"production"' },
+  });
+  await context.route(`${adpOrigin}/**`, (route) => route.fulfill({ contentType: "text/html",
+    body: `<!doctype html><title>Current Openings | Recruitment</title><form onsubmit="return false"><h2>Voluntary Self-Identification</h2><div id="selfIdRoot"></div></form><script>${compiled.outputFiles[0].text}</script>` }));
+  const page = await context.newPage();
+  await page.goto(`${adpOrigin}/fixture/mdf/self-id`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 60000 }).toMatch(/ready|awaiting-user/);
+  await expect.poll(() => page.evaluate(() => (window as any).selfId), { timeout: 30000 }).toEqual({
+    Gender: "Man/Male", Ethnicity: "Not Hispanic or Latino", Race: "Asian",
+  });
+  await page.close();
+});
