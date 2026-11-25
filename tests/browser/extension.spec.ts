@@ -11437,6 +11437,89 @@ test("Oracle's work and education timeline adds and saves one entry at a time, w
   expect(await page.evaluate(() => (window as any).refused)).toBe(0);
 });
 
+// Oracle's Major (recording, one employer's form): a cx-select box whose matches
+// the site fetches after the typing, one to four seconds later, and only while
+// the box keeps focus; its text is cleared when it blurs with no match picked.
+// The rule's pick waited 2.5 s, and the fill then retried longer wordings
+// that match nothing and left Major empty.
+test("Oracle's Major, a searched list whose matches come seconds after the typing, is waited for and picked", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      education: [{ organization: "Acme University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" }],
+      work: [],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Education</title><main>
+        <div class="apply-flow-section" data-section-number="3">
+          <div class="apply-flow-block apply-flow-block--work-and-education-timeline">
+            <div class="apply-flow-block__form-list" role="region" aria-label="Work and Education History ">
+              <div class="timeline-container">
+                <div id="timeline-anchor" class="input-row__control-container work-and-education-timeline__actions-container">
+                  <div class="work-and-education-timeline__actions work-and-education-timeline__actions--pinned">
+                    <button id="timeline-add-education-button" type="button" class="work-and-education-timeline-add-button timeline-education-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Education</span></button>
+                  </div>
+                </div>
+                <div id="slot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main><div id="lists"></div><script>
+        ${oracleEntryLists}
+        window.saved = [];
+        const slot = document.getElementById('slot');
+        document.getElementById('timeline-add-education-button').addEventListener('click', () => {
+          slot.innerHTML = '<div class="standard-apply-flow-timeline-form"><div class="timeline-form-content">'
+            + select('Degree', 'contentItemId-1', 'contentItemId') + select('Major', 'major-37', 'major') + select('School', 'educationalEstablishment-1', 'educationalEstablishment') + date('Start Date', 'startDate', 1) + date('End Date', 'endDate', 1) + '</div>'
+            + '<div class="timeline-form-footer"><button class="button app-dialog__footer-button save-btn"><span class="button__label">Add Education</span></button></div></div>';
+          const form = slot.firstElementChild;
+          wireLists(form);
+          // The matches are fetched: they come 3 s after the last key, and
+          // only if the box still has focus; a blur with nothing picked
+          // clears the text.
+          const major = form.querySelector('#major-37');
+          let loading;
+          major.addEventListener('input', (event) => {
+            clearTimeout(loading);
+            if (!event.isTrusted || !major.value) return;
+            const typed = major.value;
+            loading = setTimeout(() => {
+              if (document.activeElement !== major) return;
+              showList(major, ['Data Science, Analytics and Engineering', 'Data Science', 'Data Analytics'].filter((name) => name.toLowerCase().startsWith(typed.toLowerCase())));
+              for (const item of lists.children) item.setAttribute('role', 'option');
+            }, 3000);
+          });
+          major.addEventListener('focusout', () => { clearTimeout(loading); if (!major.dataset.picked) major.value = ''; if (lists.owner === major) lists.innerHTML = ''; });
+          // The Degree box, left with a value, takes the focus back once
+          // 0.4 s later (its validation), out of the Major being typed.
+          const degree = form.querySelector('#contentItemId-1');
+          let refocused = false;
+          degree.addEventListener('focusout', () => {
+            if (refocused || !degree.value) return;
+            refocused = true;
+            setTimeout(() => degree.focus(), 400);
+          });
+          form.querySelector('.save-btn').addEventListener('click', () => {
+            window.saved.push('major: ' + major.value + ' / ' + (major.dataset.picked || ''));
+          });
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/3`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).saved.length), { timeout: 90000 }).toBeGreaterThan(0);
+  expect((await page.evaluate(() => (window as any).saved))[0]).toBe("major: Data Science / Data Science");
+});
+
 // Entries already saved show as timeline cards ("Creative Associate", the
 // employer, "From March 2026 to No date provided"), not as tiles with an aria-label: a refill must add only the
 // entries no card shows, not the whole history again.
@@ -24825,6 +24908,7 @@ test("an Avature form whose Currency, Degree, Institution/Program and Specializa
       ...profile,
       country: "United States of America",
       salary: { min: 100000, currency: "USD", period: "year" },
+      skills: ["Python"],
       education: [
         { organization: "Penn State", title: "Master of Science", fieldOfStudy: "Data Science", location: "", details: "", startDate: "2025-08", endDate: "2027-05" },
         { organization: "Contoso University", title: "Bachelor of Science", fieldOfStudy: "Computer Science", location: "", details: "", startDate: "2015-09", endDate: "2019-06" },
@@ -24855,6 +24939,7 @@ test("an Avature form whose Currency, Degree, Institution/Program and Specializa
         <fieldset class="Section Section8"><div class="Separator Separator8" id="fieldSpecContainer930"><legend class="WizardFieldLabel tc_formTitle" id="930">Education</legend></div>
           <div class="fieldSpec MultipleDatasetEntryFormField fieldSpecPadder" id="fieldSpecContainer931"><p class="WizardEmptyLabel WizardFieldLabel tc_formLabel datasetField__label" id="931-label"></p><div class="multipleDatasetWrapper tc_formField" id="931" role="group" aria-labelledby="931-label"><div id="multipleDatasetRowsContainer_931">${entry("sample")}${entry("0")}</div><a href="#" id="addRowFor_931" class="addDatasetRow WizardFieldLink" tabindex="0" role="button">add another</a></div></div>
         </fieldset>
+        <fieldset class="Section Section9"><div class="fieldSpec fieldSpecPadder"><label class="WizardFieldLabel" for="skills-search">Skills</label><input type="search" id="skills-search" class="select2-search__field"></div></fieldset>
       </form></main><script>
         let rows = 1;
         document.querySelector('#addRowFor_931').addEventListener('click', (event) => {
@@ -24920,6 +25005,19 @@ test("an Avature form whose Currency, Degree, Institution/Program and Specializa
         });
         // The first row once held Computer Science.
         const pickedIn = { [String(lists[12]) + ":4"]: document.getElementById("931-12-0") };
+        // Once both rows hold a Major, the site's own handler on the Skills
+        // search exchanges them (as one employer's did): the rows share their
+        // result objects.
+        document.getElementById("skills-search").addEventListener("input", () => {
+          const [a, b] = ["931-12-0", "931-12-1"].map((id) => document.getElementById(id));
+          if (!a.value || !b.value || a.value === b.value || window.swaps) return;
+          window.swaps = (window.swaps || 0) + 1;
+          const [left, right] = [a, b].map((select) => [select.value, select.selectedOptions[0].text]);
+          [[a, right], [b, left]].forEach(([select, [value, text]]) => {
+            (([...select.options].find((o) => o.value === value)) || select.appendChild(new Option(text, value))).selected = true;
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+          });
+        });
       </script>`,
     }),
   );
@@ -24934,6 +25032,16 @@ test("an Avature form whose Currency, Degree, Institution/Program and Specializa
     // Its Computer Science landed in the first row and was put back.
     ["Bachelors of Science", "Other / Not Listed", "Computer Science"],
   ]);
+  // A second fill pass (the rows' Majors share the label "Specialization/Major")
+  // leaves each row with its own Major.
+  const majors = () => Promise.all(["0", "1"].map((row) => chosen(`931-12-${row}`)));
+  await expect.poll(async () => (await state()).applications.at(-1)?.status, { timeout: 90000 }).toMatch(/^(awaiting-user|ready)$/);
+  await ui({ type: "FILL_STEP", id: (await state()).applications.at(-1)!.id });
+  await page.waitForTimeout(500);
+  await expect.poll(async () => (await state()).applications.at(-1)?.status, { timeout: 150000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.waitForTimeout(3000);
+  expect(await page.evaluate(() => (window as any).swaps)).toBeGreaterThan(0);
+  expect(await majors()).toEqual(["Computer and Information Sciences, General", "Computer Science"]);
 });
 
 test("an iCIMS resume the account kept, in a frame, is replaced on a refill and by Replace with tailored resume", async () => {

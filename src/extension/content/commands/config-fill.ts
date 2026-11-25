@@ -293,6 +293,45 @@ const result = await fillDocument(command.profile, {
           // committed (Higher's School).
           method === "trustedChoose" || element.matches("input.cx-select-input"),
         );
+        // Oracle's searched lists (Major) fetch their matches from the
+        // server, one to four seconds after the typing. The box has to keep
+        // its focus until they are drawn: it was left 0.5 s after the typing,
+        // before any list came, and the site then cleared what was typed.
+        // Waited for here, ended by the options or by a "no results" state.
+        if (typed && method === "trustedType" && element.matches("input.cx-select-input")) {
+          const optionSelector = '[role="option"],[role="gridcell"].cx-select__list-item,[role="row"] .cx-select__list-item,.cx-select__list-item';
+          const drawn = () => {
+            const root = element.ownerDocument;
+            if ([...root.querySelectorAll(optionSelector)].some((entry) => entry.getClientRects().length > 0)) return true;
+            return [...root.querySelectorAll('[class*="cx-select"]')].some((box) =>
+              box.children.length === 0 && /\b(no (matching |matches|results|items)|nothing found)/i.test(box.textContent || ""));
+          };
+          const waitDrawn = async () => {
+            for (let waited = 0; !drawn() && waited < 6_000 && safe() && !userAttention() && !signal.aborted; waited += 100) {
+              // The box lost its focus before any list came: Oracle's
+              // Degree box, picked just before, takes the focus back
+              // ~0.4 s after it is left, and the site clears the Major
+              // typed meanwhile. Not waited out: typed again below.
+              if (element.ownerDocument.activeElement !== element) return false;
+              await pause(100);
+            }
+            return true;
+          };
+          if (!drawn() && !(await waitDrawn()) && safe() && !userAttention() && !signal.aborted) {
+            // Nothing listed, or the focus was taken. Oracle loads a new
+            // entry's Major list only once the box is opened (a click):
+            // typing into it before finds nothing and no search is sent.
+            // Opened, its list waited for, then typed again.
+            await pause(1_500);
+            if (!drawn()) {
+              (element as HTMLInputElement).value = "";
+              (element as HTMLElement).click();
+              for (let waited = 0; !drawn() && waited < 8_000 && safe() && !userAttention() && !signal.aborted; waited += 100) await pause(100);
+            }
+            if (safe() && !userAttention() && !signal.aborted && (await trustedType(element, values[0] ?? "", safe, signal, true, false, true)))
+              await waitDrawn();
+          }
+        }
         // The entry the menu lists for it: the site's own one where it
         // has it (SmartRecruiters' "Michigan State University" under its
         // "fill manually" one), else Down and Enter on the first, the

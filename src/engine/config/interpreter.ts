@@ -2654,7 +2654,13 @@ export async function interpretConfig(
         }
       }
       {
-        const step = await applyChoice(state, { config, configuredPaths, context, element, forbidden, globals, key, options, results, root, selector, used, values });
+        // Select2 lists of an Avature form's rows share their result objects:
+        // a later step (a Skills search, a click on the page) can make the site
+        // swap two rows' picks in one go. Each row keeps its own.
+        const picked = select2Values(root);
+        const step = await applyChoice(state, { config, configuredPaths, context, element, forbidden, globals, key, options, results, root, selector, used, values }).finally(() =>
+          restoreSwappedSelect2(picked, globals, options),
+        );
         if (step === "break") break;
         if (step === "continue") continue;
       }
@@ -3340,6 +3346,46 @@ async function fillRowChoice(
 
 // Part of interpretConfig, one choice of a rule: the element found, and the profile value written into it.
 // "break" or "continue" for the choices loop, or nothing to go on.
+// The value (and its text) of every Select2 list's hidden select on the page.
+function select2Values(root: Document): Map<HTMLSelectElement, { value: string; text: string }> {
+  return new Map(
+    [...root.querySelectorAll<HTMLSelectElement>("select.select2-hidden-accessible")].map((select) => [
+      select,
+      { value: select.value, text: select.selectedOptions[0]?.text || "" },
+    ]),
+  );
+}
+
+// Two or more lists whose values were exchanged among themselves since
+// `before` (a site's own handler, never one pick: a pick changes one list)
+// are put back, each in its own row.
+async function restoreSwappedSelect2(
+  before: Map<HTMLSelectElement, { value: string; text: string }>,
+  globals: GlobalConfig,
+  options: InterpreterOptions,
+): Promise<void> {
+  const changed = [...before].filter(([select, was]) => select.isConnected && select.value !== was.value);
+  if (changed.length < 2) return;
+  const sorted = (values: string[]) => [...values].sort().join("\n");
+  if (sorted(changed.map(([, was]) => was.value)) !== sorted(changed.map(([select]) => select.value))) return;
+  for (const [select, was] of changed) {
+    const option =
+      [...select.options].find((candidate) => candidate.value === was.value) ||
+      select.appendChild(new Option(was.text, was.value));
+    option.selected = true;
+    // Select2 redraws its control from the select on a change.
+    await (options.execute || defaultExecute)({
+      element: select,
+      guardElement: select.parentElement || select,
+      globals,
+      method: "event",
+      action: { event: "change", eventOptions: {} } as FillAction,
+      signal: options.signal,
+      values: [],
+    });
+  }
+}
+
 async function applyChoice(
   state: ChoiceState,
   { config, configuredPaths, context, element, forbidden, globals, key, options, results, root, selector, used, values }: {
