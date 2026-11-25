@@ -10,6 +10,7 @@ import { controlsWithin, trackLocalControls, hasEditLock, valueOf, markEngineWri
 import { radioGroup, tell, menuEntries, entryPoint } from "../../content-dom";
 import { nodeRecords, fieldLabel, documentId, userAttention, attentionSpan, awaitSiteSave, records } from "../tracking";
 import { writable, type Control } from "../../semantics";
+import { siteInvalid } from "../../../engine/page/invalid";
 import { typeTrusted, reactSelectInput, reactSelect, listedPosition, checkControl } from "../choose";
 import { signatureField, signingAllowed } from "../../../engine/page/signatures";
 import { fillDocument } from "../../../engine/runtime";
@@ -217,7 +218,7 @@ const result = await fillDocument(command.profile, {
     // A value the site itself calls invalid is no answer to keep:
     // Microsoft's form showed an address assigned earlier that its own
     // state never took, flagged it, and it was never typed again.
-    if (element.getAttribute("aria-invalid") === "true" && !hasEditLock(element as Control, record?.label || "")) return true;
+    if (siteInvalid(element) && !hasEditLock(element as Control, record?.label || "")) return true;
     return Boolean(nodeRecords.get(element as HTMLElement)?.siteValue);
   },
   onConfirmed: (element) => {

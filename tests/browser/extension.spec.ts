@@ -24168,7 +24168,10 @@ test("ADP's recruitment questions: digits-only salary with its currency, the lea
   expect(await page.evaluate(() => (window as any).mdfToggles)).toEqual(["Other"]);
   expect(await page.evaluate(() => (window as any).salaryTyped.every((typed: string) => /^\d+$/.test(typed)))).toBe(true);
   const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, page.url());
-  const fields = (await ui({ type: "SCAN_TAB", tabId })).observation.fields as { label: string; kind: string; options: string[]; required: boolean; value: string }[];
+  const fields = (await ui({ type: "SCAN_TAB", tabId })).observation.fields as { label: string; kind: string; options: string[]; required: boolean; value: string; invalid?: boolean }[];
+  // The box keeps aria-invalid="true" after its answer is accepted; only
+  // "question-error" marks a box the site rejects.
+  expect(fields.find((field) => /^If employed here previously/.test(field.label))).toMatchObject({ value: "N/A", invalid: false });
   const applied = fields.find((field) => field.label === "Have you ever applied here previously ?")!;
   expect(applied).toMatchObject({ required: true, value: "" });
   const referral = fields.filter((field) => field.label === "Did any of our employees inform you about this position?");

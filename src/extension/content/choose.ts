@@ -5,6 +5,7 @@ import { nameVariants } from "../../shared/matching";
 import { type Proposal, normalize } from "../../shared/model";
 import { controlledList, fabricToggle, fabricMenu, fabricOptions, fabricDrawn, pressFabric, ashbyToggle, successFactorsPicklist, ripplingSelect, shadowedOptions, deepOption, pressOutside, splChosen, picksOf, closeSuccessFactorsList, menuEntries } from "../content-dom";
 import { writable, rendered, wfnDropdown } from "../semantics";
+import { siteInvalid } from "../../engine/page/invalid";
 import { pickOption } from "../../shared/answers";
 import { searchSiteList } from "../../engine/runtime";
 import { fillClick } from "../../engine/page/click-gate";
@@ -1232,7 +1233,7 @@ export async function typeTrusted(
   // and left once more, it validates the state it now holds.
   if (!enter && !choose && element instanceof HTMLInputElement && !element.matches('input[role="spinbutton"]') && !userAttention()) {
     await pause(300);
-    if (element.getAttribute("aria-invalid") === "true" && element.value && safe() && !userAttention() &&
+    if (siteInvalid(element) && element.value && safe() && !userAttention() &&
         (element.getRootNode() as Document | ShadowRoot).activeElement !== element) {
       cs.trustedWrite = element;
       try {

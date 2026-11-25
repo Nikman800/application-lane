@@ -1,3 +1,4 @@
+import { siteInvalid } from "../page/invalid";
 import type {
   FillAction,
   InputSelector,
@@ -2546,7 +2547,7 @@ export async function interpretConfig(
         // Not when the site itself calls it invalid: Microsoft's form showed
         // the profile's address while its own state held none ("Address
         // cannot be left blank"), and it was never typed again.
-        if (current && values.some(same) && element.getAttribute("aria-invalid") !== "true" && !childListUnloaded(element)) {
+        if (current && values.some(same) && !siteInvalid(element) && !childListUnloaded(element)) {
           options.onConfirmed?.(element);
           results.push({ key, status: "skipped", reason: "The site's value is already right." });
           state.completed = true;

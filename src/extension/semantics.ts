@@ -1,4 +1,5 @@
 import { type Field } from "../shared/model";
+import { siteInvalid } from "../engine/page/invalid";
 import { tdsDateBox } from "../engine/page/tds-date-picker";
 import { wordLimit } from "../shared/questions";
 import { askedLevel } from "../shared/transcripts";
@@ -1455,7 +1456,7 @@ export function validationState(
   element: Control,
   current: string,
 ): Pick<Field, "invalid" | "validationWarning"> {
-  const ariaInvalid = element.getAttribute("aria-invalid") === "true";
+  const ariaInvalid = siteInvalid(element);
   const pattern = element.getAttribute("pattern");
   if (pattern !== null) {
     if (!patterns.has(pattern)) {
