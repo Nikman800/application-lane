@@ -504,7 +504,11 @@ function screeningQuestion(
     /\bsponsor/.test(label) || (/\b(require|requires|need|needs|obtain)\b/.test(label) && /\b(authoriz|authoris|visa)/.test(label) && !mayObtain) ||
     // "…ask an employer to commence an immigration case in order to
     // employ you? (e.g. H-1B…)" (SuccessFactors).
-    /\b(commence|file|start|begin|open)\b( \w+){0,2} immigration (case|petition)/.test(label);
+    /\b(commence|file|start|begin|open)\b( \w+){0,2} immigration (case|petition)/.test(label) ||
+    // "…will/might you need [the employer] to file an H-1B transfer (or other
+    // status) OR register you in the H-1B lottery to work in the U.S.?"
+    // (iCIMS): a visa the employer files is sponsorship.
+    /\b(file|submit)\b( \w+){0,3} h ?1 ?b\b|\bh ?1 ?b (lottery|cap|registration|transfer|petition)\b/.test(label);
   if (sponsorship) {
     const without = /\bwithout\b/.test(label);
     // "Are you authorized to work here, and will you need sponsorship?" asks

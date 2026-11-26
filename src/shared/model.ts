@@ -506,7 +506,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-26-race-boxes";
+export const CONTENT_VERSION = "2026-11-26-h1b-filing";
 export type Proposal = {
   fieldId: string;
   value: string;

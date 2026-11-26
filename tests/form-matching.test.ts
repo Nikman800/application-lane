@@ -3318,3 +3318,13 @@ test("a race asked as one checkbox per group under its question ticks the profil
   assert.deepEqual(ticked("White"), [boxes[4]!.id]);
   assert.deepEqual(ticked(""), []);
 });
+
+test("a question whether the employer must file an H-1B or enter the applicant in the H-1B lottery is the sponsorship question", () => {
+  // iCIMS: no "sponsor" word, only the filing it would take.
+  const label =
+    "Are you working in the U.S. in non-immigrant status (e.g., H-1B, O-1, or an L) and/or will/might you need Acme to file an H-1B transfer (or other status) OR register you in the H-1B lottery to work in the U.S, legally?";
+  const ask = (sponsorship: string) =>
+    proposals([field(label, { kind: "select", options: ["Yes", "No"] })], profileSchema.parse({ ...profile, workAuthorization: "Yes", sponsorship }))[0]?.value;
+  assert.equal(ask("No"), "No");
+  assert.equal(ask("Yes"), "Yes");
+});
