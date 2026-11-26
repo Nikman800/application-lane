@@ -438,7 +438,14 @@ export function inspect(): Observation {
       if (/\boptional\b/i.test(label)) return [];
       return field && (namedControl || widget.getAttribute("role") === "progressbar") ? [clip(field, 150)] : [];
     });
-  const applicationContainer = submitsApplication || [...document.querySelectorAll('form[id*="application" i], form[class*="application" i], [data-automation-id="applicationPage"], .apply-flow-section')]
+  // A form that also asks for work history, education or a résumé is an
+  // application, even with the boxes for a new account's password on it
+  // (Avature's one-page "Register" application, which also asked for the
+  // degree, university, company and position title, was refused as a sign-in).
+  // The password boxes are still never written.
+  const asksApplication = fields.filter((field) => field.kind !== "password" &&
+    /\b(degree|university|college|school|field of study|major|employer|company|position title|job title|resume|résumé|cv)\b/i.test(field.label)).length >= 2;
+  const applicationContainer = submitsApplication || asksApplication || [...document.querySelectorAll('form[id*="application" i], form[class*="application" i], [data-automation-id="applicationPage"], .apply-flow-section')]
     .some(rendered);
   for (const field of fields) cs.seenFields.add(field.id);
   return {

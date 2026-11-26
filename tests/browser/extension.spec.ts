@@ -9938,6 +9938,30 @@ test("each Greenhouse employment row's Current role is answered for its own job"
   await page.close();
 });
 
+// Avature's one-page "Register" application asks for a new account's password
+// beside the application itself (degree, university, company, position
+// title). It was refused as a sign-in page and nothing was filled.
+test("an application form with new-account password boxes is filled, the passwords left empty", async () => {
+  await context.route(`${origin}/Register**`, (route) => route.fulfill({ contentType: "text/html",
+    body: `<!doctype html><title>Register Contoso</title><form class="form form--step1 clearfix tpt_wizard" autocomplete="off" method="post">
+      <div class="fieldSpec"><label for="f1">First name *</label><input id="f1" name="1001" class="WizardFieldInput"></div>
+      <div class="fieldSpec"><label for="f2">Last name *</label><input id="f2" name="1002" class="WizardFieldInput"></div>
+      <div class="fieldSpec"><label for="f3">Email *</label><input id="f3" name="1003" type="email" class="WizardFieldInput"></div>
+      <div class="fieldSpec"><label for="f4">Password *</label><input id="f4" name="1017" type="password" autocomplete="new-password" class="PasswordField WizardFieldInput"></div>
+      <div class="fieldSpec"><label for="f5">Confirm password *</label><input id="f5" name="1018" type="password" autocomplete="new-password" class="PasswordField WizardFieldInput"></div>
+      <div class="fieldSpec"><label for="f6">Company</label><input id="f6" name="1030" class="WizardFieldInput"></div>
+      <div class="fieldSpec"><label for="f7">Position title</label><input id="f7" name="1031" class="WizardFieldInput"></div>
+      <div class="fieldSpec"><label for="f8">University</label><input id="f8" name="1040" class="WizardFieldInput"></div>
+      <button class="nextButton WizardButtonPrimary" type="submit" name="next">Next</button></form>` }));
+  const page = await context.newPage();
+  await page.goto(`${origin}/Register?jobId=1`);
+  await enqueue([page]);
+  await expect(page.locator("#f1")).toHaveValue(profile.firstName, { timeout: 45000 });
+  await expect(page.locator("#f4")).toHaveValue("");
+  await expect(page.locator("#f5")).toHaveValue("");
+  await page.close();
+});
+
 // A checkbox beside a <label for="">: reading it built an
 // invalid selector, and the fill stopped with "0 fields filled".
 test("a checkbox beside a label with an empty for does not stop the fill", async () => {
