@@ -208,14 +208,18 @@ export function profileStandingValue(field: Pick<Field, "label">, profile: Profi
     if (named.length === 1 && !/\b(commut\w*|relocat\w*|days? (a|per|each) week)\b/.test(label))
       return profile.workArrangements.includes(named[0][0]) ? "Yes" : "No";
   }
-  const holdsClearance = /^(?:do you (currently )?(hold|have|possess) (?:an? |any )?(?:(?:active|current|valid|u s|us|government|federal|dod|secret|top) )*security clearance\w*|(?:active|current) security clearance\w*|security clearance (?:level|status|type)|what (?:is your (?:current |active )?security clearance|(?:level|type) of security clearance))\b/;
-  if (topic === "clearance" && profile.legal?.clearance && holdsClearance.test(label) &&
-      !/\b(ever|previously|previous|past|expired|last|polygraph|date|when|renew\w*|transfer\w*)\b/.test(label)) {
+  const holdsClearance = /^(?:do you (currently )?(hold|have|possess) (?:an? |any )?(?:(?:active|current|valid|u s|us|government|federal|dod|secret|top) )*security clearance\w*|(?:active|current) security clearance\w*|security clearance (?:level|status|type)|what (?:is your (?:current |active )?(?:level of )?(?:(?:u s|us|government|federal) )*security clearance|(?:level|type) of security clearance)|(?:please )?(?:confirm|indicate|select|state) your (?:current |active )?(?:level of )?security clearance)\b/;
+  // The request after a notice of the level required ("A TS/SCI with
+  // Polygraph is required for this position. Please confirm your current
+  // level of security clearance.", Jobvite) is the question.
+  const clearanceAsked = holdsClearance.test(label) ? label : normalize(field.label.split(/(?<=[.?!])\s+/).filter((part) => part.trim()).pop() || "");
+  if (topic === "clearance" && profile.legal?.clearance && holdsClearance.test(clearanceAsked) &&
+      !/\b(ever|previously|previous|past|expired|last|polygraph|date|when|renew\w*|transfer\w*)\b/.test(clearanceAsked)) {
     const saved = normalize(profile.legal.clearance);
     if (/^(?:none|no (?:active |current )?security clearance(?: and never held one)?|never held (?:a |any )?(?:security )?clearance|i (?:do not|don t) (?:currently )?(?:hold|have) (?:an? )?(?:active |current )?security clearance)$/.test(saved))
       return "No";
     if (/\b(hold|have|has) (an? )?(active|current)\b|^(active|current)\b/.test(saved) &&
-        !/\b(no|not|expired|inactive)\b/.test(saved) && !/\b(level|type|secret|public trust|highest)\b/.test(label))
+        !/\b(no|not|expired|inactive)\b/.test(saved) && !/\b(level|type|secret|public trust|highest)\b/.test(clearanceAsked))
       return "Yes";
   }
 }
@@ -602,6 +606,6 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
     return { value: "No", choices: ["No Military", "No military service", "None", "Not applicable", "N/A", ...(yesNo("No", field).choices || []), "No"] };
   // "Do you have a clearance?" with a list of levels: No is "None".
   if (topic === "clearance" && yes === "No")
-    return { ...yesNo("No", field), choices: [...(yesNo("No", field).choices || []), "None", "No clearance", "No Clearance", "N/A", "Not applicable"] };
+    return { ...yesNo("No", field), choices: [...(yesNo("No", field).choices || []), "None", "No clearance", "No Clearance", "I do not have a clearance", "I don't have a clearance", "No security clearance", "N/A", "Not applicable"] };
   return yesNo(yes, field);
 }

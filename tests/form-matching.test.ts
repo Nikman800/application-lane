@@ -1254,6 +1254,11 @@ test("a saved clearance answers current holding and a clearance-level list", () 
   assert.equal(value("Are you eligible to obtain a security clearance?"), undefined);
   assert.equal(value("Do you have any concerns about getting a security clearance?"), undefined);
   assert.equal(value("When did your last security clearance expire?", ["Last year", "Never"]), undefined);
+  // Jobvite's radio of levels after a notice that names the one required,
+  // and the level asked as a question: the saved answer, not the AI step's.
+  const levels = ["TS/SCI with Fullscope Polygraph", "TS/SCI with CI Polygraph", "Top Secret", "Secret", "Confidential", "I do not have a clearance."];
+  assert.equal(value("A TS/SCI with Polygraph is required for this position. Please confirm your current level of security clearance.", levels), "I do not have a clearance.");
+  assert.equal(value("What is your current level of US Government security clearance?", ["Secret", "Top Secret", "No clearance"]), "No clearance");
 });
 
 test("acknowledgement boxes are ticked only with the profile's permission, and never a signature or an opt-in", () => {
@@ -3016,6 +3021,9 @@ test("a LinkedIn yes/no and a URL-only request are answered from the saved addre
   assert.equal(valueOf("Do you have a LinkedIn profile?", yesNo), "Yes");
   assert.equal(valueOf("Do you have a LinkedIn profile?", yesNo, profileSchema.parse({ ...rivera, linkedin: "" })), undefined);
   assert.equal(valueOf("Please enter only the URL to your LinkedIn profile. Do not include any additional text."), "https://linkedin.com/in/alex-rivera");
+  // Asked as a question (SmartRecruiters): the saved addresses, not the AI step's.
+  assert.equal(valueOf("What is your LinkedIn profile URL?"), "https://linkedin.com/in/alex-rivera");
+  assert.equal(valueOf("What is your personal website URL?", {}, profileSchema.parse({ ...rivera, website: "alexrivera.dev" })), "https://alexrivera.dev");
 });
 
 test("personal email, phone, home zip and physical address asked as sentences are answered from the profile", () => {

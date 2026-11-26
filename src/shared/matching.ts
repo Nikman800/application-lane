@@ -322,8 +322,9 @@ export function deterministicAnswer(
     [/^((zip ?code|zip|postal|post ?code)( code)? ?){1,2}$|^please enter the zip code of your primary residence in the united states$|^please provide your post code zip code$|^what is your (home |mailing |residential )?(zip|postal|post)( ?code)?( code)?$/, "postalCode"],
     // Also asked as a request, instructions after it: "Please provide your
     // LinkedIn Profile url. Instruction: Navigate to…" (one employer's Workday).
-    [/^linkedin( profile| url| profile url)?$|^(please )?((provide|enter|share|add|paste|include) )?(your )?linkedin( profile)?( page)?( url| link| address)\b|^(please )?(enter|provide) only the url (to|of) your linkedin( profile)?\b/, "linkedin"],
-    [/^(website|portfolio|personal website|other website)( url)?$/, "website"],
+    [/^linkedin( profile| url| profile url)?$|^(please )?((provide|enter|share|add|paste|include) )?(your )?linkedin( profile)?( page)?( url| link| address)\b|^(please )?(enter|provide) only the url (to|of) your linkedin( profile)?\b|^what is your linkedin( profile)?( url| link| address)?$/, "linkedin"],
+    // Also asked as a question: "What is your personal website URL?" (SmartRecruiters).
+    [/^(website|portfolio|personal website|other website)( url)?$|^what is your (personal )?(website|portfolio)( url| link| address)?$/, "website"],
     [/^github( profile| url| profile url)?$|^(please )?((provide|enter|share|add|paste|include) )?(your )?github( profile)?( page)?( url| link| address)\b/, "github"],
     [/^current (company|employer)$/, "currentCompany"],
   ];
