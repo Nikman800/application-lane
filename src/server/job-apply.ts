@@ -380,8 +380,8 @@ export async function buildTailored(
   profile: Profile,
   narrative: Narrative,
   signal: AbortSignal,
-  // This application's graduation month (YYYY-MM) from preferences.md's
-  // rule by role; the bridge shows it on the in-progress degree.
+  // The saved graduation month for this role. The bridge shows it on the
+  // in-progress degree.
   options: { graduation?: string } = {},
 ): Promise<TailoredDocuments> {
   const warnings = [...plan.warnings];

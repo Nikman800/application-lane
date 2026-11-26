@@ -8,6 +8,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { normalize, type Profile } from "../shared/model";
+import { canonicalAnswer } from "../shared/answers";
 import { workdayOpening } from "../shared/matching";
 import globals from "../engine/config/globals.json" with { type: "json" };
 import { countryCode, findRegion, locationCountry, type Geography } from "../shared/geography";
@@ -224,9 +225,9 @@ const fieldRoles: [RegExp, string[]][] = [
 ];
 
 // The roles and places a profile suggests: its jobs' titles without their
-// level, its degrees' fields, and where the applicant lives unless they will
-// relocate anywhere (their preferences say so).
-export function profileTargets(profile: Profile, preferences = ""): { roles: string[]; locations: string[] } {
+// level, its degrees' fields, and where the applicant lives, except when
+// the saved profile says they're willing to relocate.
+export function profileTargets(profile: Profile): { roles: string[]; locations: string[] } {
   const roles = new Set<string>();
   // Each job's title without its level, in any field ("Senior Registered
   // Nurse" is "registered nurse", "Marketing Manager" stays one): a title
@@ -243,8 +244,8 @@ export function profileTargets(profile: Profile, preferences = ""): { roles: str
   for (const row of profile.education)
     for (const [field, suggested] of fieldRoles)
       if (field.test(normalize(`${row.fieldOfStudy || ""} ${row.title}`))) for (const role of suggested) roles.add(role);
-  const anywhere = /relocat\w*[^\n]*\b(anywhere|yes)\b/i.test(preferences);
-  const locations = anywhere ? [] : [profile.state, profile.city].filter(Boolean) as string[];
+  const relocating = canonicalAnswer("willingToRelocate", profile.willingToRelocate) === "Yes";
+  const locations = relocating ? [] : [profile.state, profile.city].filter(Boolean) as string[];
   return { roles: [...roles].slice(0, 15), locations };
 }
 
@@ -377,13 +378,13 @@ export function schoolOnly(title: string, schools: string[]): string | undefined
 export async function searchJobs(
   settings: SearchSettings,
   profile: Profile,
-  options: { cacheDir: string; preferences?: string; known?: Set<string> | KnownOpening[]; fetcher?: Fetch; now?: number },
+  options: { cacheDir: string; known?: Set<string> | KnownOpening[]; fetcher?: Fetch; now?: number },
 ): Promise<SearchResult> {
   // Addresses as two pages of an opening agree on them (openingKey).
   const known: KnownOpening[] = [...(options.known || [])].map((opening) => (typeof opening === "string" ? { url: opening } : opening));
   const fetcher = options.fetcher || fetch;
   const now = options.now ?? Date.now();
-  const suggested = settings.fromProfile ? profileTargets(profile, options.preferences) : { roles: [], locations: [] };
+  const suggested = settings.fromProfile ? profileTargets(profile) : { roles: [], locations: [] };
   const roles = [...new Set([...settings.roles, ...suggested.roles].map((role) => role.trim()).filter(Boolean))];
   const locations = [...new Set([...settings.locations, ...(settings.locations.length ? [] : suggested.locations)])];
   const country = settings.country || (settings.fromProfile ? profile.country || "" : "");

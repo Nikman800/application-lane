@@ -185,19 +185,18 @@ export async function clearFit(app: Application) {
   app.fitError = undefined;
   if (id) await api(`/v1/jobs/${id}`, "DELETE").catch(() => { /* the backend job is only cleanup: it expires on its own */ });
 }
+export function applicationRoleTitle(app: Application): string {
+  // The posting or a tab can name the role more clearly than the tracker.
+  return [app.posting?.title, app.title, ...app.tabs.map((tab) => tab.title)].filter(Boolean).join(" | ");
+}
 // The profile as one application should be answered from: with the job's
 // country (from the posting's location) and employer, so authorization,
 // sponsorship and "worked here before" questions are asked of this job.
-export function forApplication(profile: Profile, app: Application): Profile {
+export function forApplication(profile: Profile, app: Application, roleTitle = applicationRoleTitle(app)): Profile {
   const country = locationCountry(globals as Geography, app.posting?.location);
-  // An internship is answered with the internship end date where one is
-  // saved (Tesla's anticipated graduation date).
   const title = app.posting?.title || app.title;
-  // Its tabs' titles too: Tesla's application was saved as "Tesla
-  // homepageCareers…" while its tab said "Internship, Software Engineer…".
-  const named = [app.posting?.title, app.title, ...app.tabs.map((tab) => tab.title)].filter(Boolean).join(" | ");
   // What the fill may agree to and sign comes from Settings.
-  return { ...withPermissions(forRole(profile, named), bg.state.settings), applyingTo: { ...(country ? { country } : {}), ...(app.posting?.location ? { location: app.posting.location } : {}), ...(app.company ? { company: app.company } : {}), ...(title ? { title } : {}) } };
+  return { ...withPermissions(forRole(profile, roleTitle), bg.state.settings), applyingTo: { ...(country ? { country } : {}), ...(app.posting?.location ? { location: app.posting.location } : {}), ...(app.company ? { company: app.company } : {}), ...(title ? { title } : {}) } };
 }
 // An automatic carry-on (after the site filled the form from the resume, or
 // after the posting's Apply button) that could not start: said on the card,

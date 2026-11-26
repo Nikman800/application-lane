@@ -1574,26 +1574,50 @@ test("all empty questions are drafted in bounded batches, including more than 25
   assert.deepEqual(new Set(written.answers.map((answer) => answer.fieldId)), new Set(fields.map((field) => field.id)));
 });
 
-test("suggestions for unfilled fields read the graduation date this application states", async () => {
+test("written answers get tailoring preferences and the saved expected graduation date", async (t) => {
+  const { config, sent } = await endpoint(t, [
+    { fieldId: "q1", text: "I built a TypeScript web application used by 2,000 students.", sources: ["Student web application"] },
+  ]);
+  const preferences = "## Education timeline\n- **Graduation by role:** internships: December 13, 2098.\n\n## Logistics\n- **Earliest start date:** Immediately.\n";
+  const context = { ...(await skillContext(await checkout())), preferences };
+  const saved = profileSchema.parse({ ...profile, education: [
+    { organization: "Michigan State University", title: "Master of Science", startDate: "2025-08", endDate: "2099-05-10" },
+  ] });
+  const req = { ...request([field(technicalQuestion)]), title: "Software Engineer Intern" };
+  await writeAnswers(config, req, saved, context, new AbortController().signal);
+  const input = JSON.parse(sent().messages[1].content);
+  assert.equal(input.preferences, preferences);
+  assert.equal(input.graduationForThisApplication, "2099-05");
+});
+
+test("structured field suggestions use the profile and its role override", async () => {
   const dir = await mkdtemp(join(tmpdir(), "lane-fallback-graduation-"));
-  await writeFile(join(dir, "preferences.md"), "## Education timeline\n- **Graduation by role:** internships and co-ops: December 13, 2098. Full-time and new-grad roles: May 10, 2099.\n");
+  await writeFile(join(dir, "preferences.md"), "## Education timeline\n- **Graduation by role:** internships and co-ops: December 13, 2098. Full-time and new-grad roles: May 10, 2099.\n\n## Logistics\n- **Earliest start date:** Immediately.\n");
   const store = new Store(await mkdtemp(join(tmpdir(), "lane-fallback-store-")));
   await store.init();
-  store.data.profile = profileSchema.parse({ ...profile, education: [{ organization: "Michigan State University", title: "Master of Science", startDate: "2025-08-21", endDate: "2099-05-10" }] });
+  const answers = [{ question: "What are your salary expectations?", answer: "$80,000/year" }];
+  store.data.profile = profileSchema.parse({
+    ...profile,
+    education: [{ organization: "Michigan State University", title: "Master of Science", startDate: "2025-08-21", endDate: "2099-05-10" }],
+    roleOverrides: [{ name: "Internship", titleWords: ["intern"], education: [{ index: 0, endDate: "2099-12-15" }] }],
+    answers,
+  });
   const config = configSchema.parse({ token: "test-token-".repeat(5), postingLookup: false, tailorDir: dir });
   const seen: string[] = [];
   const queue = new GenerationQueue(store, config, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
-    async (_request, given) => { seen.push(given.education[0].endDate); return { drafts: [], warnings: [] }; });
+    async (_request, given) => {
+      seen.push(given.education[0].endDate);
+      assert.deepEqual(given.answers, answers);
+      return { drafts: [], warnings: [] };
+    });
   const graduation = field("Expected graduation date", { id: "graduation", kind: "text" });
-  for (const title of ["Software Engineer Intern", "Software Engineer, New Grad"]) {
-    const job = await queue.enqueue({ ...request([graduation]), title, purpose: "field-fallback", fallbackReasons: [{ fieldId: "graduation", reason: "Normal fill could not match this field." }] });
+  for (const roleTitle of ["Software Engineer | Software Engineer Intern", "Software Engineer, New Grad"]) {
+    const job = await queue.enqueue({ ...request([graduation]), title: "Software Engineer", roleTitle, purpose: "field-fallback", fallbackReasons: [{ fieldId: "graduation", reason: "Normal fill could not match this field." }] });
     const deadline = Date.now() + 5000;
     while (["queued", "running"].includes(job.status)) { assert.ok(Date.now() < deadline); await new Promise((r) => setTimeout(r, 10)); }
     assert.equal(job.status, "complete", job.error);
   }
-  // The internship's date moves to the rule's day; the full-time one is the
-  // profile's own (its month already agrees with the rule).
-  assert.deepEqual(seen, ["2098-12-13", "2099-05-10"]);
+  assert.deepEqual(seen, ["2099-12-15", "2099-05-10"]);
 });
 
 test("answers-only jobs do not generate documents or assess fit, and do not verify a model with itself", async () => {

@@ -16,6 +16,7 @@ import {
 } from "./generation";
 import { tailoringHome } from "./job-apply";
 import { conflictWarning, graduationFor, graduationRule, profileConflicts } from "./profile-sync";
+import { expectedGraduation } from "../shared/education";
 
 // Application questions answered the way the job-applier checkout's /job-apply
 // skill answers them: from its master profile, its question guide and its
@@ -113,7 +114,7 @@ Return ONLY this JSON: {"answers":[{"fieldId":"q1","text":"...","sources":["..."
 - A question that asks the applicant to describe their experience with something the profile lacks, or covers only in part (a language used in coursework and never at work), is answered, never skipped: say plainly what they have not done, then the nearest real experience the profile does show, and stop there. An honest "not yet" is an answer the employer can use; an empty box is not. Never invent the experience, and never promise how fast they would learn it.
 - Where the job asks for something else the profile lacks, say plainly that it is not in the applicant's background yet, or skip the question. Never invent it.
 - Logistics questions (salary, start date, availability, relocation, remote or onsite, work authorization, sponsorship, notice) are answered ONLY from the preferences, faithfully. If the preferences do not say, skip the question.
-- When graduationForThisApplication is given (YYYY-MM), it is the graduation date this application states: use it for any graduation or availability date, never the other date in the preferences.
+- When graduationForThisApplication is given (YYYY-MM), use it as the expected graduation date for this application. If an availability answer refers to expected graduation, use the same date there.
 - Say why this company only from what the job text says about its product, domain or problem. When the job text is empty, skip why-this-company and other motivation questions.
 - notUsed on a question says why your earlier answer to it could not be used. Write it again so that problem is gone: say only what the profile states, keep the profile's own figures and names, and leave out a claim the profile does not make instead of rewording it. Do not mention the earlier answer.
 - pageFields are the form's other fields, with what is chosen in them. A question that refers to another field ("the work you listed above", "the area you selected") is answered from that field's chosen value; if it has none, skip it.
@@ -275,6 +276,8 @@ export async function writeAnswers(
     return { answers, warnings: [...new Set(warnings)], withheld, sources, providers, reasons };
   }
   const refs = new Map(fields.map((field, i) => [`q${i + 1}`, field]));
+  const graduation = expectedGraduation(profile.education)?.slice(0, 7)
+    ?? graduationFor(graduationRule(context.preferences), request.title);
   const exchange: Exchange = { attempts: 0 };
   const budget = withinTime(options.timeoutMs ?? defaultBudget(config), signal);
   const parsed = await completeJSON(
@@ -296,9 +299,7 @@ export async function writeAnswers(
             preferences: context.preferences,
             facts: profile.facts.map((fact) => fact.text),
             job: { title: request.title, description: request.description },
-            ...(graduationFor(graduationRule(context.preferences), request.title)
-              ? { graduationForThisApplication: graduationFor(graduationRule(context.preferences), request.title) }
-              : {}),
+            ...(graduation ? { graduationForThisApplication: graduation } : {}),
             pageFields: pageFields(request, new Set(fields)),
             questions: [...refs].map(([id, field]) => ({
               id,

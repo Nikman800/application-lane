@@ -71,12 +71,12 @@ test("a job search finds the roles and places asked for, newest and closest firs
   assert.deepEqual(wider.listings.map((listing) => listing.company).sort(), ["Beta", "acme"]);
 });
 
-test("a search from the profile looks for its roles, where the applicant lives unless they relocate anywhere", async () => {
+test("a search from the profile uses its roles and the saved willingness to relocate", async () => {
   assert.deepEqual(profileTargets(profile), {
     roles: ["software engineer", "data scientist", "data engineer", "machine learning", "data analyst"],
     locations: ["AZ", "Tucson"],
   });
-  assert.deepEqual(profileTargets(profile, "- **Relocation:** Yes, open to relocating anywhere.").locations, []);
+  assert.deepEqual(profileTargets({ ...profile, willingToRelocate: "Yes" }).locations, []);
   const cacheDir = await mkdtemp(join(tmpdir(), "lane-search-"));
   const result = await searchJobs(searchSettingsSchema.parse({ fromProfile: true, companies: [] }), profile, { cacheDir, fetcher, now });
   assert.deepEqual(result.listings.map((listing) => listing.company), ["Acme", "Beta"]);

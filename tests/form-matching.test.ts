@@ -10,6 +10,7 @@ import { canonicalAnswer, pickOption as pickListOption } from "../src/shared/ans
 import { deterministicAnswer, nameVariants, postingGuess, proposals, publicPostingUrl, untickedNo } from "../src/shared/matching";
 import { configPassTimeout, transitionTiming } from "../src/shared/timing";
 import { degreeAliases } from "../src/shared/education";
+import { localDate } from "../src/shared/dates";
 import { profileFactQuestion } from "../src/shared/profile-facts";
 
 test("authorization never invents documentary proof or temporary immigration status", () => {
@@ -1200,6 +1201,58 @@ test("a saved answer covers the same standing question in other words, and no ot
   assert.equal(proposals([field("Desired salary", { kind: "number" })], profile).length, 0);
 });
 
+test("career preferences answer work arrangements and start dates ahead of reusable answers", () => {
+  const saved = profileSchema.parse({
+    ...profile,
+    workArrangements: ["onsite", "hybrid"],
+    availableFrom: "2099-07-16",
+    answers: [
+      { question: "Are you willing to work onsite?", answer: "No" },
+      { question: "What is your earliest start date?", answer: "Immediately" },
+    ],
+  });
+  const value = (label: string, overrides: Partial<Field> = {}, who = saved) => proposals([field(label, overrides)], who)[0]?.value;
+  const choice = { kind: "select", options: ["Yes", "No"] };
+  assert.equal(value("Are you willing to work onsite?", choice), "Yes");
+  assert.equal(value("Are you comfortable with hybrid work?", choice), "Yes");
+  assert.equal(value("Are you willing to work remotely?", choice), "No");
+  assert.equal(value("Are you able to commute to our Boulder office?", choice), undefined);
+  assert.equal(value("What is your earliest start date?", { kind: "date" }), "2099-07-16");
+  assert.equal(value("When are you available to start?: Day", { kind: "spinbutton" }), "16");
+  assert.equal(value("What is your earliest start date?", { kind: "date" }, { ...saved, availableFrom: "immediately" }), localDate());
+  assert.equal(value("Start date", { kind: "date", section: "Employment history" }), undefined);
+  assert.equal(value("What is your earliest start date?", { kind: "date" }, { ...saved, availableFrom: undefined }), localDate());
+  const sources = fieldFallbackSources(saved);
+  assert.match(sources.find(({ id }) => id === "profile.workArrangements")!.text, /onsite, hybrid/);
+  assert.match(sources.find(({ id }) => id === "profile.availableFrom")!.text, /2099-07-16/);
+  assert.ok(!sources.some(({ id }) => id.startsWith("answer.")));
+});
+
+test("a reusable coding assessment answer applies to equivalent willingness questions", () => {
+  const saved = profileSchema.parse({
+    ...profile,
+    answers: [{ question: "Are you willing to complete a coding assessment?", answer: "Yes" }],
+  });
+  const value = (label: string) => proposals([field(label, { kind: "select", options: ["Yes", "No"] })], saved)[0]?.value;
+  assert.equal(value("Would you take a coding test as part of the interview?"), "Yes");
+  assert.equal(value("Have you already completed our coding assessment?"), undefined);
+  assert.equal(value("Are you willing to take an online personality assessment?"), undefined);
+});
+
+test("a saved clearance answers current holding and a clearance-level list", () => {
+  const saved = profileSchema.parse({
+    ...profile,
+    legal: { clearance: "No security clearance, and never held one" },
+    answers: [{ question: "Do you hold an active security clearance?", answer: "Yes" }],
+  });
+  const value = (label: string, options = ["Yes", "No"]) => proposals([field(label, { kind: "select", options })], saved)[0]?.value;
+  assert.equal(value("Do you hold an active security clearance?"), "No");
+  assert.equal(value("What is your current security clearance level?", ["Secret", "Top Secret", "None"]), "None");
+  assert.equal(value("Are you eligible to obtain a security clearance?"), undefined);
+  assert.equal(value("Do you have any concerns about getting a security clearance?"), undefined);
+  assert.equal(value("When did your last security clearance expire?", ["Last year", "Never"]), undefined);
+});
+
 test("acknowledgement boxes are ticked only with the profile's permission, and never a signature or an opt-in", () => {
   const allowed = profileSchema.parse({ ...profile, acknowledgeTerms: true });
   const ticked = (label: string, who = allowed) => proposals([field(label, { kind: "checkbox" })], who)[0]?.value;
@@ -2080,6 +2133,11 @@ test("salary expectations are given for the period asked, in the applicant's cur
   assert.equal(answer("What is your salary expectation?", euros), "EUR 55,000-65,000");
   assert.equal(answer("What is your salary expectation?", { ...profile, salary: { min: 55000, currency: "", period: "year" as const } }), "55,000");
   assert.deepEqual(proposals([field("Desired salary range", { kind: "select", options: ["$50k-$70k", "$70k-$90k"] })], yearly), []);
+  const bracket = (options: string[], who = yearly) => answer("Desired salary range", who, { kind: "select", options });
+  assert.equal(bracket(["$70k-$90k", "$90k-$99k", "$100k or more"]), "$90k-$99k");
+  assert.equal(bracket(["EUR 50,000–69,999", "EUR 70,000–89,999"], euros), "EUR 50,000–69,999");
+  assert.equal(bracket(["EUR 90,000–100,000", "EUR 100,001–120,000"], yearly), undefined);
+  assert.equal(bracket(["$80k–$99k", "$100k or more"], { ...yearly, answers: [{ question: "Desired salary range", answer: "$100k or more" }] }), "$80k–$99k");
 });
 
 test("an application page's posting is guessed as the same address without /apply", () => {

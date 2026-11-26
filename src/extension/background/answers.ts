@@ -10,7 +10,7 @@ import { bg } from "./state";
 import { applicationForTab, attachTab, draftOnlyTab, inspectTab } from "./tabs";
 import { alive, allFrames, answerFills, answerRequests, api, fieldFallbackFills, frameCall, persist } from "./core";
 import { clearAnswerDrafts } from "./documents";
-import { forApplication, touch } from "./queue";
+import { applicationRoleTitle, forApplication, touch } from "./queue";
 import { broadcast } from "./badges";
 import { uiMessage } from "./ui";
 
@@ -33,7 +33,7 @@ export async function draftAnswers(app: Application, tabId: number, ids?: string
   const job: GenerationJob = await api("/v1/jobs", "POST", {
     purpose: "answers", applicationId: app.id, operation: Date.now(),
     profileRevision: profile.revision, url: app.sourceUrl || app.url,
-    title: app.title, company: app.company,
+    title: app.title, roleTitle: applicationRoleTitle(app), company: app.company,
     description: [app.sourceDescription || "", ...captured.frames.map((frame) => frame.observation.description)].join("\n").slice(0, 25000),
     fields, questionIds: selected.map((field) => field.id),
     postingUrl: app.postingUrl, postingText: app.postingText,
@@ -146,7 +146,9 @@ export async function editedAnswers(tabId: number): Promise<Observation["fields"
   return fields;
 }
 export async function suggestAnswers(tabId: number) {
-  const profile: Profile = await api("/v1/profile");
+  const savedProfile: Profile = await api("/v1/profile");
+  const app = applicationForTab(tabId);
+  const profile = app ? forApplication(savedProfile, app) : savedProfile;
   const fields = await editedAnswers(tabId);
   const saved = new Map(
     profile.answers.map((answer) => [normalize(answer.question), answer.answer]),
@@ -207,24 +209,26 @@ export async function recordHandAnswers(app: Application) {
 export async function recurringAnswers(): Promise<RecurringAnswer[]> {
   const profile: Profile = await api("/v1/profile");
   const groups = new Map<string, RecurringAnswer & { seen: Set<string> }>();
-  for (const app of bg.state.applications)
+  const field = (label: string): Field => ({ id: "recurring", label, kind: "text", required: false, value: "", options: [], revision: 1, protected: false });
+  for (const app of bg.state.applications) {
+    const effective = forApplication(profile, app);
     for (const entry of app.handAnswers || []) {
       // One kept before keptHandAnswer's later checks (a list's hidden value).
       if (!keptHandAnswer({ label: entry.question, value: entry.answer })) continue;
-      const asked =questionTopic(entry.question) || normalize(entry.question);
+      if (proposals([field(entry.question)], effective).length) continue;
+      const asked = questionTopic(entry.question) || normalize(entry.question);
       const key = `${asked}=${normalize(entry.answer)}`;
       const group = groups.get(key) || { key, question: entry.question, answer: entry.answer, applications: 0, seen: new Set<string>() };
       group.seen.add(app.id);
       group.applications = group.seen.size;
       groups.set(key, group);
     }
+  }
   const saved = new Set(profile.answers.flatMap((answer) => [normalize(answer.question), questionTopic(answer.question) || ""]).filter(Boolean));
   const dismissed = new Set(bg.state.settings.dismissedAnswers || []);
-  const field = (label: string): Field => ({ id: "recurring", label, kind: "text", required: false, value: "", options: [], revision: 1, protected: false });
   return [...groups.values()]
     .filter((group) => group.applications >= 2 && !dismissed.has(group.key))
     .filter((group) => !saved.has(questionTopic(group.question) || normalize(group.question)))
-    .filter((group) => !proposals([field(group.question)], profile).length)
     .sort((a, b) => b.applications - a.applications)
     .slice(0, 20)
     .map(({ seen: _seen, ...group }) => group);

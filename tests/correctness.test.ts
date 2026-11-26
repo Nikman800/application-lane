@@ -51,6 +51,7 @@ import { splitPhone } from "../src/shared/phone";
 import { internshipSeason, profileTargets, searchJobs, searchSettingsSchema, stageDefaults } from "../src/server/job-search";
 import { createApp } from "../src/server/app";
 import { configSchema } from "../src/server/store";
+import { profileFingerprint } from "../src/server/profile-sync";
 
 const base = {
   firstName: "Sam",
@@ -371,29 +372,45 @@ test("deleting local data removes reports, captures, searches, the fixer's resul
   }
 });
 
-test("a stored capture carries the profile revision and fingerprint", async () => {
+test("the application profile and capture fingerprint use saved overrides without tailoring preferences", async () => {
   const directory = await mkdtemp(join(tmpdir(), "lane-capture-stamp-"));
-  const cfg = configSchema.parse({ postingLookup: false, token: "test-token-".repeat(7), model: "test", endpoint: "http://127.0.0.1:9999/v1" });
-  const { server } = await createApp(cfg, directory);
+  const tailorDir = join(directory, "tailoring");
+  await mkdir(tailorDir);
+  await writeFile(join(tailorDir, "preferences.md"),
+    "## Education timeline\n- **Graduation by role:** internships: December 13, 2098.\n\n## Logistics\n- **Coding assessment:** Yes.\n");
+  const cfg = configSchema.parse({ postingLookup: false, token: "test-token-".repeat(7), model: "test", endpoint: "http://127.0.0.1:9999/v1", tailorDir });
+  const { server, store } = await createApp(cfg, directory);
+  store.data.profile = person({
+    revision: 7,
+    education: [{ organization: "Example University", title: "M.S.", startDate: "2025-08", endDate: "2099-05-10" }],
+    roleOverrides: [{ name: "Internships", titleWords: ["intern"], education: [{ index: 0, endDate: "2099-12-15" }] }],
+    answers: [{ question: "Are you willing to complete a coding assessment?", answer: "No" }],
+  });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   const headers = { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" };
   const id = "00000000-0000-4000-8000-0000000000d1";
   try {
+    const roleTitle = "Engineer | Software Engineer Intern";
+    const applied = await fetch(`${url}/v1/profile/application?title=${encodeURIComponent(roleTitle)}`, { headers });
+    assert.equal(applied.status, 200);
+    const effective = await applied.json() as Profile;
+    assert.equal(effective.education[0].endDate, "2099-12-15");
+    assert.deepEqual(effective.answers, store.data.profile.answers);
+    assert.equal(store.data.profile.education[0].endDate, "2099-05-10");
     const reply = await fetch(`${url}/v1/captures`, {
       method: "POST",
       headers,
       body: JSON.stringify({
-        id, createdAt: 1, trigger: "fill", application: { title: "Engineer", company: "Acme" },
+        id, createdAt: 1, trigger: "fill", application: { title: "Engineer", company: "Acme", roleTitle },
         tab: { tabId: 1, url: "https://acme.example/jobs/1", title: "Engineer at Acme" },
         extension: { version: "0.1.0", contentVersion: "test" }, frames: [],
       }),
     });
     assert.equal(reply.status, 201);
     const stored = JSON.parse(await readFile(join(directory, "captures", `${id}.json`), "utf8"));
-    assert.equal(typeof stored.profile.revision, "number");
-    assert.match(stored.profile.fingerprint, /^[0-9a-f]{64}$/);
+    assert.deepEqual(stored.profile, { revision: 7, fingerprint: profileFingerprint(effective) });
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }

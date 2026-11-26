@@ -3,7 +3,7 @@ import { normalize } from "./model";
 import globals from "../engine/config/globals.json" with { type: "json" };
 import { countriesNamed, countryCode, findRegion, type Geography } from "./geography";
 import { askedCountry, citizenOf, jobCountry, usCitizen, usPerson, workAuthorizations } from "./authorization";
-import { parseSalary, salaryAnswer } from "./salary";
+import { formatSalary, parseSalary, salaryAnswer, salaryBracket } from "./salary";
 import { localDate, writtenDate, MONTH_NAMES } from "./dates";
 import { degreeLevel } from "./education";
 import { ageAnswer } from "./profile-facts";
@@ -19,6 +19,7 @@ export type Topic =
   | "workThere"
   | "commute"
   | "onsite"
+  | "remote"
   | "salary"
   | "start"
   | "clearance"
@@ -61,6 +62,8 @@ function elsewhere(question: string, profile: Pick<Profile, "country"> & { apply
   return countriesNamed(geography, question).some((country) => !home.includes(country));
 }
 
+const payQuestion = /\b(salary|compensation|pay|wage)\b.*\b(expect\w*|desired|requirements?|required|requested|target|range|bracket)\b|\b(desired|expected|target) (annual |base )?(salary|compensation|pay)\b/;
+const hourlyPay = /\b(hour|hourly|hr|per hour|rate)\b/;
 const topics: [Topic, RegExp][] = [
   // (The "Arms Export Control Act Debarred List" is a denied-parties list.)
   ["usPerson", /\bu s person\b|\bus person\b|\bexport control(?!s? act\b)|\bitar\b|\bear regulations\b/],
@@ -84,15 +87,16 @@ const topics: [Topic, RegExp][] = [
     "onsite",
     /\b(willing|able|comfortable|open|okay|ok|can you|commit|available)\b.*\b(on ?site|in (the |our )?office|in person|hybrid|work(ing)? (from|at|in) (one of )?(our|the) offices?)\b|\b(on ?site|in (the |our )?office|in person|hybrid)\b.*\b(willing|able|comfortable|open|okay|ok|can you|commit|meet this requirement)\b/,
   ],
+  ["remote", /\b(willing|able|comfortable|open|can you|available)\b.*\b(work(ing)? remote(?:ly)?|remote work|work(ing)? from home|remote (role|position))\b/],
   // ("Wage Or Salary Required", an employer.)
-  ["salary", /\b(salary|compensation|pay|wage)\b.*\b(expect\w*|desired|requirements?|required|requested|target)\b|\b(desired|expected|target) (annual |base )?(salary|compensation|pay)\b/],
+  ["salary", payQuestion],
   // "What date are you available to start work?" asks it too.
   // A program's own start date, asked Yes or No ("This program has a fixed
   // start date mentioned in the job advert. Are you available to join on
   // that date?", a SmartRecruiters screening step).
   ["start", /\b(available|able) to (join|start|begin)\b.*\bon (that|the|this|its) (start )?date\b|\b(earliest|soonest)\b.*\bstart\b|\bwhen (can|could|would) you (be able to )?start\b|\bhow soon\b.*\b(able|ready|available|can|could|would)\b.*\b(start|join|begin)\b|\b(what|which) date (are|would|will) you (be )?available to (start|begin)\b|\bwhen (are|will|would) you (be )?available to (start|begin)\b|^what is your availability or notice period$|^(desired |available |earliest |preferred )?start date$|^date available$|^available start date$|\bdate available to start\b/],
   ["fullTime", /\b(available|able|willing|commit)\b.*\b(full time|monday( through| to| thru)? friday|40 hours)\b/],
-  ["assessment", /\b(take home|coding (assessment|challenge|test)|technical assessment|online assessment)\b/],
+  ["assessment", /\b(willing|open|comfortable|prepared|able|can you|would you)\b.*\b(coding|programming) (assessment|challenge|test|exercise|assignment)\b/],
   ["adult", /\b(at least|over|older than) (the age of )?18\b|\b18 years( of age)? (or older|and older|old or older)\b/],
   // ("Have you worked for an employer in the past 12 months?": the time comes after the employer.)
   // one employer's "Have you ever provided services to an employer or any of its
@@ -165,7 +169,7 @@ export function questionTopic(question: string): Topic | undefined {
     if (/\b(cuba|iran|north korea|syria|crimea|embargoed|sanctioned)\b/.test(normalize(question))) return;
     const topic = topics.find(([, pattern]) => pattern.test(label))?.[0];
     // A saved figure is a yearly one; an hourly rate is another question.
-    if (topic === "salary" && /\b(hour|hourly|hr|per hour|rate)\b/.test(label)) return;
+    if (topic === "salary" && hourlyPay.test(label)) return;
     // Holding a clearance is one question; whether one could be obtained,
     // or what might prevent it, are others. "Do you hold an active security
     // clearance? No" answered "Are you eligible to obtain a U.S. security
@@ -181,6 +185,39 @@ export function questionTopic(question: string): Topic | undefined {
   // "Are you one of the following?" asks about the list after it, as "these"
   // does about the text before (one employer's citizenship list, cc40f1fb).
   return of(asked) ?? (/\b(this|these|that|those|the above|the following|such)\b/.test(normalize(asked)) ? of(question) : undefined);
+}
+
+function standingTopic(field: Pick<Field, "label">, profile: Profile): Topic | undefined {
+  const topic = questionTopic(field.label);
+  const label = normalize(askedPart(field.label));
+  return topic ?? (profile.salary?.min !== undefined && hourlyPay.test(label) && payQuestion.test(label) ? "salary" : undefined);
+}
+
+export function profileStandingValue(field: Pick<Field, "label">, profile: Profile, topic = standingTopic(field, profile)): string | undefined {
+  if (topic === "salary" && profile.salary?.min !== undefined) return formatSalary(profile.salary, true);
+  if (topic === "start") return profile.availableFrom === "immediately" ? "Immediately" : profile.availableFrom;
+  if (topic === "fullTime" && profile.availableFullTime !== undefined) return profile.availableFullTime ? "Yes" : "No";
+  const label = normalize(askedPart(field.label));
+  if ((topic === "onsite" || topic === "remote") && profile.workArrangements?.length) {
+    const modes = [
+      ["onsite", /\b(on ?site|in (the |our )?office|in person|work\w* (from|at|in) (one of )?(our|the) offices?)\b/],
+      ["hybrid", /\bhybrid\b/],
+      ["remote", /\b(remote(?:ly)?|work\w* from home)\b/],
+    ] as const;
+    const named = modes.filter(([, pattern]) => pattern.test(label));
+    if (named.length === 1 && !/\b(commut\w*|relocat\w*|days? (a|per|each) week)\b/.test(label))
+      return profile.workArrangements.includes(named[0][0]) ? "Yes" : "No";
+  }
+  const holdsClearance = /^(?:do you (currently )?(hold|have|possess) (?:an? |any )?(?:(?:active|current|valid|u s|us|government|federal|dod|secret|top) )*security clearance\w*|(?:active|current) security clearance\w*|security clearance (?:level|status|type)|what (?:is your (?:current |active )?security clearance|(?:level|type) of security clearance))\b/;
+  if (topic === "clearance" && profile.legal?.clearance && holdsClearance.test(label) &&
+      !/\b(ever|previously|previous|past|expired|last|polygraph|date|when|renew\w*|transfer\w*)\b/.test(label)) {
+    const saved = normalize(profile.legal.clearance);
+    if (/^(?:none|no (?:active |current )?security clearance(?: and never held one)?|never held (?:a |any )?(?:security )?clearance|i (?:do not|don t) (?:currently )?(?:hold|have) (?:an? )?(?:active |current )?security clearance)$/.test(saved))
+      return "No";
+    if (/\b(hold|have|has) (an? )?(active|current)\b|^(active|current)\b/.test(saved) &&
+        !/\b(no|not|expired|inactive)\b/.test(saved) && !/\b(level|type|secret|public trust|highest)\b/.test(label))
+      return "Yes";
+  }
 }
 
 type Answer = Pick<Proposal, "value" | "choices" | "numeric">;
@@ -327,7 +364,7 @@ function companyFamily(field: Field, profile: Profile): Answer | undefined {
 
 export function standingAnswer(field: Field, profile: Profile): Answer | undefined {
   const label = normalize(field.label);
-  const topic = questionTopic(field.label);
+  const topic = standingTopic(field, profile);
   // "If employed here previously: start and end dates and reason for
   // leaving?" as a box to write in: N/A for an applicant who has never
   // worked for a company they apply to (ADP's custom questions).
@@ -437,8 +474,9 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
       return country !== undefined && (country || "US") === citizenCountry;
     })?.answer;
   const person = topic === "usPerson" ? usPerson(profile) : undefined;
+  const fromProfile = profileStandingValue(field, profile, topic);
   const saved =
-    savedFor(topic) ||
+    fromProfile || savedFor(topic) ||
     (topic === "workThere"
       ? savedFor("relocate") || profile.willingToRelocate
       : topic === "commute"
@@ -474,17 +512,22 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
   if (topic === "citizen" && /\bpermanent resid|\bgreen card\b|\bor\b.*\b(authoriz|visa)/.test(label) && yes !== "Yes") return;
   if (topic === "salary") {
     // A figure saved as a standing answer is read like the profile's own.
-    const own = profile.salary && profile.answers.every((answer) => questionTopic(answer.question) !== "salary")
-      ? profile.salary
-      : parseSalary(saved, "year");
-    const numeric = field.kind === "number" || Boolean(field.options.length) || /\b(numbers? only|numeric|digits only)\b/.test(label);
+    const own = fromProfile ? profile.salary : parseSalary(saved, "year");
+    const numeric = field.kind === "number" || Boolean(field.options.length) || (!!field.invalid && !!field.value) ||
+      /\b(numbers? only|numeric( only| value)?|digits only|whole numbers?|no (commas|symbols|currency)|without (commas|symbols|currency))\b/.test(label);
     // Words saved in place of a figure ("Negotiable") answer a text box.
     if (!own) return numeric ? undefined : { value: saved.trim() };
     const answer = salaryAnswer(own, { label, numeric });
     if (!answer) return;
     // A list of ranges is matched by the figure; a text box takes a saved
     // answer as the applicant wrote it.
-    if (field.options.length) return { value: String(answer.numeric), numeric: answer.numeric };
+    if (field.options.length) {
+      if (fromProfile) {
+        const option = salaryBracket(own, field.options);
+        return option ? { value: option } : undefined;
+      }
+      return { value: String(answer.numeric), numeric: answer.numeric };
+    }
     return own === profile.salary || numeric ? answer : { value: saved.trim(), numeric: answer.numeric };
   }
   if (topic === "start") {
@@ -495,11 +538,13 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
     if (/\b(work|employment|experience|education|history|job|school)\b/i.test(field.section || "")) return;
     // "Availability or notice period" is answered only by "Immediately": a
     // date or another notice is not the same thing.
-    if (/\bnotice period\b/.test(label) && !/^\s*(immediately|immediate|asap|right away|now)\b/i.test(saved)) return;
+    const immediate = /^\s*(immediately|immediate|asap|right away|now)\b/i.test(saved);
+    const date = immediate ? localDate() : /^\d{4}-\d{2}-\d{2}$/.test(saved) ? saved : undefined;
+    if (/\bnotice period\b/.test(label) && !immediate) return;
     // Whether one can start on the date the employer set: an applicant who
     // can start now can then. Any other saved answer may not, and is left.
     if (field.options.some((option) => /^yes\b/i.test(option.trim())) && /\bon (that|the|this|its) (start )?date\b/.test(label))
-      return /^\s*(immediately|immediate|asap|right away|now)\b/i.test(saved) ? yesNo("Yes", field) : undefined;
+      return immediate ? yesNo("Yes", field) : undefined;
     // "Immediately" answers a text box or a list that offers it. A box that
     // takes only a date gets today's: the date the applicant could start.
     // Another saved answer ("Two weeks' notice") is no date, and is left.
@@ -512,22 +557,24 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
     // was typed into each box and none took it. Today's date, part by part, as the graduation date's is.
     const part = field.label.match(/(?:\?\s*:?|[.:]\s*:|\bdate\s*:|\bstart\??\s*:)\s*(month|day|year)\s*$/i)?.[1].toLowerCase();
     if (part) {
-      if (!/^\s*(immediately|immediate|asap|right away|now)\b/i.test(saved)) return;
-      const [year, monthNumber, day] = localDate().split("-");
+      if (!date) return;
+      const [year, monthNumber, day] = date.split("-");
       const name = MONTH_NAMES[Number(monthNumber) - 1];
       if (part === "year") return { value: year };
       if (part === "month") return { value: name, choices: [name.slice(0, 3), monthNumber, String(Number(monthNumber))] };
       return { value: String(Number(day)), choices: [day] };
     }
     if (/date/.test(field.kind) || (!field.options.length && /^(date available|available (start )?date|availability date|(earliest )?start date|date of availability)$/.test(label))) {
-      if (!/^\s*(immediately|immediate|asap|right away|now)\b/i.test(saved)) return;
+      if (!date) return;
       // Amazon's picker names its format, "Date: Year-Month-Day", and calls
       // "10/25/2026" the wrong one. Without a format
       // shown or known, the date is left.
-      const value = writtenDate(localDate(), field, profile);
+      const value = writtenDate(date, field, profile);
       return value ? { value } : undefined;
     }
-    return { value: saved.trim(), choices: /immediate|asap|right away/i.test(saved) ? ["Immediately", "Immediate", "ASAP", "Available immediately"] : undefined };
+    if (date && !immediate && !field.options.length)
+      return { value: writtenDate(date, field, profile) || date };
+    return { value: saved.trim(), choices: immediate ? ["Immediately", "Immediate", "ASAP", "Available immediately"] : undefined };
   }
   if (topic === "citizen" && !/\b(are|am) (you|i)\b|^(u s|us|united states) citizen$/.test(label)) {
     // A status list: the saved wording, and the ways lists word a citizen

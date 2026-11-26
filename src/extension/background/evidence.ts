@@ -10,6 +10,7 @@ import { applicationForTab, networkSummary, pageEvidence } from "./tabs";
 import { applicationForm, knownNonApplication, postingMismatch } from "../application-form";
 import { BACKEND_DOWN, allFrames, api, persist } from "./core";
 import { invalidate } from "./run";
+import { applicationRoleTitle } from "./queue";
 
 
 // Every fill leaves a capture of the page as the fill left it, with its
@@ -60,6 +61,7 @@ export async function captureFill(app: Application, tabId: number, trigger: "fil
     applicationId: app.id,
     application: {
       title: app.title,
+      roleTitle: applicationRoleTitle(app),
       company: app.company,
       workflowStage: app.workflowStage,
       status: app.status,

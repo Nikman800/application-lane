@@ -78,16 +78,17 @@ test("invented evidence, foreign IDs and invented requirements cannot yield a go
 });
 
 test("fit evidence includes saved experience, education and skill context while excluding contact and demographics", () => {
-  const evidence = fitEvidence(profile, {
+  const context = {
     profile: "## Projects\n### Backend\n- Built a Python service.",
     preferences: "## Logistics\n- **Relocation:** Yes", guidance: "", warnings: [],
-  });
+  };
+  const evidence = fitEvidence(profile, context);
   const text = evidence.map((entry) => entry.text).join("\n");
   assert.match(text, /TypeScript/);
   assert.match(text, /B\.S\. Computer Science/);
   assert.match(text, /Python service/);
   assert.match(text, /United States: status not said; needs sponsorship: yes/);
-  assert.doesNotMatch(text, /private@example|Private demographic/);
+  assert.doesNotMatch(text, /private@example|Private demographic|Relocation:\*\* Yes/);
 });
 
 test("fit assessment uses the configured provider and application graduation date, and short postings need more information", async (t) => {

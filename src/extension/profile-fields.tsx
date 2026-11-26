@@ -1,7 +1,7 @@
 // Profile editor parts for answers that differ by country and by applicant:
 // work authorization country by country, citizenships, expected pay, and
 // how dates and letters are written.
-import React from "react";
+import React, { useState } from "react";
 import globals from "../engine/config/globals.json" with { type: "json" };
 import type { Profile, WorkAuthorization } from "../shared/model";
 import type { Salary } from "../shared/salary";
@@ -169,6 +169,9 @@ export function SalaryEditor({ profile, edit }: { profile: Profile; edit: Edit }
 }
 
 export function CareerEditor({ profile, edit }: { profile: Profile; edit: Edit }) {
+  const [choosingDate, setChoosingDate] = useState(false);
+  const selectDate = profile.availableFrom === "immediately" ? false : choosingDate || Boolean(profile.availableFrom);
+  const arrangements = profile.workArrangements || [];
   return (
     <>
       <label>
@@ -179,6 +182,47 @@ export function CareerEditor({ profile, edit }: { profile: Profile; edit: Edit }
           <option value="new-grad">New graduate</option>
           <option value="experienced">Experienced</option>
           <option value="career-change">Changing careers</option>
+        </select>
+      </label>
+      <fieldset className="work-arrangements">
+        <legend>Open to these work arrangements</legend>
+        {([["onsite", "Onsite"], ["hybrid", "Hybrid"], ["remote", "Remote"]] as const).map(([value, label]) => (
+          <label key={value}>
+            <input type="checkbox" checked={arrangements.includes(value)} onChange={(e) => {
+              const next = e.target.checked ? [...arrangements, value] : arrangements.filter((item) => item !== value);
+              edit("workArrangements", next.length ? next : undefined);
+            }} />
+            {label}
+          </label>
+        ))}
+        <small>Leave all blank to answer work arrangement questions yourself.</small>
+      </fieldset>
+      <label>
+        Earliest start
+        <select value={selectDate ? "date" : profile.availableFrom || ""} onChange={(e) => {
+          setChoosingDate(e.target.value === "date");
+          edit("availableFrom", e.target.value === "immediately" ? "immediately" : undefined);
+        }}>
+          <option value="">Not set</option>
+          <option value="immediately">Immediately</option>
+          <option value="date">Specific date</option>
+        </select>
+      </label>
+      {selectDate && (
+        <label>
+          Earliest start date
+          <input type="date" required value={profile.availableFrom || ""} onChange={(e) => {
+            if (e.target.value || !e.target.validity.badInput) edit("availableFrom", e.target.value || undefined);
+          }} />
+        </label>
+      )}
+      <label>
+        Available to work full-time hours
+        <select value={profile.availableFullTime === undefined ? "" : String(profile.availableFullTime)}
+          onChange={(e) => edit("availableFullTime", e.target.value ? e.target.value === "true" : undefined)}>
+          <option value="">Not set</option>
+          <option value="true">Yes</option>
+          <option value="false">No</option>
         </select>
       </label>
       <label>

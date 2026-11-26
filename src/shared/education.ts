@@ -71,6 +71,14 @@ export const levelRank = { "": 0, associate: 1, bachelor: 2, master: 3, mba: 3, 
 export const thisMonth = (now = new Date()) =>
   `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
+export function expectedGraduation(rows: readonly { endDate: string }[]): string | undefined {
+  const month = thisMonth();
+  return rows.map((row) => row.endDate)
+    .filter((date) => /^\d{4}-\d{2}/.test(date) && date.slice(0, 7) >= month)
+    .sort()
+    .at(-1);
+}
+
 // Whether the applicant is still at this school (or job): its own say, else
 // an end date still ahead. An empty end date alone says nothing.
 export function studying(row: Row, now = new Date()): boolean | undefined {

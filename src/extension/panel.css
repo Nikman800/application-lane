@@ -503,6 +503,18 @@ input[type="radio"] {
   accent-color: var(--accent);
   flex-shrink: 0;
 }
+.work-arrangements {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 10px 0;
+}
+.work-arrangements label {
+  flex-direction: row;
+  align-items: center;
+  margin: 6px 0;
+}
 .micro {
   display: flex;
   align-items: center;

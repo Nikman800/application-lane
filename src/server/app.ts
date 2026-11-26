@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { basename, join, resolve } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { ISSUE_IMAGE_LIMIT, generationSchema, profileSchema, type FixerItem, type FixerOverview, type FixerResult } from "../shared/model";
+import { ISSUE_IMAGE_LIMIT, forRole, generationSchema, profileSchema, type FixerItem, type FixerOverview, type FixerResult } from "../shared/model";
 import { cleanFixerSettings } from "../shared/fixer-settings";
 import { devToolsEnabled } from "../shared/dev-tools";
 import { Store, atomicJSON, type Config } from "./store";
@@ -24,7 +24,7 @@ import { extractResume, transcriptsFolder } from "./documents";
 import { desktopPath, exportDocuments, exportedPaths, markSent, openFolder, removeWritten } from "./export";
 import { bundleSchema, exportBundle, importTailoringFiles, importedTailoring } from "./profile-bundle";
 import { skillContext } from "./answers";
-import { applicationProfile, profileConflicts, profileStamp } from "./profile-sync";
+import { profileConflicts, profileStamp } from "./profile-sync";
 import { configView, saveTranscript, updateConfig } from "./settings";
 import { packageRoot, packageVersion } from "./paths";
 import { Pairing, pairingBanner, type PairingAnnouncement } from "./pairing";
@@ -394,10 +394,10 @@ export async function createApp(
         });
       if (path === "/v1/profile" && req.method === "GET")
         return send(res, 200, store.data.profile);
-      // The profile as one application states it (graduation by role).
+      // Apply the saved job-type overrides for diagnostics and older extensions.
       if (path === "/v1/profile/application" && req.method === "GET") {
         const title = new URL(req.url || "/", "http://127.0.0.1").searchParams.get("title") || "";
-        return send(res, 200, await applicationProfile(store.data.profile, config, title.slice(0, 300)));
+        return send(res, 200, forRole(store.data.profile, title));
       }
       // Where the extension profile and the job-applier files disagree.
       if (path === "/v1/profile/conflicts" && req.method === "GET") {
@@ -640,11 +640,11 @@ export async function createApp(
           })
           .parse(await jsonBody(req, 100 * 1024 * 1024));
         const { har, ...fields } = bundle;
-        // The profile this fill used: the per-application profile served for
-        // its job (what the extension fetched), stamped here because the
-        // extension does not hold it at capture time.
+        // Stamp the saved profile with the same role title the fill used.
+        const roleTitle = fields.application?.roleTitle;
         const title = typeof fields.application?.title === "string" ? fields.application.title : "";
-        const capture = { ...fields, profile: profileStamp(await applicationProfile(store.data.profile, config, title.slice(0, 300))) };
+        const effective = forRole(store.data.profile, typeof roleTitle === "string" ? roleTitle : `${title} | ${fields.tab.title}`);
+        const capture = { ...fields, profile: profileStamp(effective) };
         if (har && capture.network?.entries !== har.log.entries.length) throw new Error("Network capture does not match capture.");
         await mkdir(join(directory, "captures"), { recursive: true });
         // The capture JSON is what readers list: written after its HAR.
@@ -682,7 +682,6 @@ export async function createApp(
       const searchDir = join(directory, "search");
       const searchSettingsPath = join(searchDir, "settings.json");
       const searchResultsPath = join(searchDir, "latest.json");
-      const preferences = () => readFile(join(config.tailorDir || join(directory, "tailoring"), "preferences.md"), "utf8").catch(() => "");
       const readSearchSettings = async () =>
         searchSettingsSchema.parse({
           // Defaults for the applicant's career stage, under what they saved.
@@ -690,12 +689,12 @@ export async function createApp(
           ...JSON.parse(await readFile(searchSettingsPath, "utf8").catch(() => "{}")),
         });
       if (path === "/v1/search/settings" && req.method === "GET")
-        return send(res, 200, { settings: await readSearchSettings(), suggested: profileTargets(store.data.profile, await preferences()) });
+        return send(res, 200, { settings: await readSearchSettings(), suggested: profileTargets(store.data.profile) });
       if (path === "/v1/search/settings" && req.method === "PUT") {
         const settings = searchSettingsSchema.parse(await jsonBody(req));
         await mkdir(searchDir, { recursive: true });
         await atomicJSON(searchSettingsPath, settings);
-        return send(res, 200, { settings, suggested: profileTargets(store.data.profile, await preferences()) });
+        return send(res, 200, { settings, suggested: profileTargets(store.data.profile) });
       }
       // Which openings are already applications, as they are now: marked
       // only when the search ran, one saved three days before marked none of
@@ -770,7 +769,7 @@ export async function createApp(
         const overrides = z.record(z.unknown()).parse(await jsonBody(req).catch(() => ({})));
         const settings = searchSettingsSchema.parse({ ...(await readSearchSettings()), ...overrides });
         const known = await knownOpenings();
-        const result = await searchJobs(settings, store.data.profile, { cacheDir: join(searchDir, "cache"), preferences: await preferences(), known });
+        const result = await searchJobs(settings, store.data.profile, { cacheDir: join(searchDir, "cache"), known });
         result.listings = await withSites(result.listings);
         await mkdir(searchDir, { recursive: true });
         await atomicJSON(searchResultsPath, result);

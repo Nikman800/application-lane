@@ -22,9 +22,8 @@ export function ProfilePage({ panel }: { panel: PanelState }) {
       </p>
       {conflicts.length > 0 && (
         <div className="notice" role="status" aria-label="Profile disagreements">
-          <strong>This profile and your tailoring notes disagree.</strong> Yes/no
-          answers use this profile, written answers use the files, so an
-          application could contradict itself. Make them match:
+          <strong>This profile and your tailoring notes disagree.</strong> Form
+          fields use the saved profile. Written drafts can draw on the notes.
           <ul>
             {conflicts.map((c) => (
               <li key={c.field}>
@@ -647,7 +646,7 @@ export function ProfilePage({ panel }: { panel: PanelState }) {
                     ...(profile.roleOverrides || []),
                     (profile.roleOverrides || []).some((override) => override.name === "Internships & co-ops")
                       ? { name: "New job type", titleWords: [], education: [] }
-                      : { name: "Internships & co-ops", titleWords: ["intern", "internship", "co-op"], education: [] },
+                      : { name: "Internships & co-ops", titleWords: ["intern", "internship", "co-op", "summer analyst", "summer associate"], education: [] },
                   ])
                 }
               >
@@ -655,8 +654,8 @@ export function ProfilePage({ panel }: { panel: PanelState }) {
               </button>
             </div>
             <p className="help">
-              What changes for some jobs: a later graduation date for
-              internships, say. A job whose title has one of a type's
+              Set a different graduation date or full-time availability for some
+              jobs. A job whose title has one of a type's
               words is filled with these values instead; the first type
               that matches is used.
             </p>
@@ -669,6 +668,15 @@ export function ProfilePage({ panel }: { panel: PanelState }) {
                     <label>
                       Name
                       <input value={override.name} maxLength={80} onChange={(e) => change({ name: e.target.value })} />
+                    </label>
+                    <label>
+                      Available to work full-time hours for this job type
+                      <select value={override.availableFullTime === undefined ? "" : String(override.availableFullTime)}
+                        onChange={(e) => change({ availableFullTime: e.target.value ? e.target.value === "true" : undefined })}>
+                        <option value="">Use profile default</option>
+                        <option value="true">Yes</option>
+                        <option value="false">No</option>
+                      </select>
                     </label>
                     <label>
                       Job title words (comma-separated)
@@ -732,9 +740,9 @@ export function ProfilePage({ panel }: { panel: PanelState }) {
               </button>
             </div>
             <p className="help">
-              Answers match an exact question label. Eligibility and
-              sensitive questions are filled only when you explicitly
-              supply an answer.
+              Answers match the same question and recognized variants of
+              common questions, such as willingness to take a coding test.
+              Dedicated profile fields and job-type overrides take precedence.
             </p>
             {profile.answers.map((answer, index) => (
               <div className="history-row" key={index}>

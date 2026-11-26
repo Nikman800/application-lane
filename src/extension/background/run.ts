@@ -10,7 +10,7 @@ import { pickTranscript } from "../../shared/transcripts";
 import { storeBuild } from "../../shared/store-build";
 import { trustedTypingAvailable, releaseTrustedInput } from "../trusted-input";
 import { rowHolds } from "../row-holds";
-import { carryOnFailed, clearFit, fillable, forApplication, operationKey, resume, schedule, touch, trackTab } from "./queue";
+import { applicationRoleTitle, carryOnFailed, clearFit, fillable, forApplication, operationKey, resume, schedule, touch, trackTab } from "./queue";
 import { type Frame, alive, answerRequests, api, applyFrame, configUploads, dirty, emptyFields, fieldFallbackRequests, frameCall, frameDeadline, loadingSince, pageTimers, persist, endOnStepChange, reinspectNavigation, reviewInterruptedWrite, signingPolicies } from "./core";
 import { applicationForTab, attachTab, guessedAgain, inspectTab, leadingPage, namedByPage, observations, postingFromOwnTab, useApply, wordCount } from "./tabs";
 import { finishedStages, interactedNote } from "./submissions";
@@ -138,21 +138,15 @@ export async function run(app: Application, operation: number) {
   // after document generation must reuse that wait, rather than start another
   // ten-second loading budget. A new fill/navigation resets it separately.
   if (componentsReady && tab.status !== "loading") loadingSince.delete(app.id);
-  // As this application should state it: an internship and a full-time role
-  // can name different graduation dates (preferences.md, graduation by role).
-  const profile: Profile = forApplication(
-    await api(`/v1/profile/application?title=${encodeURIComponent(app.title)}`).catch(() => api("/v1/profile")),
-    app,
-  );
+  const savedProfile: Profile = await api("/v1/profile");
   if (!alive(app, operation)) return;
-  if (!profile.confirmed || !profile.facts.length)
+  if (!savedProfile.confirmed || !savedProfile.facts.length)
     throw new Error(
       "Save and confirm your profile before preparing applications.",
     );
-  if (app.profileRevision && app.profileRevision !== profile.revision)
+  if (app.profileRevision && app.profileRevision !== savedProfile.revision)
     throw new Error("Profile changed. Choose Fill this step with the updated profile.");
-  app.profileRevision = profile.revision;
-  signingPolicies.set(app.id, profile.signatures ?? "never");
+  app.profileRevision = savedProfile.revision;
   const { frames: observed, inaccessible, accessOrigins, frameUrls } = await observations(
     app,
     operation,
@@ -235,6 +229,9 @@ export async function run(app: Application, operation: number) {
   const heading = primary.observation.title || "";
   app.title = app.posting?.title || (genericTitle(app.title, app.url) && heading && !genericTitle(heading, app.url) ? heading : app.title);
   namedByPage(app, primary.observation);
+  const roleTitle = applicationRoleTitle(app);
+  const profile = forApplication(savedProfile, app, roleTitle);
+  signingPolicies.set(app.id, profile.signatures ?? "never");
   app.ats = primary.observation.ats;
   // A SuccessFactors page showing only folded sections and upload slots has
   // its whole form behind them: the fill goes on and opens them (the
@@ -356,6 +353,7 @@ export async function run(app: Application, operation: number) {
         profileRevision: profile.revision,
         url: app.url,
         title: app.title,
+        roleTitle,
         company: app.company || undefined,
         description: [
           app.sourceDescription || "",

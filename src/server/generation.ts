@@ -11,7 +11,7 @@ import { type FieldFallbackWriter, writeFieldFallback } from "./field-fallback";
 import { randomUUID, createHash } from "node:crypto";
 import { transcriptArtifacts, transcriptsFolder, renderArtifacts } from "./documents";
 import { TailoringProgress } from "./tailoring-progress";
-import { applicationProfile, applicationGraduation, withGraduation } from "./profile-sync";
+import { expectedGraduation } from "../shared/education";
 import { join, resolve } from "node:path";
 import { copyFile } from "node:fs/promises";
 import { exportDocuments } from "./export";
@@ -310,13 +310,20 @@ export class GenerationQueue {
     if (independent.length < items.length) warnings.push("No other model in your Drafting order could check some drafts, so they need your review without a second model check.");
     items.splice(0, items.length, ...independent);
     if (!items.length) return { narrative, written, warnings };
-    let profileText = profile.facts.map((fact) => `- ${fact.text}`).join("\n");
+    const graduation = expectedGraduation(profile.education)?.slice(0, 7);
+    let profileText = [
+      ...profile.facts.map((fact) => `- ${fact.text}`),
+      ...(graduation ? [`- Expected graduation for this application: ${graduation}.`] : []),
+    ].join("\n");
     if (this.config.tailorDir) {
       const context = await skillContext(this.config.tailorDir).catch(() => undefined);
       // The facts under their own heading: after profile.md's last section
       // they read as part of it, and a profile ending in "## Known gaps"
       // made every fact a gap (evidenceEntries, verify.ts).
-      if (context?.profile) profileText = `${context.profile}\n\n${context.preferences}\n\n## Confirmed facts\n${profileText}`;
+      if (context) {
+        const preferences = items.some((item) => item.kind === "answer") ? context.preferences : "";
+        profileText = [context.profile, preferences, `## Confirmed facts\n${profileText}`].filter(Boolean).join("\n\n");
+      }
     }
     let verdicts;
     try {
@@ -493,12 +500,10 @@ export class GenerationQueue {
     try {
       await this.store.save();
       if (request.purpose === "field-fallback") {
-        // The profile as this application states it, as Fill reads it: an
-        // internship's graduation date and the preferences' plain answers
-        // (suggestions said May for an internship that Fill dated December).
+        // Use the saved override selected by the same titles as Fill.
         const result = await this.fieldFallback(
           request,
-          await applicationProfile(profile, this.config, request.title.slice(0, 300)),
+          forRole(profile, request.roleTitle || request.title),
           controller.signal,
         );
         job.fieldDrafts = result.drafts;
@@ -560,10 +565,8 @@ export class GenerationQueue {
       if (!posting) job.postingRole = createHash("sha256").update(JSON.stringify([request.title, request.company])).digest("hex");
       // The profile as this kind of job is answered from (its overrides by
       // job title), as the extension fills it.
-      profile = forRole(profile, request.title);
-      // Documents and answers state this application's graduation date.
-      const graduation = await applicationGraduation(this.config, request.title);
-      if (graduation) profile = withGraduation(profile, graduation);
+      profile = forRole(profile, [request.title, request.roleTitle].filter(Boolean).join(" | "));
+      const graduation = expectedGraduation(profile.education)?.slice(0, 7);
       if (request.purpose === "answers") {
         progress = new TailoringProgress(job);
         for (const field of request.fields.filter(applicationQuestion))

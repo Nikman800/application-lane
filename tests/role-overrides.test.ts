@@ -35,3 +35,17 @@ test("an internship's graduation questions take its type's end date, other jobs 
   assert.equal(fullTime.education[0].endDate, "2099-05-10");
   assert.equal(proposals([question], fullTime)[0]?.value, "2099-05-10");
 });
+
+test("a job-type hours override can apply by itself and keeps other roles at the default", () => {
+  const saved = profileSchema.parse({
+    ...applicant,
+    availableFullTime: false,
+    roleOverrides: [{ name: "Internships", titleWords: ["summer analyst", "summer associate"], availableFullTime: true }],
+  });
+  const question = { id: "hours", label: "Are you available to work full-time?", kind: "select", required: false, value: "", options: ["Yes", "No"], revision: 1, protected: false };
+  const intern = forRole(saved, "Technology Summer Analyst");
+  assert.equal(proposals([question], intern)[0]?.value, "Yes");
+  assert.equal(proposals([question], forRole(saved, "Technology Engineer"))[0]?.value, "No");
+  assert.equal(intern.education[0].endDate, saved.education[0].endDate);
+  assert.equal(saved.availableFullTime, false);
+});

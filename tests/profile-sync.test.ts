@@ -9,7 +9,6 @@ import {
   markdownEntries,
   profileConflicts,
   profileFingerprint,
-  withGraduation,
 } from "../src/server/profile-sync";
 
 // preferences.md and profile.md as the job-applier checkout writes them.
@@ -83,7 +82,7 @@ test("each real disagreement is named with both values and the file", () => {
   assert.deepEqual(conflictWarning([]), []);
 });
 
-test("graduation by role: internships and full-time roles state their own date", async () => {
+test("the written-answer graduation rule recognizes internships and full-time jobs", () => {
   const rule = graduationRule(
     "## Education timeline\n- **Graduation by role:** internships and co-ops: December 13, 2027. Full-time and new-grad roles: May 10, 2027.",
   );
@@ -96,44 +95,16 @@ test("graduation by role: internships and full-time roles state their own date",
   assert.equal(internshipRole("Investment Banking Summer Associate"), true);
   assert.equal(internshipRole("Analyst, Summer Reading Program Technology"), false);
   assert.equal(graduationFor(rule, "Software Engineer, New Grad"), "2027-05");
-  // Only the degree still in progress moves; a same-month date keeps its day.
+});
+
+test("either graduation month in the written-answer rule agrees with the profile", () => {
   const base = profile({ education: [
-    { organization: "Penn State", title: "B.S.", startDate: "2020-09", endDate: "2024-06-15" },
     { organization: "MSU", title: "M.S.", startDate: "2025-08", endDate: "2027-05-10" },
   ] });
-  assert.deepEqual(withGraduation(base, "2027-12").education.map((r) => r.endDate), ["2024-06-15", "2027-12"]);
-  assert.equal(withGraduation(base, "2027-05"), base);
-  // A rule with the day moves the date to that day.
-  assert.deepEqual(graduationRule(
-    "## Education timeline\n- **Graduation by role:** internships and co-ops: December 13, 2027. Full-time and new-grad roles: May 10, 2027.", true,
-  ), { internship: "2027-12-13", fullTime: "2027-05-10" });
-  assert.deepEqual(withGraduation(base, "2027-12-13").education.map((r) => r.endDate), ["2024-06-15", "2027-12-13"]);
-  assert.equal(withGraduation(base, "2027-05-10"), base);
   // Either of the rule's dates agrees with the extension profile.
   const both = "- **Graduation:** December 13, 2027.\n- **Graduation by role:** internships: December 13, 2027. Full-time: May 10, 2027.";
   assert.deepEqual(profileConflicts(base, { preferences: both, profile: masterProfile }), []);
   assert.equal(profileConflicts(base, { preferences: "- **Graduation:** December 13, 2027.", profile: masterProfile })[0].field, "Graduation");
-});
-
-test("plain preference entries become standing answers, and hedged ones do not", async () => {
-  const { preferenceAnswers } = await import("../src/server/profile-sync");
-  const { questionTopic } = await import("../src/shared/standing");
-  const text = [
-    "- **Work authorization:** U.S. citizen. No sponsorship needed.",
-    "- **Relocation:** Yes, open to relocating anywhere.",
-    "- **Remote vs. onsite preference:** Prefers onsite, fine with hybrid.",
-    "- **Salary expectation:** $90,000/year target (full-time). Internships: accept the posted rate.",
-    "- **Earliest start date / availability:** Immediately.",
-    "- **Security clearance:** None.",
-    "- **Willing to do a take-home / coding assessment:** Yes (default).",
-  ].join("\n");
-  const byTopic = (title: string) => Object.fromEntries(preferenceAnswers(text, title).map((a) => [questionTopic(a.question), a.answer]));
-  assert.deepEqual(byTopic("Software Engineer"), { relocate: "Yes", citizen: "Yes", usPerson: "Yes", onsite: "Yes", salary: "$90,000", start: "Immediately", clearance: "No", assessment: "Yes" });
-  // An internship takes the posted rate: no figure is offered.
-  assert.equal(byTopic("Software Engineering Intern").salary, undefined);
-  // Hedged or absent entries say nothing.
-  const hedged = "- **Relocation:** Depends on the city.\n- **Remote vs. onsite preference:** Remote only.\n- **Security clearance:** Held Secret until 2022.";
-  assert.deepEqual(preferenceAnswers(hedged, "Engineer"), []);
 });
 
 test("the profile fingerprint is stable, follows answers, and ignores revision and timestamps", () => {

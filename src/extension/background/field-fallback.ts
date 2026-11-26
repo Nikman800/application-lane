@@ -7,7 +7,7 @@ import { releaseTrustedInput } from "../trusted-input";
 import { bg } from "./state";
 import { alive, answerFills, api, fieldFallbackFills, fieldFallbackRequests, frameCall, optionReads, persist, withPageTimers } from "./core";
 import { applicationForTab, draftOnlyTab, inspectTab } from "./tabs";
-import { forApplication, touch } from "./queue";
+import { applicationRoleTitle, forApplication, touch } from "./queue";
 import { broadcast } from "./badges";
 import { questionFields } from "./documents";
 import { draftAnswers } from "./answers";
@@ -146,8 +146,9 @@ export async function draftFieldFallback(
       ids.some((id) => typeof id !== "string"))
   )
     throw new Error("Choose valid unresolved fields to review.");
-  // As Fill read it, so both agree on what is left (graduation by role).
-  const profile: Profile = forApplication(await api(`/v1/profile/application?title=${encodeURIComponent(app.title)}`).catch(() => api("/v1/profile")), app);
+  const savedProfile: Profile = await api("/v1/profile");
+  const roleTitle = applicationRoleTitle(app);
+  const profile = forApplication(savedProfile, app, roleTitle);
   const captured = await inspectTab(tabId);
   const scanned = await unresolvedFields(app, tabId, captured, profile);
   if (!scanned.available)
@@ -206,6 +207,7 @@ export async function draftFieldFallback(
     profileRevision: profile.revision,
     url: captured.tab.url || app.url,
     title: app.title,
+    roleTitle,
     company: app.company,
     description: "",
     fields,

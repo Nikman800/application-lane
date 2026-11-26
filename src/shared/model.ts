@@ -63,6 +63,7 @@ export const roleOverrideSchema = z.object({
     index: z.number().int().min(0).max(30),
     endDate: z.string().max(20),
   })).max(30).default([]),
+  availableFullTime: z.boolean().optional(),
 });
 export type RoleOverride = z.infer<typeof roleOverrideSchema>;
 // A professional reference the applicant is willing to have contacted. Phone
@@ -333,6 +334,9 @@ const profileObject = z.object({
   phoneCountryCode: z.string().max(8).default(""),
   careerStage: z.enum(["student", "new-grad", "experienced", "career-change"]).optional(),
   yearsExperience: z.number().min(0).max(70).optional(),
+  workArrangements: z.array(z.enum(["onsite", "hybrid", "remote"])).max(3).optional(),
+  availableFrom: z.union([z.literal("immediately"), z.string().date()]).optional(),
+  availableFullTime: z.boolean().optional(),
   // How dates are written where a form does not say, and the paper
   // letters are printed on. Unset: by the applicant's country.
   locale: z
@@ -390,15 +394,16 @@ export function overrideFor(overrides: RoleOverride[], title: string): RoleOverr
     }));
 }
 // The profile as an application for this job is answered from.
-export function forRole<T extends { education: { endDate: string }[]; roleOverrides?: RoleOverride[] }>(profile: T, title: string): T {
-  const override = overrideFor(profile.roleOverrides || [], title);
-  if (!override?.education.length) return profile;
+export function forRole(profile: Profile, title: string): Profile {
+  const override = overrideFor(profile.roleOverrides, title);
+  if (!override) return profile;
   return {
     ...profile,
-    education: profile.education.map((row, index) => {
+    ...(override.availableFullTime !== undefined ? { availableFullTime: override.availableFullTime } : {}),
+    education: override.education.length ? profile.education.map((row, index) => {
       const change = override.education.find((entry) => entry.index === index && entry.endDate.trim());
       return change ? { ...row, endDate: change.endDate.trim() } : row;
-    }),
+    }) : profile.education,
   };
 }
 export type Profile = z.infer<typeof profileObject> & { applyingTo?: ApplyingTo };
@@ -542,6 +547,8 @@ export const generationSchema = z.object({
   profileRevision: z.number().int(),
   url: z.string().url().max(3000),
   title: z.string().max(1000),
+  // The titles the extension used to select a saved job-type override.
+  roleTitle: z.string().optional(),
   // As the tracker names it, which may be a URL slug: the letter greets it
   // only when the posting writes the same name.
   company: z.string().max(300).optional(),

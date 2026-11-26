@@ -5,7 +5,7 @@ import { applicationQuestion } from "../../shared/questions";
 import { bg } from "./state";
 import { answerRequests, api, persist } from "./core";
 import { inspectTab, namedByPage, postingFromOwnTab, wordCount } from "./tabs";
-import { schedule } from "./queue";
+import { applicationRoleTitle, schedule } from "./queue";
 
 export async function checkFit(app: Application) {
   if (app.fitJobId) return bg.state;
@@ -27,7 +27,7 @@ export async function checkFit(app: Application) {
   const job: GenerationJob = await api("/v1/jobs", "POST", {
     purpose: "fit", applicationId: app.id, operation: Date.now(),
     profileRevision: profile.revision, url: app.sourceUrl || app.url,
-    title: app.title, company: app.company,
+    title: app.title, roleTitle: applicationRoleTitle(app), company: app.company,
     description: [app.sourceDescription || "", ...frames.map((frame) => frame.observation.description)].join("\n").slice(0, 25000),
     fields: frames.flatMap((frame) => frame.observation.fields).slice(0, 250),
     postingUrl: app.postingUrl, postingText: app.postingText,
@@ -66,7 +66,7 @@ export async function draftDocuments(app: Application) {
   const job: GenerationJob = await api("/v1/jobs", "POST", {
     purpose: "application", applicationId: app.id, operation: Date.now(),
     profileRevision: profile.revision, url: app.sourceUrl || app.url,
-    title: app.title, company: app.company || undefined,
+    title: app.title, roleTitle: applicationRoleTitle(app), company: app.company || undefined,
     description: [app.sourceDescription || "", ...frames.map((frame) => frame.observation.description)].join("\n").slice(0, 25000),
     // No question of the page's is answered; the letter is asked for by name.
     fields: [{ id: "documents|cover", label: "Cover letter", kind: "file", required: false, value: "", options: [], revision: 0, protected: false, documentKind: "cover" }],

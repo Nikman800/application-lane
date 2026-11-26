@@ -102,6 +102,31 @@ export function salaryAnswer(
   return { value: formatSalary(salary, !asked), numeric: salary.min };
 }
 
+export function salaryBracket(salary: Salary, options: readonly string[]): string | undefined {
+  const { min, max = min, period } = salary;
+  if (min === undefined || max === undefined || max < min) return;
+  const currency = salary.currency.toUpperCase();
+  const dollar = /^(\$|USD|CAD|AUD|NZD|SGD|HKD|MXN)$/;
+  const compatibleCurrency = (option: string) =>
+    !option || !currency || option === currency ||
+    ((option === "$" || currency === "$") && dollar.test(option) && dollar.test(currency));
+  const matches = options.flatMap((option) => {
+    const bracket = parseSalary(option, period);
+    if (bracket?.min === undefined || bracket.period !== period || !compatibleCurrency(bracket.currency)) return [];
+    const bound = bracket.min;
+    if (bracket.max !== undefined)
+      return min >= bound && max <= bracket.max ? [{ option, rank: min === bracket.max ? 2 : 1 }] : [];
+    if (/\+|\b(or (more|above|higher|over|greater)|at least|and (up|above))\b/i.test(option))
+      return min >= bound ? [{ option, rank: 1 }] : [];
+    if (/\b(up to|at most|or (below|less|lower|under))\b/i.test(option))
+      return max <= bound ? [{ option, rank: max === bound ? 2 : 1 }] : [];
+    if (/\b(below|under|less than)\b/i.test(option))
+      return max < bound ? [{ option, rank: 1 }] : [];
+    return min === bound && max === bound ? [{ option, rank: 0 }] : [];
+  }).sort((a, b) => a.rank - b.rank);
+  return matches[0] && matches[0].rank !== matches[1]?.rank ? matches[0].option : undefined;
+}
+
 const currencyNames: Record<string, string[]> = {
   USD: ["United States Dollar", "US Dollar"], CAD: ["Canada Dollar", "Canadian Dollar"], EUR: ["Euro"], GBP: ["United Kingdom Pound", "British Pound"],
   AUD: ["Australia Dollar", "Australian Dollar"], INR: ["India Rupee", "Indian Rupee"], MXN: ["Mexico Peso", "Mexican Peso"],

@@ -1,4 +1,4 @@
-import { askedPart, citizenWordings, questionTopic, standingAnswer } from "./standing";
+import { askedPart, citizenWordings, profileStandingValue, questionTopic, standingAnswer } from "./standing";
 import {
   canonicalAnswer,
   choiceSynonyms,
@@ -16,7 +16,7 @@ import {
   type Proposal,
 } from "./model";
 import { legalQuestion } from "./questions";
-import { degreeAliases, degreeLevel, graduated, highestRow, latestRow, levelRank, studying, thisMonth as currentMonth } from "./education";
+import { degreeAliases, degreeLevel, expectedGraduation, graduated, highestRow, latestRow, levelRank, studying, thisMonth as currentMonth } from "./education";
 import { localDate, writtenDate } from "./dates";
 import { schoolNames } from "./schools";
 import { currencyListNames, salaryAnswer } from "./salary";
@@ -172,6 +172,7 @@ export function deterministicAnswer(
     return;
   const saved = profile.answers.filter((a) => normalize(a.question) === label);
   if (saved.length) {
+    if (profileStandingValue(field, profile)) return;
     if (!saved.every((a) => normalize(a.answer) === normalize(saved[0].answer))) return;
     if (/^(yes|no)$/.test(normalize(saved[0].answer)) && qualifiedBinaryField(field)) return;
     return saved[0].answer;
@@ -576,7 +577,12 @@ export function profileAnswer(
   if (qualified && !(qualified === "workAuthorization" ? citizenAuthorizationQuestion : futureSponsorshipQuestion)
       .test(normalize(askedPart(field.label)))) return;
   const saved = profile.answers.filter((a) => normalize(a.question) === label);
-  if (saved.length) {
+  if (saved.length && !profileStandingValue(field, profile)) {
+    if (/^(date|datepicker)$/.test(field.kind) && questionTopic(field.label) === "start" &&
+        saved.every((answer) => normalize(answer.answer) === normalize(saved[0].answer))) {
+      const date = standingAnswer(field, profile);
+      if (date) return date;
+    }
     const answer = normalize(saved[0].answer);
     if (!qualified || !/^(yes|no)$/.test(answer) ||
         !saved.every((a) => normalize(a.answer) === answer) ||
@@ -826,12 +832,7 @@ export function profileAnswer(
   // December ends the Fall term and is winter by the calendar, so it answers
   // only a list that offers one of the two.
   if (/\bgraduat\w* (season|term|semester|quarter)\b/.test(label)) {
-    const thisMonth = currentMonth();
-    const coming = profile.education
-      .map((row) => row.endDate)
-      .filter((date) => /^\d{4}-\d{2}/.test(date) && date.slice(0, 7) >= thisMonth)
-      .sort()
-      .at(-1);
+    const coming = expectedGraduation(profile.education);
     if (!coming) return;
     const [year, month] = coming.split("-").map(Number);
     const seasons = month >= 3 && month <= 6 ? ["Spring"] : month <= 2 ? ["Winter"] : month <= 8 ? ["Summer"] : month <= 11 ? ["Fall", "Autumn"] : ["Fall", "Autumn", "Winter"];
@@ -855,12 +856,7 @@ export function profileAnswer(
       later: /\bor later\b|\band (beyond|after)\b/.test(normalize(option)),
     }));
     if (read.every((entry) => entry.seasons.length && entry.year) && (read.some((entry) => entry.seasons.length > 1) || (dated.length < field.options.length && read.length >= 2))) {
-      const thisMonth = currentMonth();
-      const coming = profile.education
-        .map((row) => row.endDate)
-        .filter((date) => /^\d{4}-\d{2}/.test(date) && date.slice(0, 7) >= thisMonth)
-        .sort()
-        .at(-1);
+      const coming = expectedGraduation(profile.education);
       if (!coming) return;
       const [year, month] = coming.split("-").map(Number);
       const seasons = month >= 3 && month <= 6 ? ["spring"] : month <= 2 ? ["winter"] : month <= 8 ? ["summer"] : month <= 11 ? ["fall"] : ["fall", "winter"];
@@ -946,14 +942,9 @@ function educationAndPlaceAnswer({ field, profile, label, asked, educationRow }:
       !/\bwhat is (the |your )?highest (level of )?(education|degree|diploma)\b/.test(label)) {
     // Only a date still ahead is an anticipated graduation; a finished
     // degree's end date is not.
-    const thisMonth = currentMonth();
     const latest = educationRow
       ? /^\d{4}-\d{2}/.test(educationRow.endDate) ? educationRow.endDate : undefined
-      : profile.education
-      .map((row) => row.endDate)
-      .filter((date) => /^\d{4}-\d{2}/.test(date) && date.slice(0, 7) >= thisMonth)
-      .sort()
-      .at(-1);
+      : expectedGraduation(profile.education);
     if (!latest) return;
     const [year, monthNumber] = latest.split("-");
     const month = months[Number(monthNumber) - 1];

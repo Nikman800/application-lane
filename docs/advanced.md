@@ -114,6 +114,8 @@ Written questions can be drafted on their own: open **Application questions** on
 
 Answers are written from your profile, `profile.md` and `preferences.md` (when you tailor with LaTeX), following the question guide and anti-fabrication rules in `references/`. Default guidance ships with the backend.
 
+Form fields and AI suggestions for structured fields use the saved **Profile**. Set acceptable work arrangements and the earliest start under **Application answer bank**. Use **Differences by job type** for graduation dates or full-time availability that vary by role. Save screening questions such as willingness to take a coding test under **Reusable answers**. Changes to `preferences.md` affect written drafts.
+
 After **Fill this step**, **Unfilled structured fields** lists empty fields your profile could not resolve. **Ask AI for suggestions** proposes values from your saved details, each with its source, for you to accept before **Fill selected suggestions**. Passwords, financial identifiers, legal attestations, files and written questions are excluded.
 
 ## AI filling settings

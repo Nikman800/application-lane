@@ -10,6 +10,7 @@ import type {
 import { legalDetailLabels, normalize, type LegalDetailKey } from "../shared/model";
 import { legalQuestion, legalTopics, structuredFallbackField } from "../shared/questions";
 import { proposals } from "../shared/matching";
+import { profileStandingValue } from "../shared/standing";
 import type { Config } from "./store";
 import {
   cliNotice,
@@ -77,6 +78,7 @@ export function fieldFallbackSources(
     hispanic: "Hispanic or Latino status",
     age18OrOlder: "Age 18 or older",
     willingToRelocate: "Willing to relocate",
+    workArrangements: "Acceptable work arrangements",
   };
   for (const [key, label] of Object.entries(scalarLabels) as [
     keyof Profile,
@@ -85,6 +87,9 @@ export function fieldFallbackSources(
     add(`profile.${key}`, label, profile[key]);
   add("profile.workAuthorization", "Work authorization and sponsorship, by country", authorizationLines(profile).join(". "));
   add("profile.salary", "Expected pay", profile.salary ? formatSalary(profile.salary, true) : "");
+  add("profile.availableFrom", "Earliest start", profile.availableFrom === "immediately" ? "Immediately" : profile.availableFrom);
+  if (profile.availableFullTime !== undefined)
+    add("profile.availableFullTime", "Available to work full-time hours", profile.availableFullTime ? "Yes" : "No");
   for (const key of Object.keys(legalDetailLabels) as LegalDetailKey[])
     add(`legal.${key}`, `Legal and eligibility: ${legalDetailLabels[key]}`, profile.legal?.[key]);
   profile.education.forEach((row, index) =>
@@ -118,13 +123,10 @@ export function fieldFallbackSources(
       reference.email,
     ]),
   );
-  profile.answers.forEach((answer, index) =>
-    add(
-      `answer.${index + 1}`,
-      `Saved answer to ${answer.question}`,
-      answer.answer,
-    ),
-  );
+  profile.answers.forEach((answer, index) => {
+    if (!profileStandingValue({ label: answer.question }, profile))
+      add(`answer.${index + 1}`, `Saved answer to ${answer.question}`, answer.answer);
+  });
   profile.facts.forEach((fact) =>
     add(`fact.${fact.id}`, "Confirmed fact", fact.text),
   );
@@ -156,6 +158,9 @@ export function fieldFallbackSources(
     ],
     [/profile\.age18OrOlder/, /18|age|adult/],
     [/profile\.willingToRelocate/, /relocat/],
+    [/profile\.workArrangements/, /on ?site|hybrid|remote|in person|office|work arrangement|work from home/],
+    [/profile\.availableFrom/, /start|begin|notice period|availability|available to join/],
+    [/profile\.availableFullTime/, /full time|work hours|hours a week|monday/],
     [/profile\.(gender|pronouns)/, /gender|pronoun|\bsex\b/],
     [/profile\.(ethnicity|hispanic)/, /race|ethnic|hispanic|latin/],
     [/profile\.veteranStatus/, /veteran|military/],

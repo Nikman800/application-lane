@@ -23,8 +23,8 @@ export function unknownFit(profile: Profile, summary: string, needsPosting = fal
 }
 
 // Contact details, references and demographic answers do not help judge job fit.
-// The skill's own profile and logistics supplement the extension's saved facts.
-export function fitEvidence(profile: Profile, context?: SkillContext): { id: string; text: string }[] {
+// The tailoring profile can supplement the extension's saved experience.
+export function fitEvidence(profile: Profile, context?: Pick<SkillContext, "profile">): { id: string; text: string }[] {
   const history = (kind: string, rows: Profile["work"]) => rows.map((row) =>
     `${kind}: ${row.title} at ${row.organization}, ${row.startDate} to ${row.endDate}. ${row.fieldOfStudy || ""} ${row.details}`.trim(),
   );
@@ -36,7 +36,7 @@ export function fitEvidence(profile: Profile, context?: SkillContext): { id: str
     ...authorizationLines(profile).map((line) => `Work authorization: ${line}`),
     ...(["willingToRelocate", "city", "state", "country"] as const)
       .flatMap((key) => profile[key] ? [`${key}: ${profile[key]}`] : []),
-    ...(context ? evidenceEntries(`${context.profile}\n\n${context.preferences}`) : []),
+    ...(context ? evidenceEntries(context.profile) : []),
   ];
   return [...new Set(texts.filter(Boolean))].map((text, index) => ({ id: `e${index + 1}`, text }));
 }

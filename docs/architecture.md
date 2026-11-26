@@ -21,7 +21,7 @@ Every endpoint except the pairing handshake requires `Authorization: Bearer <pai
 | `GET /v1/live` (WebSocket) | The command line's live line: commands to the extension and the queue as it changes. The token is its first message. |
 | **Profile** | |
 | `GET /v1/profile`, `PUT /v1/profile` | Versioned confirmed profile; stale updates are rejected. |
-| `GET /v1/profile/application` | The profile as one application should state it (per-role graduation, preferences). |
+| `GET /v1/profile/application?title=…` | The saved profile with matching job-type overrides applied. |
 | `GET /v1/profile/conflicts` | Where the profile and the tailoring folder's notes disagree. |
 | `GET /v1/profile/bundle`, `PUT /v1/profile/bundle` | Export or import the profile (and tailoring files) to move it to another computer. |
 | `POST /v1/import` | Base64 PDF/DOCX to unconfirmed plain text, limited to 10 MB. |

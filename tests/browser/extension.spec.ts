@@ -4542,6 +4542,39 @@ test("work authorization is entered country by country, with U.S. EEO questions 
   expect(saved.citizenships).toEqual(["CA"]);
 });
 
+test("profile career preferences and job-type hours are saved independently of reusable answers", async () => {
+  await panel.bringToFront();
+  await showDashboard("profile");
+  await panel.getByRole("checkbox", { name: "Onsite", exact: true }).check();
+  await panel.getByRole("checkbox", { name: "Hybrid", exact: true }).check();
+  const start = panel.getByRole("combobox", { name: /^Earliest start/ });
+  await start.selectOption("immediately");
+  await start.selectOption("date");
+  await panel.getByLabel("Earliest start date", { exact: true }).fill("2099-08-05");
+  await panel.getByRole("combobox", { name: /^Available to work full-time hours/ }).selectOption("false");
+  const roles = panel.getByRole("region", { name: "Differences by job type" });
+  await roles.getByRole("button", { name: "+ Add job type" }).click();
+  await roles.getByRole("combobox", { name: /^Available to work full-time hours for this job type/ }).selectOption("true");
+  await panel.getByRole("button", { name: "+ Add answer" }).click();
+  await panel.getByLabel("Question", { exact: true }).fill("Are you willing to complete a coding assessment?");
+  await panel.getByLabel("Your answer", { exact: true }).fill("Yes");
+  await panel.getByRole("checkbox", { name: /confirm they are accurate/ }).check();
+  await panel.getByRole("button", { name: "Save confirmed profile" }).click();
+  await expect(panel.getByRole("status")).toContainText("Profile saved");
+  const saved = await ui({ type: "API", path: "/v1/profile" });
+  expect(saved).toMatchObject({
+    workArrangements: ["onsite", "hybrid"],
+    availableFrom: "2099-08-05",
+    availableFullTime: false,
+    answers: [{ question: "Are you willing to complete a coding assessment?", answer: "Yes" }],
+  });
+  const internship = await fetch(`http://127.0.0.1:${(backend.address() as { port: number }).port}/v1/profile/application?title=Technology%20Summer%20Associate`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(internship.ok).toBe(true);
+  expect((await internship.json()).availableFullTime).toBe(true);
+});
+
 test("network capture is off by default, and Settings says what it records", async () => {
   await panel.bringToFront();
   await showDashboard("settings");
@@ -17296,8 +17329,11 @@ test("Tesla's start date is picked from its calendar as today", async () => {
 // anticipated graduation date?": a read-only box
 // set only from its calendar, left with only its placeholder, today's date.
 // As captured: the month between buttons named for the months around it.
-test("Tesla's graduation date is picked from its calendar, month by month", async () => {
+test("Tesla's graduation calendar uses the saved role override and skips Markdown-only answers", async () => {
   const graduating = new Date().getFullYear() + 1;
+  appConfig.tailorDir = await scratch("lane-fill-preferences-");
+  await writeFile(join(appConfig.tailorDir, "preferences.md"),
+    `## Education timeline\n- **Graduation by role:** internships: January 12, ${graduating}.\n\n## Logistics\n- **Coding assessment:** Yes.\n`);
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, education: [{ organization: "Virginia Tech", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: `${graduating}-05-10`, location: "", details: "" }],
     // Graduating a term later for internships: this is one.
     roleOverrides: [{ name: "Internships & co-ops", titleWords: ["intern", "internship", "co-op"], education: [{ index: 0, endDate: `${graduating}-12-13` }] }] } });
@@ -17305,6 +17341,7 @@ test("Tesla's graduation date is picked from its calendar, month by month", asyn
     route.fulfill({
       contentType: "text/html",
       body: `<!doctype html><title>Internship Application</title><form class="job-application-form" onsubmit="return false"><label>Email<input name="personal.email" type="email"></label>
+        <label>Are you willing to complete a coding assessment?<select id="assessment"><option value="">Choose</option><option>Yes</option><option>No</option></select></label>
         <div class="tds-form-item" variant="date"><label class="tds-form-label" for="grad">If you are a current university student, please provide your anticipated graduation date?</label><div class="tds-form-input tds-form-input--default"><input class="tds-form-input-text tds-form-input-date" id="grad" name="legal.legalUniversityAnticipatedGraduationDate" readonly="" placeholder="November 9, 2026"><div class="tds-form-input-trailing"><button class="tds-icon-btn" type="button">Calendar</button></div><div class="tds-tooltip tds-tooltip--closed tds-date-picker-tooltip" role="tooltip"><div class="tds-date-picker tds-density--dense"><div aria-label="Use left or right arrow keys to increment the month" class="tds-date-picker-month" tabindex="0"><button tabindex="-1" type="button">‹</button><label aria-live="polite"></label><button tabindex="-1" type="button">›</button></div><div aria-label="Use arrow keys to increment the date" class="tds-date-picker-days-grid"></div></div></div></div></div>
       </form><script>
         const names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -17341,6 +17378,8 @@ test("Tesla's graduation date is picked from its calendar, month by month", asyn
   await page.goto(`${teslaOrigin}/careers/search/job/apply/287990`);
   await enqueue([page]);
   await expect(page.locator("#grad")).toHaveValue(`December 13, ${graduating}`, { timeout: 60000 });
+  await expect.poll(async () => (await state()).applications.find((app) => app.url === page.url())?.status, { timeout: 30000 }).toMatch(/ready|awaiting-user/);
+  await expect(page.locator("#assessment")).toHaveValue("");
 });
 
 // Reports from one employer's, one employer's and one employer's forms: an
