@@ -7,7 +7,7 @@ import {
   type Application,
 } from "../src/shared/model";
 import { canonicalAnswer, pickOption as pickListOption } from "../src/shared/answers";
-import { deterministicAnswer, nameVariants, postingGuess, proposals, publicPostingUrl, untickedNo } from "../src/shared/matching";
+import { deterministicAnswer, historyRowMap, nameVariants, postingGuess, proposals, publicPostingUrl, untickedNo } from "../src/shared/matching";
 import { configPassTimeout, transitionTiming } from "../src/shared/timing";
 import { degreeAliases } from "../src/shared/education";
 import { localDate } from "../src/shared/dates";
@@ -240,6 +240,46 @@ test("a place the site parsed for a remote job is emptied", () => {
   assert.equal(proposals([parsed("City", 0)], remote)[0]?.value, "Lansing");
   assert.deepEqual(proposals([parsed("City", 1, { siteValue: false })], remote), []);
   assert.deepEqual(proposals([parsed("City", 1, { section: "Education" })], remote), []);
+});
+
+// UKG Pro filled its job rows from the uploaded resume, its projects among
+// them ("Tech" at a project's name) ahead of the last job. With only the
+// site's guesses on the page, rows were paired in page order: the third saved
+// job was written over a project, and the real third job was offered for
+// removal.
+test("job rows the site parsed are paired with saved jobs by the site's employer, not page order", () => {
+  const worked = profileSchema.parse({
+    ...profile,
+    work: [
+      { organization: "Acme", title: "Associate", location: "Blacksburg, VA", startDate: "2026-03", endDate: "", details: "" },
+      { organization: "Solo Studio", title: "Founder", location: "Remote", startDate: "2025-03", endDate: "", details: "" },
+      { organization: "Contoso", title: "Software Engineer Intern", location: "Roanoke, VA", startDate: "2023-07", endDate: "2023-09", details: "" },
+    ],
+  });
+  const rows = [["Associate", "Acme"], ["Founder", "Solo Studio"], ["Tech", "Budget App"], ["Tech", "Budget App"], ["Tech", "Fan-Out Backend"], ["Facial Recognition (Senior Project)", "Capstone"], ["Software Engineer Intern", "Contoso"]];
+  const fields = rows.flatMap(([title, company], index) => [
+    field("Job Title", { id: `${index}-title`, value: title, siteValue: true, section: "Work Experience", index }),
+    field("Company / Organization", { id: `${index}-company`, value: company, siteValue: true, section: "Work Experience", index }),
+  ]);
+  const map = historyRowMap(fields, worked);
+  assert.equal(map.get("work:0"), 0);
+  assert.equal(map.get("work:1"), 1);
+  assert.equal(map.get("work:6"), 2);
+  for (const page of [2, 3, 4, 5]) assert.equal(map.has(`work:${page}`), false, `page row ${page}`);
+  // A project row is answered from no saved job; the real third job's row
+  // from the third, and its end date the site guessed is kept: it ended.
+  const answered = new Set(proposals(fields, worked).map((proposal) => proposal.fieldId));
+  for (const one of fields) if ([2, 3, 4, 5].includes(one.index || 0)) assert.equal(answered.has(one.id), false, `page row ${one.index} ${one.label}`);
+  // A job still held has no end: the month and year the site parsed for it
+  // ("Present" read as this month) are emptied.
+  const ends = [0, 6].flatMap((index) => ["To month", "To year"].map((label) => field(label, { id: `${index}-${label}`, value: label === "To month" ? "Nov" : "2026", siteValue: true, section: "Work Experience", index })));
+  const ended = Object.fromEntries(proposals([...fields, ...ends], worked).filter((proposal) => /^\d-To/.test(proposal.fieldId)).map((proposal) => [proposal.fieldId, proposal.value]));
+  assert.equal(ended["0-To month"], "");
+  assert.equal(ended["0-To year"], "");
+  assert.equal(ended["6-To year"], "2023");
+  // The applicant's own entry still outweighs the site's guess.
+  const typed = fields.map((one) => one.index === 2 && /Company/.test(one.label) ? { ...one, value: "Contoso", siteValue: false } : one);
+  assert.equal(historyRowMap(typed, worked).get("work:2"), 2);
 });
 
 // SuccessFactors (Contoso) pre-fills "Home/Area Code"

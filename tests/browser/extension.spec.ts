@@ -13609,6 +13609,34 @@ test("a forced resume dialog that fills the application is recognized as replaci
   expect(fields.find((field) => field.kind === "file")?.replacesForm).toBe(true);
 });
 
+// UKG Pro: the resume uploader posts from a <form> of its own, its notice
+// ("You can use a resume to fill out your application faster") just outside
+// it, so the upload was not known to rewrite the form and the site's resume
+// rows were kept. The page also holds a hidden copy of its address block with
+// the same ids: each box had two labels and read "City City", no rule's.
+test("a UKG Pro resume uploader in its own form replaces the form, and a hidden copy of the address block does not double its labels", async () => {
+  const address = `<div class="row"><div class="col-md-8"><div class="form-group"><label for="City" class="control-label required">City</label><input id="City" type="text" class="form-control" autocomplete="address-level2" required aria-describedby="CityError"><span id="CityError" class="help-block" style="display: none;"></span></div></div>
+    <div class="col-md-8"><div class="form-group"><label for="State" class="control-label required">State / Province</label><select class="form-control" id="State" required><option value="">Choose...</option><option value="VA">Virginia</option></select></div></div></div>`;
+  const contact = `<div data-automation="contact-information-panel"><div class="panel panel-transparent" role="region" aria-label="Contact Information"><form novalidate>${address}</form></div></div>`;
+  await context.route(`${ukgOrigin}/acme/JobBoard/job/OpportunityApply**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Data Analyst Intern | Apply</title><main><h1>Apply for Data Analyst Intern</h1>
+      <div class="well" data-automation="resumeparsinguploader-container">You can use a resume to fill out your application faster and it will be added automatically as an attachment.
+        <upload-button><form enctype="multipart/form-data" method="POST" novalidate action="/acme/JobBoard/job/Documents/UploadResume"><div>
+          <input type="file" name="file" class="hidden" data-automation="upload-file-input" accept="application/pdf" id="FileUpload_abc">
+          <label class="btn btn-default btn-upload" role="button" tabindex="0" for="FileUpload_abc">Upload Resume</label></div></form></upload-button>
+        <span class="help-block">DOC, DOCX, or PDF (Max file size 6MB).</span></div>
+      <div id="OpportunityApply">${contact}<div class="row" style="display: none;">${contact}</div></div></main>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${ukgOrigin}/acme/JobBoard/job/OpportunityApply?opportunityId=1`);
+  const fields: { kind: string; label: string; replacesForm?: boolean }[] = (await content(page, { type: "INSPECT" })).data.fields;
+  expect(fields.find((field) => field.kind === "file")?.replacesForm).toBe(true);
+  expect(fields.filter((field) => field.kind !== "file").map((field) => field.label)).toEqual(["City", "State / Province"]);
+});
+
 test("Paylocity's address line is typed, its matching suggestion picked, and a row with no street left empty", async () => {
   test.setTimeout(180000);
   // Paylocity's address: Address Line 1 is a text box suggesting
@@ -25495,6 +25523,40 @@ test("UKG Pro education rows get their From month and From year from the profile
   await expect(scope("Education 1").locator('input[aria-label="From year"]')).toHaveValue("2025", { timeout: 45_000 });
   await expect(scope("Education 2").locator('select[aria-label="From month"] option:checked')).toHaveText("Sep", { timeout: 45_000 });
   await expect(scope("Education 2").locator('input[aria-label="From year"]')).toHaveValue("2021", { timeout: 45_000 });
+});
+
+// UKG Pro filled a job row from the resume, reading "Present" as this month:
+// To month "Nov" and To year "2026" under a job the profile says is still
+// held. Nothing emptied them ("Leave this blank if you currently work here").
+test("UKG Pro's To month and year the site parsed for a job still held are emptied", async () => {
+  test.setTimeout(120000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, work: [{ organization: "Acme", title: "Associate", location: "Blacksburg, VA", details: "Built services.", startDate: "2026-03", endDate: "" }] } });
+  const months = '<option value="">Choose...</option>' + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => `<option value="${i + 1}">${m}</option>`).join("");
+  const part = (kind: string, month: number, year: string) => `<div class="col-md-12"><div class="form-group" role="group" aria-labelledby="NewEmployment_${kind}Label0"><label class="control-label" id="NewEmployment_${kind}Label0">${kind}</label>
+      <div class="form-inline"><div class="form-group"><label>Month</label><br><select class="form-control" aria-label="${kind} month">${months.replace(`value="${month}"`, `value="${month}" selected`)}</select></div>
+      <div class="form-group"><label>Year (YYYY)</label><br><input class="form-control" placeholder="YYYY" maxlength="4" type="text" size="4" aria-label="${kind} year" value="${year}"></div></div>${kind === "To" ? '<span class="help-block">Leave this blank if you currently work here.</span>' : ""}</div></div>`;
+  await context.route(`${ukgOrigin}/acme/JobBoard/job/OpportunityApply**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Data Analyst Intern | Apply</title><main><h1>Data Analyst Intern</h1>
+      <div class="form-group"><label for="FirstName" class="control-label">First Name</label><input class="form-control" id="FirstName" type="text" autocomplete="given-name"></div>
+      <div class="panel panel-transparent" role="region" aria-label="Work Experience"><div class="panel-heading"><div class="panel-title"><h2 class="collapsible-panel-title">Work Experience</h2></div></div><div class="panel-collapse collapse in"><div class="panel-body">
+      <div role="form" class="row" data-automation="panel-list-item" aria-label="Work Experience 1"><div class="col-sm-24"><div class="row"><div class="col-xs-18 col-sm-20 col-md-22" data-automation="work-experience-item">
+        <div class="row"><div class="col-md-12"><div class="form-group"><label class="control-label required" id="lblJobTitle0">Job Title</label><input type="text" class="form-control" aria-labelledby="lblJobTitle0" value="Associate"></div></div></div>
+        <div class="row"><div class="col-md-12"><div class="form-group"><label class="control-label required" id="lblOrganization0">Company / Organization</label><input type="text" class="form-control" aria-labelledby="lblOrganization0" value="Acme"></div></div></div>
+        <div class="row">${part("From", 3, "2026")}${part("To", 11, "2026")}</div>
+      </div></div></div></div></div></div></div></main>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${ukgOrigin}/acme/JobBoard/job/OpportunityApply?opportunityId=1`);
+  await enqueue([page]);
+  await expect(page.locator("#FirstName")).toHaveValue(profile.firstName, { timeout: 45_000 });
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 45_000 }).toMatch(/^(awaiting-user|ready)$/);
+  await expect(page.locator('select[aria-label="To month"]')).toHaveValue("");
+  await expect(page.locator('input[aria-label="To year"]')).toHaveValue("");
+  await expect(page.locator('select[aria-label="From month"] option:checked')).toHaveText("Mar");
+  await expect(page.locator('input[aria-label="From year"]')).toHaveValue("2026");
 });
 
 test("UKG Pro questions scrolled up inside the page's scroller stay in the scanned fields", async () => {

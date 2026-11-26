@@ -188,11 +188,15 @@ export async function apply(command: Command) {
         if (selected.getAttribute("aria-pressed") !== "true") fillClick(selected);
         await pause(0);
       } else if (element instanceof HTMLSelectElement) {
-        const option = pickOption(
-          proposal,
-          [...element.options].filter((o) => !o.disabled),
-          (o) => o.label,
-        );
+        // An empty answer empties the list: its blank entry ("Choose...")
+        // is chosen (a job's end the site parsed for one still held, UKG).
+        const option = proposal.value === ""
+          ? [...element.options].find((o) => !o.disabled && o.value === "")
+          : pickOption(
+            proposal,
+            [...element.options].filter((o) => !o.disabled),
+            (o) => o.label,
+          );
         if (!option) throw new Error("No exact select option.");
         selectedLabel = option.label;
         Object.getOwnPropertyDescriptor(

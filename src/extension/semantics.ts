@@ -534,7 +534,10 @@ function associatedLabel(element: Control): string {
     "labels" in element && element.labels
       ? [...(element.labels as NodeListOf<HTMLLabelElement>)]
           .map(labelText)
-          .filter(Boolean)
+          // A page holding a hidden copy of its address block (UKG) has two
+          // label[for="City"], both resolved to the first #City: the label
+          // read "City City", which no rule knew.
+          .filter((text, index, all) => text && all.indexOf(text) === index)
           .join(" ")
       : "";
   // A web component's own label attribute names it (SmartRecruiters'
@@ -687,7 +690,11 @@ function uploaderScope(element: HTMLInputElement) {
   let scope: Element = element;
   for (
     let parent = element.parentElement, depth = 0;
-    parent && depth < 9 && !parent.matches("body,html,form");
+    // A form holding nothing but this uploader is the uploader's own (UKG
+    // posts the resume from a <form> of its own, its "fill out your
+    // application faster" notice just outside it), not the application's.
+    parent && depth < 9 && !parent.matches("body,html") &&
+      !(parent.matches("form") && parent.querySelector('input:not([type="file"]):not([type="hidden"]),select,textarea'));
     parent = parent.parentElement, depth++
   ) {
     if (parent.querySelectorAll('input[type="file"]').length !== 1) break;

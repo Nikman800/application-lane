@@ -1933,6 +1933,17 @@ export function historyRowMap(fields: Field[], profile: Profile) {
       collection === "education" ? /major|discipline|field of study/ : /title|position/;
     const sharedNames = sharedBy(nameKey);
     const sharedDetails = sharedBy(detailKey);
+    // The site's own guess of an employer (from a parsed resume) that names
+    // exactly one saved row, on one page row only: weaker than the
+    // applicant's entries, but the only evidence on a form the site filled
+    // itself. UKG listed resume projects as jobs before the third job, and
+    // the rows were paired in page order: a project took the third job.
+    // Only where the site added rows: with as many as saved, page order
+    // holds and its guesses are written over.
+    const siteNames = new Map<string, number>();
+    if (pageRows.size > rows.length) for (const pageFields of pageRows.values())
+      for (const value of new Set(pageFields.filter((field) => field.siteValue && field.value && nameKey.test(normalize(field.label))).map((field) => normalize(field.value))))
+        siteNames.set(value, (siteNames.get(value) || 0) + 1);
     for (const [page, pageFields] of pageRows) {
       // A site's guesses from a parsed resume are no evidence of which
       // profile row a page row holds; only the applicant's entries are.
@@ -1940,9 +1951,16 @@ export function historyRowMap(fields: Field[], profile: Profile) {
         saidBy(pageFields, pattern).filter((value) => !shared.has(value));
       const names = said(nameKey, sharedNames);
       const details = said(detailKey, sharedDetails);
+      const guessed = pageFields
+        .filter((field) => field.siteValue && field.value && nameKey.test(normalize(field.label)))
+        .map((field) => normalize(field.value))
+        .filter((value) => siteNames.get(value) === 1);
       rows.forEach((row, index) => {
+        const organization = normalize(row.organization);
         const score =
-          (names.some((value) => matches(value, normalize(row.organization))) ? 2 : 0) +
+          (names.some((value) => matches(value, organization)) ? 2 : 0) +
+          (!names.length && organization && guessed.includes(organization) &&
+            rows.filter((other) => normalize(other.organization) === organization).length === 1 ? 1.5 : 0) +
           (details.some((value) =>
             matches(value, normalize(row.fieldOfStudy || row.title)),
           )
@@ -2095,6 +2113,10 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
         /^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$)/i.test(original.value.trim()) && !/^[a-z][a-z0-9+.-]*:/i.test(original.value.trim()))
       return [{ fieldId: original.id, value: `https://${original.value.trim()}`, expectedValue: original.value, revision: original.revision, source: "confirmed-profile" as const }];
     const mapped = rowMap.get(`${collection}:${original.index || 0}`);
+    // A page row paired with no saved row (a resume project the site listed
+    // as a job) is answered from none: by its page number it took the saved
+    // row of that number, another job's.
+    if (mapped === undefined && collection && [...rowMap.keys()].some((key) => key.startsWith(`${collection}:`))) return [];
     // Answers come from the profile row paired with this page row.
     const field = mapped === undefined ? original : { ...original, index: mapped };
     // "If other, enter School Name" counts only beside a list set to Other,
@@ -2188,7 +2210,12 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
         /^\s*remote\s*$/i.test(profile.work[field.index || 0]?.location || "") &&
         /^(city|(street )?address( line)?( 1| one)?|state|province|county|(zip|postal)( code)?( zip)?)$/.test(normalize(field.label)) &&
         field.kind !== "select" && field.kind !== "combobox";
-      if (!field.siteValue || !(keptSecondLine || remotePlace)) return [];
+      // A job still held has no end: a month and year the site's parser gave
+      // it ("Present" read as this month, UKG) are emptied.
+      const job = /experience|employment|work|job/.test(section) && !/education/.test(section) ? profile.work[field.index || 0] : undefined;
+      const heldEnd = Boolean(job?.organization) && !job?.endDate &&
+        /^(to|end)( date)?( (month|year))?$|^(month|year) (to|ended)$/.test(normalize(field.label));
+      if (!field.siteValue || !(keptSecondLine || remotePlace || heldEnd)) return [];
       answer = { value: "" };
     }
     if (
@@ -2254,7 +2281,8 @@ function ownProposals(fields: Field[], profile: Profile): Proposal[] {
         also = values.slice(1);
       }
     }
-    if (field.options.length) {
+    // An emptied list (answer "") takes its blank entry, which is no option.
+    if (field.options.length && answer.value !== "") {
       let option: string | undefined;
       let refused = false;
       try {
