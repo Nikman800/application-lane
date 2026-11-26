@@ -1475,9 +1475,23 @@ export async function fillPlacePicker(command: Command, proposal: Proposal, reco
     pressOutside();
     throw new Error("No suggestion matched the city. Pick it from the site's suggestions.");
   }
-  for (const type of ["mousedown", "mouseup", "click"])
-    choice.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window, button: 0 }));
+  // Google's list ignores a script's mousedown, and a box left without a
+  // place picked goes back to the typed city when it loses focus: the place
+  // is lit with real Down keys from the box and taken with Enter.
+  const position = items().indexOf(choice) + 1;
+  const focused = () => (element.getRootNode() as Document | ShadowRoot).activeElement === element;
+  if (!focused()) element.focus({ preventScroll: true });
+  // The keys are the fill's own, not the applicant's.
+  cs.trustedWrite = element;
+  const keyed = focused() && await requestTrustedType(element, { applicationId: cs.applicationId, operation: cs.operation, documentId }, "", 0, new AbortController().signal, safe, false, position)
+    .then((result) => result.ok, () => false)
+    .finally(() => { cs.trustedWrite = undefined; });
+  if (!keyed)
+    for (const type of ["mousedown", "mouseup", "click"])
+      choice.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window, button: 0 }));
   await pause(300);
+  if (!safe()) throw new Error("Custom selection was superseded.");
+  if (items().length) throw new Error("No place was picked. Pick it from the site's suggestions.");
   if ((element.getRootNode() as ShadowRoot).activeElement === element) element.blur();
   await pause(0);
   if (!safe()) throw new Error("Custom selection was superseded.");

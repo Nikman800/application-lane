@@ -24615,6 +24615,8 @@ test("Rippling's Location box has its suggestion picked, or its list closed when
 // input, and the places are drawn in a .pac-container outside the form. The
 // box read as an unlabelled field and was left; the hidden latitude is set
 // only when a place is picked.
+// Google's list ignores a script's mousedown: a place is picked with real
+// keys (Down to it, then Enter), as the applicant would.
 test("A Google place picker's city search is labelled by its question and has the matching place picked", async () => {
   await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, city: "Blacksburg", state: "Virginia" } });
   await context.route(`${origin}/place-picker`, (route) =>
@@ -24647,16 +24649,30 @@ test("A Google place picker's city search is labelled by its question and has th
                     const item = document.createElement("div");
                     item.className = "pac-item";
                     item.innerHTML = '<span class="pac-icon"></span><span class="pac-item-query"><span class="pac-matched">' + typed + '</span></span><span>' + state + ', USA</span>';
-                    item.addEventListener("mousedown", () => {
+                    item.pick = () => {
                       input.value = typed + ", " + state + ", USA";
                       document.querySelector('input[name="latitude"]').value = lat;
                       document.querySelector('input[name="longitude"]').value = "-80.4";
                       close();
-                    });
+                    };
+                    // As Google's list: a script's mousedown picks nothing.
+                    item.addEventListener("mousedown", (event) => { if (event.isTrusted) item.pick(); });
                     box.append(item);
                   }
                   document.body.append(box);
                 }, 400);
+              });
+              // Down lights the next place and Enter picks the lit one; a box
+              // left with no place picked goes back to the typed text.
+              input.addEventListener("keydown", (event) => {
+                const items = [...document.querySelectorAll(".pac-item")];
+                const lit = items.findIndex((item) => item.classList.contains("pac-item-selected"));
+                if (event.key === "ArrowDown" && items.length) {
+                  items.forEach((item) => item.classList.remove("pac-item-selected"));
+                  items[(lit + 1) % items.length].classList.add("pac-item-selected");
+                  event.preventDefault();
+                }
+                if (event.key === "Enter" && lit >= 0) { items[lit].pick(); event.preventDefault(); }
               });
             }
           }
