@@ -2206,6 +2206,8 @@ test("a current student answers Yes to being enrolled, and nobody else is answer
   // A list read only when opened still gets its answer.
   assert.equal(pick(student, label, { kind: "combobox", options: [] }), "Yes");
   assert.equal(pick(student, "Are you currently enrolled in a degree program?"), "Yes");
+  // A Greenhouse list, read only when opened.
+  assert.equal(pick(student, "Are you a current student enrolled in a college/university program or have graduated within the past 12 months", { kind: "combobox", options: [] }), "Yes");
   assert.equal(pick(graduate), undefined);
   assert.equal(pick(justStarted), undefined);
   // Which school is another question, answered with the school, not Yes.
@@ -2414,6 +2416,26 @@ test("a related-to-an-employee question is No unless a reference or a job is at 
   const ask = (who: typeof profile) => proposals([field(label, { kind: "combobox", options })], who)[0]?.value;
   assert.equal(ask(profileSchema.parse({ ...profile, applyingTo: { company: "Acme", title: "Intern" } })), "No");
   assert.equal(ask(profileSchema.parse({ ...profile, references: [{ name: "Sam Lee", relationship: "Manager at Acme", email: "sam@acme.example" }] })), undefined);
+  // "Do you have any relatives employed at Acme?" (Oracle) was left to the AI step.
+  const employed = (who: typeof profile) => proposals([field("Do you have any relatives employed at Acme?", { kind: "radio", options: ["Yes", "No"] })], who)[0]?.value;
+  assert.equal(employed(profile), "No");
+  assert.equal(employed(profileSchema.parse({ ...profile, work: [{ organization: "Acme", title: "Analyst", startDate: "2020-01", endDate: "2021-01", location: "", details: "" }] })), undefined);
+});
+
+// A field-of-study list of broad areas was left to the AI step.
+test("a field-of-study list of broad areas takes the computer science area for a computing degree", () => {
+  const options = ["Business & Management", "Engineering (Non-Computer Science)", "Engineering – Computer Science & Technology", "Physical Sciences", "Other"];
+  assert.equal(proposals([field("Please select your field of study", { kind: "select", options })], profile)[0]?.value, "Engineering – Computer Science & Technology");
+  const historian = profileSchema.parse({ ...profile, education: profile.education.map((row) => ({ ...row, fieldOfStudy: "History" })) });
+  assert.equal(proposals([field("Please select your field of study", { kind: "select", options })], historian)[0]?.value, undefined);
+});
+
+// Oracle: "Please select your education" as High School/GED, Less Than High
+// School/GED or Beyond High School was left to the AI step.
+test("an education list of high school or beyond is Beyond High School for a college degree", () => {
+  const options = ["High School/GED", "Less Than High School/GED", "Beyond High School"];
+  assert.equal(proposals([field("Please select your education", { kind: "radio", options })], profile)[0]?.value, "Beyond High School");
+  assert.equal(proposals([field("Please select your education", { kind: "radio", options })], profileSchema.parse({ ...profile, education: [] }))[0]?.value, undefined);
 });
 
 // Microsoft: "Are you currently enrolled in a Doctorate Degree

@@ -1174,6 +1174,22 @@ function educationAndPlaceAnswer({ field, profile, label, asked, educationRow }:
   // verify your most recent graduation date and the highest degree or
   // diploma received. What is the highest level of education you've
   // received?".
+  // "Please select your education" as High School/GED, Less Than High
+  // School/GED or Beyond High School: anyone with a college degree, finished
+  // or under way, is beyond it (it was left to the AI step).
+  // A field-of-study list of broad areas ("Engineering – Computer Science &
+  // Technology", "Engineering (Non-Computer Science)", "Business &
+  // Management"): a computing degree is the computer science area. It was
+  // left to the AI step.
+  if (/\bfield of study\b|\bmajor\b/.test(label) && /^(select|combobox|radio)$/.test(field.kind)) {
+    const area = field.options.find((option) => /\bcomputer science\b/i.test(option) && !/\bnon[- ]?computer\b/i.test(option));
+    if (area && field.options.length > 3 && !field.options.some((option) => normalize(option) === "computer science") &&
+        profile.education.some((row) => /\b(computer science|software engineering|computing)\b/i.test(row.fieldOfStudy || "")))
+      return { value: area };
+  }
+  const beyondHighSchool = field.options.find((option) => /^beyond high school\b/i.test(option.trim()));
+  if (beyondHighSchool && /\beducation\b/.test(label) && profile.education.some((row) => levelRank[degreeLevel(row.title)] >= levelRank.associate))
+    return { value: beyondHighSchool };
   const lastAsk = normalize(field.label.match(/([^.?!]*\?)\s*$/)?.[1] || "");
   const highestPattern = /^(?:what(?: i|'| )?s )?(?:the |your )?highest (?:level of )?(?:degree|education)(?: level)?(?: (?:that )?you (?:have|ve))?((?: (?:earned|obtained|completed|attained|received|pursuing|in progress))*)$/;
   // "Degree you are currently pursuing or have completed" (Oracle): the same

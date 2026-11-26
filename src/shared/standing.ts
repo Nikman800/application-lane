@@ -114,10 +114,12 @@ const topics: [Topic, RegExp][] = [
   // bachelor's, master's, or other degree-seeking program … If you qualify,
   // please select yes.", an employer.) Which
   // school one attends is another question, asked by name.
-  ["enrolled", /^(?!(what|which|where|name|please (include|list|enter|provide))\b).*\b(are you|must be|be|currently|actively)\b( currently| actively)? enrolled\b.*\b(degree|program|college|university|school|student)\b/],
+  // Also "Are you a current student enrolled in a college/university program
+  // or have graduated within the past 12 months" (it was left to the AI step).
+  ["enrolled", /^(?!(what|which|where|name|please (include|list|enter|provide))\b).*\b(are you|must be|be|currently|actively)\b( currently| actively| an? current student)? enrolled\b.*\b(degree|program|college|university|school|student)\b/],
   // ("Are you related or have close personal friendships with any current
   // an employer employees with whom you will be directly working…".)
-  ["relatedToEmployee", /\b(are you|do you have)\b.*\b(related|relatives?|family members?|close (personal )?friendships?|personal relationships?)\b.*\bemployees?\b/],
+  ["relatedToEmployee", /\b(are you|do you have)\b.*\b(related|relatives?|family members?|close (personal )?friendships?|personal relationships?)\b.*\b(employees?|employed (at|by|with))\b/],
   ["referred", /\b(were|was) you referred\b|\breferred (to this (position|job|role) )?by (someone|anyone|an? (current )?(employee|associate|team member))\b/],
 ];
 
@@ -449,6 +451,7 @@ export function standingAnswer(field: Field, profile: Profile): Answer | undefin
   // None of them there and no job of their own there, No; else theirs to say.
   if (topic === "relatedToEmployee" && !profile.answers.some((answer) => questionTopic(answer.question) === "relatedToEmployee")) {
     const company = label.match(/\b(?:current|any|of|at) (?:current )?([a-z0-9&]+) (?:employees?|team members?|staff)\b/)?.[1] ||
+      label.match(/\bemployed (?:at|by|with) ([a-z0-9&]+)\b/)?.[1] ||
       normalize(profile.applyingTo?.company || "").split(" ")[0];
     if (!company || /^(us|our|this|the|your|a|an|any|current)$/.test(company)) return;
     const theirs = (text: string) => normalize(text).includes(company);
