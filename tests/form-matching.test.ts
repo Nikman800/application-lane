@@ -3389,3 +3389,35 @@ test("a question whether the employer must file an H-1B or enter the applicant i
   assert.equal(ask("No"), "No");
   assert.equal(ask("Yes"), "Yes");
 });
+
+// ns2cloud HCM (SuccessFactors) asks each education row's degree as "Level
+// (High School,College, University, Other)" over a list of degrees read only
+// when opened (Bachelor's Degree, Master's Degree, University Degree, ...):
+// it was left to the AI step, which chose "University Degree" for both rows.
+test("an education row's Level over a list of degrees takes the row's degree", () => {
+  const rows = profileSchema.parse({
+    ...profile,
+    education: [
+      { organization: "Penn State", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-12" },
+      { organization: "Virginia Tech", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06" },
+    ],
+  });
+  const degrees = ["No Selection", "Advanced Technical Degree", "Bachelor's Degree", "Basic Education (Primary)", "Doctor's Degree", "Master's Degree", "University Degree"];
+  for (const [index, expected] of [[0, "Master's Degree"], [1, "Bachelor's Degree"]] as const) {
+    const level = field("Level  (High School,College, University, Other)", { kind: "combobox", section: "Education", index, required: false });
+    const closed = proposals([level], rows)[0];
+    assert.equal(closed?.value, rows.education[index].title, "ns2cloud HCM: the closed list is asked for the row's degree");
+    assert.equal(pickListOption(closed!, degrees, (option) => option), expected, "the row's degree picks its entry in the list");
+    assert.equal(proposals([{ ...level, options: degrees }], rows)[0]?.value, expected, "the open list's entry is the answer");
+  }
+});
+
+test("an ns2cloud HCM application page is tracked at the posting's public career page, which carries the same _s.crb", () => {
+  const crb = "_s.crb=AbCdEf0123%252f7XEgNzT825QybQNTnqlERyagBGA%253d";
+  const posting = `https://career-hcm20.ns2cloud.com/career?${crb}`;
+  assert.equal(publicPostingUrl(`https://career-hcm20.ns2cloud.com/portalcareer?${crb}`), posting, "ns2cloud HCM: the application page maps to the public posting");
+  assert.equal(publicPostingUrl(posting), posting);
+  const other = "https://career-hcm20.ns2cloud.com/portalcareer?navBarLevel=MY_PROFILE";
+  assert.equal(publicPostingUrl(other), other);
+  assert.equal(publicPostingUrl(`https://example.test/portalcareer?${crb}`), `https://example.test/portalcareer?${crb}`);
+});

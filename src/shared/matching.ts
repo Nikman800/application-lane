@@ -216,7 +216,10 @@ export function deterministicAnswer(
     )
       return row.organization;
     // iCIMS: "Type of Degree (High School/GED/Bachelor/etc.)".
-    if (/^(job )?title$|^position$|^degree( dropdown)?$/.test(label) || (/education/.test(section) && /^type of degree\b/.test(label))) {
+    // SuccessFactors: "Level (High School,College, University, Other)" over a
+    // list of degrees (Bachelor's Degree, Master's Degree, ...), read only when
+    // opened: a degree, though its label names kinds of school.
+    if (/^(job )?title$|^position$|^degree( dropdown)?$/.test(label) || (/education/.test(section) && (/^type of degree\b/.test(label) || /^level (high school|college|university)\b/.test(label)))) {
       // A list naming each degree with its abbreviation ("Master of Science
       // (M.S.)", beside "Masters of Criminal Justice (M.C.J.)"): the one whose
       // name is the saved degree's. "Masters of Science" matched none and was
@@ -2404,6 +2407,11 @@ export function publicPostingUrl(raw: string): string {
     const jobId = url.searchParams.get("jobId");
     if (/^workforcenow\.adp\.com$/i.test(url.hostname) && /^\/job\/?$/i.test(url.pathname) && cid && jobId)
       return canonicalURL(`https://workforcenow.adp.com/mascsr/default/mdf/recruitment/recruitment.html?cid=${encodeURIComponent(cid)}&jobId=${encodeURIComponent(jobId)}&lang=en_US`);
+    // ns2cloud HCM (SuccessFactors): the application page (/portalcareer) and
+    // the public posting (/career) are told apart by path alone; both carry
+    // the posting's own _s.crb. Its encoded value is kept as it was written.
+    if (/(^|\.)ns2cloud\.com$/i.test(url.hostname) && /^\/portalcareer\/?$/i.test(url.pathname) && url.searchParams.get("_s.crb"))
+      return `${url.origin}/career?_s.crb=${/[?&]_s\.crb=([^&]*)/.exec(url.search)![1]}`;
     // UKG Pro's application page and its sign-in (AuthCode/Register, with the
     // application page in the state's returnUrl) both stand for the job's
     // public OpportunityDetail page.
