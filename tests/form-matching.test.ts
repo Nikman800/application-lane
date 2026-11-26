@@ -3407,6 +3407,16 @@ test("open-on-click self-ID lists: Man/Male, a lone Ethnicity as Hispanic or not
   assert.ok(ask("Race")!.choices?.includes("Asian"));
 });
 
+// UKG Pro's self-ID asks "Ethnic Origin" as a list of only "Hispanic/Latino"
+// and "Not Hispanic/Latino", next to "I decline to say Ethnic Origin". No
+// topic was read from its name, and it was left unanswered.
+test("a list named Ethnic Origin holding only Hispanic/Latino or not is answered from the saved Hispanic answer", () => {
+  const who = profileSchema.parse({ ...profile, ethnicity: "South Asian", hispanic: "No" });
+  const ask = (p = who) => proposals([field("Ethnic Origin", { kind: "select", required: true, options: ["Hispanic/Latino", "Not Hispanic/Latino"] })], p)[0];
+  assert.equal(ask()?.value, "Not Hispanic/Latino");
+  assert.equal(ask(profileSchema.parse({ ...who, ethnicity: "Hispanic/Latinx", hispanic: "Yes" }))?.value, "Hispanic/Latino");
+});
+
 test("a race asked as one checkbox per group under its question ticks the profile's group, a plain Asian for any Asian", () => {
   // Oracle Recruiting: "Select the races you identify with." over one box
   // per group, each labelled only with the group's name.

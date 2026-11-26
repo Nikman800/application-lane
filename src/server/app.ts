@@ -28,7 +28,7 @@ import { profileConflicts, profileStamp } from "./profile-sync";
 import { configView, saveTranscript, updateConfig } from "./settings";
 import { packageRoot, packageVersion } from "./paths";
 import { Pairing, pairingBanner, type PairingAnnouncement } from "./pairing";
-import { fromFixingFlag, lapse, repairsSchema, repairSchema, type Repair } from "../shared/repairs";
+import { fromFixingFlag, lapse, queueReport, release, reportReviewId, repairsSchema, repairSchema, type Repair } from "../shared/repairs";
 
 const recordingSchema = z
 .object({
@@ -609,10 +609,21 @@ export async function createApp(
         // The report JSON is the fixer's commit marker: publish it last.
         if (recording) await atomicJSON(join(directory, "recordings", `${recording.id}.json`), recording);
         if (har) await atomicJSON(join(directory, "issues", `${report.id}.har.json`), har);
-        await atomicJSON(
-          join(directory, "issues", `${report.id}.json`),
-          report,
-        );
+        const issuePath = join(directory, "issues", `${report.id}.json`);
+        const appId = report.applicationId;
+        const stage = report.application?.workflowStage;
+        if (devTools && appId && stage !== "submitted" && stage !== "abandoned" && report.application?.status !== "cancelled") {
+          await withRepairs(async () => {
+            const now = Date.now();
+            const repairs = await readRepairs(directory, now);
+            const queued = queueReport(repairs[appId], appId, report.id, now);
+            await atomicJSON(issuePath, report);
+            if (queued !== repairs[appId]) {
+              repairs[appId] = { ...queued, updatedAt: Math.max(queued.updatedAt, (repairs[appId]?.updatedAt || 0) + 1) };
+              await atomicJSON(join(directory, "repairs.json"), repairs);
+            }
+          });
+        } else await atomicJSON(issuePath, report);
         return send(res, 201, report);
       }
       if (path === "/v1/captures" && req.method === "POST") {
@@ -791,9 +802,8 @@ export async function createApp(
       // What the fixer is repairing, application by application
       // (src/shared/repairs.ts): the full-screen view shows "needs fixing"
       // and "being fixed" from these, so the applicant leaves them alone
-      // meanwhile. The transitions are the lane command's; this keeps the
-      // records, and gives a repair whose owner went quiet back to the
-      // queue with its defects still open.
+      // meanwhile. Reports queue here and the fixer advances them with lane.
+      // A repair whose owner went quiet goes back to the queue.
       if (path === "/v1/repairs" && req.method === "GET")
         return send(res, 200, await withRepairs(() => readRepairs(directory)));
       const repairMatch = path.match(/^\/v1\/repairs\/([^/]+)$/);
@@ -976,6 +986,18 @@ export async function createApp(
       if (issueMatch) {
         const issuePath = join(directory, "issues", `${issueMatch[1]}.json`);
         if (req.method === "DELETE") {
+          if (devTools) await withRepairs(async () => {
+            const id = issueMatch[1];
+            const now = Date.now();
+            const repairs = await readRepairs(directory, now);
+            const review = reportReviewId(id);
+            const repair = Object.values(repairs).find((item) => item.defects.some((defect) => defect.id === review));
+            if (!repair) return;
+            const defects = repair.defects.filter((defect) => defect.id !== review);
+            const updated = { ...repair, defects, evidence: repair.evidence.filter((item) => item.kind !== "report" || item.id !== id), updatedAt: Math.max(now, repair.updatedAt + 1) };
+            repairs[repair.applicationId] = defects.some((defect) => defect.status === "open") ? updated : release(updated, updated.updatedAt, "The report was deleted.");
+            await atomicJSON(join(directory, "repairs.json"), repairs);
+          });
           await unlink(issuePath).catch((error) => {
             if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
           });

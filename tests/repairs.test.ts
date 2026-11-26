@@ -4,6 +4,8 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { once } from "node:events";
+import { randomUUID } from "node:crypto";
 import { findDefects, summarizeEvidence, type Evidence } from "../scripts/repair-evidence";
 import {
   NO_PROGRESS_LIMIT,
@@ -27,13 +29,49 @@ import {
   type Defect,
   type Found,
 } from "../src/shared/repairs";
-import { readRepairs } from "../src/server/app";
+import { createApp, readRepairs } from "../src/server/app";
+import { configSchema } from "../src/server/store";
 
 const APP = "f00dcafe-0000-4000-8000-000000000001";
 const defect = (kind: Defect["kind"], field: string, detail = "x"): Defect => ({ id: defectId(kind, field, detail), kind, field, detail, status: "open" });
 const found = (...defects: Defect[]): Found => ({ defects, userActions: [] });
 const city = defect("lost-value", "City");
 const degree = defect("widget", "Degree");
+
+test("report intake queues a tracked application before the fixer claims it", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "lane-report-repair-"));
+  const cfg = configSchema.parse({ token: "repair-fixture-token-".repeat(3), model: "fixture", endpoint: "http://127.0.0.1:9/v1" });
+  const previous = process.env.LANE_DEV_TOOLS;
+  process.env.LANE_DEV_TOOLS = "1";
+  const { server } = await createApp(cfg, directory).finally(() => {
+    if (previous === undefined) delete process.env.LANE_DEV_TOOLS;
+    else process.env.LANE_DEV_TOOLS = previous;
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const headers = { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" };
+  const report = { id: randomUUID(), applicationId: APP, createdAt: Date.now(), category: "wrong-value", note: "The city was incorrect.",
+    tab: { tabId: 3, url: "https://careers.example/apply", title: "Apply" }, extension: { version: "test", contentVersion: "test" }, frames: [] };
+  const post = (data: object) => fetch(`${url}/v1/issues`, { method: "POST", headers, body: JSON.stringify(data) });
+  try {
+    assert.equal((await post(report)).status, 201);
+    const queued = (await readRepairs(directory))[APP];
+    assert.equal(queued.state, "needs-fixing");
+    assert.equal(queued.owner, undefined);
+    assert.ok(queued.live?.queuedAt);
+    assert.deepEqual(queued.evidence.map(({ id }) => id), [report.id]);
+    assert.equal((await post(report)).status, 201);
+    assert.deepEqual((await readRepairs(directory))[APP], queued);
+    const submitted = { ...report, id: randomUUID(), applicationId: randomUUID(), application: { workflowStage: "submitted" } };
+    assert.equal((await post(submitted)).status, 201);
+    assert.equal((await readRepairs(directory))[submitted.applicationId], undefined);
+    assert.equal((await fetch(`${url}/v1/issues/${report.id}`, { method: "DELETE", headers })).status, 200);
+    assert.equal((await readRepairs(directory))[APP].state, "released");
+  } finally {
+    server.close();
+  }
+});
 
 test("repair evidence ties changes and loading controls to the capture without dumping request data", () => {
   const capture: Evidence = { id: "check", applicationId: APP, frames: [{ observation: { pendingFields: ["Clearance"],

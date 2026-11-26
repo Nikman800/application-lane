@@ -1554,6 +1554,11 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
     // Oracle Recruiting): each box's label is only a group's name, so the
     // question says the topic.
     (field.kind === "checkbox" && /\braces?\b|\bethnicit/.test(normalize(field.question || "")) ? "ethnicity" : undefined) ||
+    // A list whose only answers are "Hispanic/Latino" and "Not
+    // Hispanic/Latino" asks the Hispanic question, whatever its name (UKG
+    // Pro's "Ethnic Origin").
+    (field.options.length === 2 && field.options.every((option) => /\bhispanic\b|\blatin[oa]x?\b/i.test(option)) &&
+      field.options.some((option) => /\b(not|non)\b/i.test(option.replace(/-/g, " "))) ? "hispanic" : undefined) ||
     (["Yes", "No"].every((answer) =>
       disabilityOptions.some((option) => readOption("disabilityStatus", option) === answer),
     )

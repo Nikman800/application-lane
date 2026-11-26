@@ -66,6 +66,12 @@ export const repairSchema = z.object({
   userActions: z.array(z.string().max(400)).max(50),
   owner: z.object({ name: z.string().max(100), since: z.number(), heartbeatAt: z.number() }).optional(),
   nextAction: z.string().max(400).optional(),
+  live: z.object({
+    queuedAt: z.number(),
+    inspectedAt: z.number().optional(),
+    correctedAt: z.number().optional(),
+    blocker: z.object({ at: z.number(), reason: z.string().max(400), applicant: z.boolean() }).optional(),
+  }).optional(),
   attempts: z.array(attemptSchema).max(50),
   // A refill started (lane retry) whose outcome no capture has shown yet.
   refill: z.object({ at: z.number(), reason: z.enum(["repair", "profile", "page"]), build: z.string().max(100).optional(),
@@ -90,6 +96,7 @@ export const repairsSchema = z.record(z.string(), repairSchema);
 // Long enough for a hard repair's time box and a live check; an owner who
 // has not touched the record since has stopped working on it.
 export const OWNER_LAPSE_MS = 45 * 60_000;
+export const LIVE_REVIEW_MS = 5 * 60_000;
 // Refills in a row that changed nothing before the repair is called blocked.
 export const NO_PROGRESS_LIMIT = 3;
 // A capture taken this soon after a fill can still miss the site's own late
@@ -129,17 +136,56 @@ export function openRepair(existing: Repair | undefined, found: Found & { applic
     }
   }
   const open = defects.some((defect) => defect.status === "open");
+  const evidence = found.evidence;
+  const newEvidence = evidence && !base.evidence.some((item) => item.kind === evidence.kind && item.id === evidence.id);
   return {
     ...base,
     step: found.step ?? base.step,
     defects,
-    evidence: found.evidence ? [...base.evidence, { ...found.evidence, at: now }].slice(-100) : base.evidence,
+    evidence: newEvidence ? [...base.evidence, { ...evidence, at: now }].slice(-100) : base.evidence,
     userActions: [...new Set([...base.userActions, ...found.userActions])].slice(0, 50),
     state: base.state === "being-fixed" ? "being-fixed" : open && (base.state !== "released" || added) ? "needs-fixing" : base.state,
     blocker: added ? undefined : base.blocker,
     verification: added ? undefined : base.verification,
+    live: base.state === "released" && added ? { queuedAt: now } : base.live,
     updatedAt: now,
   };
+}
+
+export const reportReviewId = (reportId: string) => defectId("other", undefined, `Review report ${reportId}`);
+
+export function queueReport(existing: Repair | undefined, applicationId: string, reportId: string, now: number): Repair {
+  if (existing?.evidence.some((item) => item.kind === "report" && item.id === reportId)) return existing;
+  const review: Defect = { id: reportReviewId(reportId), kind: "other", detail: "Review the new report and its live form.", status: "open", manual: true };
+  const repair = openRepair(existing, { applicationId, evidence: { kind: "report", id: reportId }, defects: [review], userActions: [] }, now);
+  const queuedAt = existing && section(existing) ? repairQueuedAt(existing) : now;
+  return { ...repair, live: { queuedAt } };
+}
+
+export const repairQueuedAt = (repair: Repair) => repair.live?.queuedAt ?? repair.createdAt;
+
+export function liveReview(repair: Repair, now: number) {
+  if (!section(repair)) return;
+  const queuedAt = repairQueuedAt(repair);
+  const { inspectedAt, correctedAt, blocker } = repair.live || {};
+  const dueAt = Math.max(queuedAt, inspectedAt ?? 0, correctedAt ?? 0, blocker?.at ?? 0) + LIVE_REVIEW_MS;
+  const waiting = blocker?.applicant === true || Boolean(blocker && now < dueAt);
+  return { queuedAt, inspectedAt, dueAt, overdue: !waiting && now >= dueAt, waiting, blocker };
+}
+
+export function recordInspection(repair: Repair, now: number): Repair {
+  if (repair.live?.inspectedAt !== undefined && !repair.live.blocker) return repair;
+  return { ...repair, live: { ...repair.live, queuedAt: repairQueuedAt(repair), inspectedAt: now, blocker: undefined }, updatedAt: now };
+}
+
+export function recordLiveBlocker(repair: Repair, reason: string, applicant: boolean, now: number): Repair {
+  const prior = repair.live?.blocker;
+  if (prior?.reason === reason && prior?.applicant === applicant) return repair;
+  return { ...repair, live: { ...repair.live, queuedAt: repairQueuedAt(repair), blocker: { at: now, reason, applicant } }, updatedAt: now };
+}
+
+function correctedLive(repair: Repair, now: number): Repair["live"] {
+  return { ...repair.live, queuedAt: repairQueuedAt(repair), correctedAt: now, blocker: undefined };
 }
 
 // The fixer's old flag (fixing.json: a time and a note) as a record: the
@@ -252,6 +298,7 @@ export function recordAttempt(repair: Repair, outcome: { reason: Attempt["reason
     // A later check that resolves something is progress again: the block
     // named defects that are no longer all open.
     blocker: stuck ? `${NO_PROGRESS_LIMIT} refills changed nothing; still open: ${attempt.remaining.slice(0, 4).join(", ")}` : attempt.progress || fresh ? undefined : repair.blocker,
+    live: attempt.progress ? correctedLive(repair, now) : repair.live,
     updatedAt: now,
   };
 }
@@ -285,6 +332,7 @@ export function verifyLive(
       owner: undefined,
       nextAction: undefined,
       blocker: undefined,
+      live: correctedLive(after, now),
       verification: { capture: check.capture, build: check.build, at: now, settledMs: check.settledMs },
       regression: check.codeChanged ? (repair.regression === "published" ? "published" : "pending") : repair.regression,
     },
@@ -299,8 +347,10 @@ export function release(repair: Repair, now: number, why: string): Repair {
 }
 
 export function recordCleanup(repair: Repair, ids: string[], capture: string, now: number): Repair {
+  const corrected = repair.defects.some((defect) => defect.status === "open" && !defect.cleanedIn && ids.includes(defect.id));
   return { ...repair, defects: repair.defects.map((defect) =>
     defect.status === "open" && ids.includes(defect.id) ? { ...defect, cleanedIn: capture } : defect),
+    live: corrected ? correctedLive(repair, now) : repair.live,
     verification: undefined, updatedAt: now };
 }
 

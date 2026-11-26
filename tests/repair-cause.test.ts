@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { repairCommands, type RepairContext } from "../scripts/lane-repairs";
-import { defectId, type Repair } from "../src/shared/repairs";
+import { LIVE_REVIEW_MS, claim, defectId, heartbeat, liveReview, openRepair, queueReport, type Repair } from "../src/shared/repairs";
+import { laneGroup } from "../src/shared/lane-groups";
 import type { QueueSnapshot, QueueSummaryItem } from "../src/shared/model";
 
-const app = (id: string, company: string) => ({ id, company, title: "Engineer", url: `https://${company}.example/apply` }) as QueueSummaryItem;
-const apps = [app("aaaaaa00-0000-4000-8000-000000000001", "acme"), app("bbbbbb00-0000-4000-8000-000000000002", "globex")];
+const app = (id: string, company: string) => ({ id, company, title: "Engineer", url: `https://${company}.example/apply`, stage: "applying", status: "awaiting-user" }) as QueueSummaryItem;
+const apps = [app("aaaaaa00-0000-4000-8000-000000000001", "acme"), app("bbbbbb00-0000-4000-8000-000000000002", "globex"), app("cccccc00-0000-4000-8000-000000000003", "initech")];
 const repair = (applicationId: string): Repair => ({
   applicationId,
   state: "released",
@@ -112,4 +113,54 @@ test("repair refill waits for the exact build and uses its attempt's capture", a
   assert.equal(store[id].verification?.capture, "exact");
   assert.equal(actions.filter((action) => action === "repair-fill").length, 1);
   assert.equal(captures, 2, "an early capture is repeated without restarting the fill");
+});
+
+test("new live reviews take precedence over active code checks and manual verification hands back the form", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "lane-live-review-"));
+  await mkdir(join(dir, "issues"));
+  await mkdir(join(dir, "captures"));
+  let now = 10_000;
+  const [first, second, third] = apps;
+  const reportId = "new-report";
+  const store = Object.fromEntries([first, second].map(({ id }) => {
+    const active = claim(openRepair(undefined, { applicationId: id, defects: [{ ...repair(id).defects[0], status: "open" }], userActions: [] }, now), "fixer", now, "Running regression tests");
+    return [id, { ...active, live: { queuedAt: now, inspectedAt: now + LIVE_REVIEW_MS - 10 } }];
+  }));
+  store[third.id] = queueReport(undefined, third.id, reportId, now + 100);
+  assert.equal(store[third.id].state, "needs-fixing");
+  const deadline = liveReview(store[third.id], now)!.dueAt;
+  now = deadline - 1;
+  const noteUpdated = heartbeat(claim(store[third.id], "fixer", now - 10), now, "Still triaging");
+  assert.equal(liveReview(noteUpdated, deadline)?.overdue, true);
+  assert.equal(liveReview(noteUpdated, deadline)?.dueAt, deadline);
+  const live = {
+    now: () => now,
+    json: true,
+    send: async (action: string, id?: string) => {
+      assert.equal(id, third.id);
+      if (action === "inspect") return { ok: true, detail: JSON.stringify({ form: true, url: third.url, fields: [], blockers: [], inaccessible: [] }) };
+      if (action === "about") return { ok: true, detail: JSON.stringify({ busy: false }) };
+      assert.equal(action, "capture");
+      return { ok: true, detail: "clean" };
+    },
+  };
+  const next = await harness([], store, dir, live);
+  await next.commands.next();
+  assert.deepEqual(JSON.parse(next.printed[0]).pendingReports, [reportId]);
+  assert.equal(store[third.id].state, "being-fixed");
+  assert.equal(store[third.id].live?.inspectedAt, now);
+  await writeFile(join(dir, "issues", `${reportId}.json`), JSON.stringify({ id: reportId, applicationId: third.id }));
+  await (await harness(["initech", "--report", reportId, "--defect", "City needs correction"], store, dir, live)).commands.open();
+  assert.equal(store[third.id].defects.length, 1);
+  assert.equal(store[third.id].evidence.length, 1);
+  await writeFile(join(dir, "captures", "clean.json"), JSON.stringify({ id: "clean", applicationId: third.id, form: true, createdAt: ++now }));
+  const handoff = await harness(["initech", "--cleanup", "--confirm", "1", "--release"], store, dir, live);
+  await handoff.commands.check();
+  assert.equal(JSON.parse(handoff.printed[0]).released, true);
+  assert.equal(laneGroup(third, undefined), "needs you");
+  assert.equal(store[third.id].state, "released");
+  assert.equal(store[third.id].defects[0].status, "open");
+  const list = await harness([], store, dir);
+  await list.commands.list();
+  assert.ok(list.printed.some((line) => line.includes("City needs correction") && line.includes("automation proof pending")));
 });

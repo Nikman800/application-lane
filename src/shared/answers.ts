@@ -470,6 +470,9 @@ export function canonicalAnswer(field: ChoiceField, raw: string | undefined): st
   // "I have no military experience" is not a veteran; read by its "I have",
   // it was taken as one (one employer's Workday).
   if (field === "veteranStatus" && /\b(no (prior )?military|never served|not a veteran|have not served|no service)\b/.test(text)) return "No";
+  // An option that only names the group ("Hispanic/Latino", beside "Not
+  // Hispanic/Latino") says Yes.
+  if (field === "hispanic" && /\b(hispanic|latin[oa]x?)\b/.test(text) && !/\b(not|non|no)\b/.test(text)) return "Yes";
   // Yes/No families, checked after declines so "I do not wish…" is Decline.
   if (/^(no|n|false|none|never)\b|\b(not|do not|don t|dont|am not|have not|i m not)\b/.test(text)) return "No";
   if (/^(yes|y|true)\b|\b(i am|i have|i identify|authorized|eligible)\b/.test(text)) return "Yes";
