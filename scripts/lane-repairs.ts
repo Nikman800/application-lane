@@ -42,12 +42,16 @@ import {
   explain,
   heartbeat,
   buildKey,
+  liveReview,
   mayRetry,
   openRepair,
   outcome,
   published,
   recordCleanup,
+  recordInspection,
+  recordLiveBlocker,
   release,
+  reportReviewId,
   section,
   verifyLive,
   type Attempt,
@@ -163,13 +167,16 @@ export function repairCommands(ctx: RepairContext) {
     for (const [kind, id] of sources) {
       const evidence = await readEvidence(kind, id);
       if (evidence.applicationId && evidence.applicationId !== app.id) throw new Error(`${id} is from another application.`);
+      if (repair && kind === "issues") repair = { ...repair, defects: repair.defects.filter((defect) => defect.id !== reportReviewId(id)) };
       repair = openRepair(repair, { applicationId: app.id, step: evidence.tab?.url, evidence: { kind: kind === "issues" ? "report" : "capture", id }, ...findDefects(evidence) }, now());
     }
     if (described.length) {
       const defects: Defect[] = described.map((text) => ({ id: defectId("other", undefined, text), kind: "other", detail: text.slice(0, 600), status: "open", manual: true }));
       repair = openRepair(repair, { applicationId: app.id, defects, userActions: [] }, now());
     }
-    if (!repair!.defects.length) {
+    if (!repair!.defects.some((defect) => defect.status === "open")) {
+      if (repairs[app.id] && section(repairs[app.id]))
+        await save(release(repair!, now(), "The report had no fill defect. Review the remaining questions."), repairs[app.id].updatedAt);
       print(`${ctx.name(app)}: nothing the software can fix.`);
       for (const action of repair!.userActions) print(`  - for the applicant: ${action}`);
       return;
@@ -255,16 +262,59 @@ export function repairCommands(ctx: RepairContext) {
     return checkPage(app, repair);
   }
 
-  async function inspect() {
-    const app = await target();
+  async function inspectPage(app: QueueSummaryItem, repair?: Repair) {
+    if (repair?.state === "needs-fixing") {
+      repair = await save(claim(repair, "fixer", now(), "Inspecting the live form"), repair.updatedAt);
+    }
     const result = JSON.parse(await send("inspect", app) || "{}") as { form: boolean; url: string; fields: { label: string; value: string }[]; blockers: string[]; inaccessible: string[] };
-    if (ctx.json) print(JSON.stringify(result, null, 2));
+    if (repair && result.form) {
+      const inspected = recordInspection(repair, now());
+      if (inspected !== repair) repair = await save(inspected, repair.updatedAt);
+    }
+    const reports = !repair ? [] : repair.evidence
+      .filter(({ kind, id }) => kind === "report" && repair.defects.some((defect) => defect.id === reportReviewId(id) && defect.status === "open"))
+      .map(({ id }) => id);
+    if (ctx.json) print(JSON.stringify({ ...result, applicationId: app.id, pendingReports: reports }, null, 2));
     else {
       print(`${ctx.name(app)} — ${result.form ? "Application form" : "No recognized application form"} (${result.url})`);
+      if (reports.length) print(`  Reports to classify: ${reports.join(", ")}`);
       for (const blocker of result.blockers) print(`  ${blocker}`);
       for (const error of result.inaccessible) print(`  Unreadable: ${error}`);
       for (const field of result.fields) print(`  ${field.label}: ${field.value || "(empty)"}`);
     }
+  }
+
+  async function inspect() {
+    const app = await target();
+    const repair = (await all())[app.id];
+    return inspectPage(app, section(repair) ? repair : undefined);
+  }
+
+  async function nextRepair() {
+    const [wanted] = positional(ctx.words);
+    const queue = await ctx.snapshot();
+    const repairs = await all();
+    const apps = wanted ? [ctx.find(queue, wanted)] : queue.applications;
+    const time = now();
+    const [next] = apps.flatMap((app) => {
+      if (app.stage === "submitted" || app.stage === "abandoned" || app.status === "cancelled") return [];
+      const repair = repairs[app.id];
+      const review = repair && liveReview(repair, time);
+      return review && (!review.waiting || wanted) ? [{ app, repair, review }] : [];
+    }).sort((a, b) => a.review.dueAt - b.review.dueAt || a.review.queuedAt - b.review.queuedAt);
+    if (!next) return print(ctx.json ? "null" : "No actionable repair. Waiting forms and automation proof stay on the repair list.");
+    return inspectPage(next.app, next.repair);
+  }
+
+  async function liveBlocker() {
+    const app = await target();
+    const repair = (await all())[app.id];
+    if (!section(repair)) throw new Error("There is no active repair on this application.");
+    const reason = positional(ctx.words).slice(1).join(" ").trim();
+    if (!reason || reason.length > 400) throw new Error("Give the specific live-page blocker in 400 characters or fewer.");
+    const updated = recordLiveBlocker(repair, reason, ctx.words.includes("--applicant"), now());
+    if (updated !== repair) await save(updated, repair.updatedAt);
+    print(`${ctx.name(app)}: ${updated.live?.blocker?.applicant ? "waiting for the applicant" : "live review blocked"} — ${reason}`);
   }
 
   async function evidence() {
@@ -377,8 +427,12 @@ export function repairCommands(ctx: RepairContext) {
     }
     if (manual) {
       if (found.defects.some(({ id }) => confirmed.includes(id))) throw new Error("The capture still shows a defect marked for cleanup.");
-      await save(recordCleanup(repair, confirmed, capture.id, now()), repair.updatedAt);
-      print(ctx.json ? JSON.stringify({ captureId: capture.id, cleaned: confirmed }) : `Live cleanup recorded in capture ${capture.id}. Automation proof remains open.`);
+      const cleaned = recordCleanup(repair, confirmed, capture.id, now());
+      const requested = ctx.words.includes("--release");
+      const released = requested && !found.defects.length && cleaned.defects.every((defect) => defect.status === "resolved" || defect.cleanedIn);
+      await save(released ? release(cleaned, now(), "Live corrections verified. Review the form and finish anything it leaves for you.") : cleaned, repair.updatedAt);
+      print(ctx.json ? JSON.stringify({ captureId: capture.id, cleaned: confirmed, ...(requested ? { released } : {}) }) : `Live cleanup recorded in capture ${capture.id}. Automation proof remains open.${released ? " Released to the applicant." : requested ? " The page still has open defects." : ""}`);
+      if (requested && !released) process.exitCode = 1;
       return;
     }
     const result = verifyLive(repair, { capture: capture.id, build: buildKey(state.build), settledMs: settled, found,
@@ -435,7 +489,7 @@ export function repairCommands(ctx: RepairContext) {
   }
 
   async function show(everything: boolean) {
-    const repairs = Object.values(await all()).filter((repair) => everything || repair.state !== "released" || repair.regression === "pending");
+    const repairs = Object.values(await all()).filter((repair) => everything || repair.state !== "released" || repair.regression === "pending" || repair.defects.some((defect) => defect.status === "open" && defect.cleanedIn));
     if (ctx.json) return print(JSON.stringify(repairs, null, 2));
     if (!repairs.length) return print("No repairs open or awaiting publication.");
     const queue = await ctx.snapshot().catch(() => undefined);
@@ -448,6 +502,7 @@ export function repairCommands(ctx: RepairContext) {
       print(`${label(repair.applicationId)}  ${where}, ${outcome(repair)}${repair.owner ? `, ${repair.owner.name}` : ""}${repair.regression !== "none" ? `, regression ${repair.regression}` : ""}`);
       if (repair.cause) print(`   cause: ${repair.cause}`);
       if (repair.nextAction) print(`   next: ${repair.nextAction}`);
+      if (repair.live?.blocker) print(`   live blocker: ${repair.live.blocker.reason}`);
       if (repair.note) print(`   ${repair.note}`);
       list(repair);
     }
@@ -495,5 +550,5 @@ export function repairCommands(ctx: RepairContext) {
     await writeFile(file, JSON.stringify({ status, summary: previous.summary && status === "fixed" ? previous.summary : summary, ...(repair.cause ? { cause: repair.cause } : {}), problems: open.map((defect) => `${describe(defect)}${defect.cleanedIn ? " (live page corrected; automation proof pending)" : ""}`), commit, startedAt: previous.startedAt || repair.createdAt, finishedAt: now() }, null, 2));
   }
 
-  return { open, own, retry, refill, inspect, capture, evidence, check, fixed: check, release: giveBack, cause, list: () => show(ctx.words.includes("--all")), publish };
+  return { open, own, retry, refill, inspect, next: nextRepair, liveBlocker, capture, evidence, check, fixed: check, release: giveBack, cause, list: () => show(ctx.words.includes("--all")), publish };
 }

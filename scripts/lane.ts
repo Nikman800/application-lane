@@ -30,7 +30,7 @@ import { colorDepth, createPalette, openingLine, splitTracked, styled, tabStrip,
 import { sameOpening } from "../src/shared/matching";
 import { liveLine } from "./lane-live";
 import { repairCommands, type RepairContext } from "./lane-repairs";
-import { section, type Repair } from "../src/shared/repairs";
+import { liveReview, repairQueuedAt, section, type Repair } from "../src/shared/repairs";
 import { laneGroup } from "../src/shared/lane-groups";
 import { packageRoot } from "../src/server/paths";
 
@@ -84,6 +84,7 @@ let repairs: Record<string, Repair> = {};
 const failed = (app: QueueSummaryItem) => app.status === "failed" || app.lastFill?.status === "error";
 // The same groups the browser's tab groups use (src/shared/lane-groups.ts).
 const group = (app: QueueSummaryItem) => laneGroup(app, section(repairs[app.id]));
+const repairAge = (repair: Repair) => repair.owner ? `Started ${ago(repair.owner.since)}` : `Queued ${ago(repairQueuedAt(repair))}`;
 // What a repair says about it, for the lists: what is being done, or what is
 // waiting to be fixed.
 const repairLine = (app: QueueSummaryItem) => {
@@ -91,7 +92,8 @@ const repairLine = (app: QueueSummaryItem) => {
   if (!repair) return "";
   const open = repair.defects.filter((defect) => defect.status === "open");
   const doing = repair.nextAction || open.map((defect) => defect.field || defect.detail).slice(0, 3).join("; ").slice(0, 160);
-  return [doing, repair.cause && `cause: ${repair.cause.slice(0, 200)}`].filter(Boolean).join("\n    ");
+  const review = liveReview(repair, Date.now());
+  return [doing, repairAge(repair), review?.overdue && "Live review overdue", review?.blocker?.reason, repair.cause && `cause: ${repair.cause.slice(0, 200)}`].filter(Boolean).join("\n    ");
 };
 
 const readRepairs = async () => {
@@ -120,7 +122,16 @@ async function add() {
 async function status() {
   const queue = await snapshot();
   const inbox = await api<{ url: string }[]>("/v1/inbox");
-  if (json) return console.log(JSON.stringify({ ...queue, inbox: inbox.map((item) => item.url) }, null, 2));
+  if (json) {
+    const now = Date.now();
+    const repairQueue = queue.applications.flatMap((app) => {
+      const repair = repairs[app.id];
+      const state = group(app);
+      if (state !== "needs fixing" && state !== "being fixed") return [];
+      return [{ applicationId: app.id, state, activeSince: repair.owner?.since, ...liveReview(repair, now) }];
+    });
+    return console.log(JSON.stringify({ ...queue, inbox: inbox.map((item) => item.url), repairQueue }, null, 2));
+  }
   const counts = new Map<string, number>();
   for (const app of queue.applications) counts.set(group(app), (counts.get(group(app)) || 0) + 1);
   console.log(colors.bold(`As of ${ago(queue.at)}: ${queue.applications.length} applications.`));
@@ -430,6 +441,11 @@ async function ui() {
       detail.push(colors.info(fit(app.url, width)));
       const facts = fit(`${app.status} · ${app.stage} · updated ${ago(app.updatedAt)}${app.reports ? ` · ${app.reports} report${app.reports === 1 ? "" : "s"}` : ""}`, width);
       detail.push(colors.on ? facts.replace(app.status, colors.group(group(app))(colors.bold(app.status))).replace(` ${app.stage} `, ` ${colors.accent(app.stage)} `) : facts);
+      const repair = repairs[app.id];
+      if (group(app) === "needs fixing" || group(app) === "being fixed") {
+        const review = liveReview(repair, Date.now());
+        detail.push(fit([repairAge(repair), review?.overdue && "Live review overdue", review?.blocker?.reason].filter(Boolean).join(" · "), width));
+      }
       detail.push(fit(app.note, width));
       if (app.lastFill) {
         const last = fit(`last fill: ${app.lastFill.status}, ${app.lastFill.filled} filled. ${app.lastFill.note}`, width);
@@ -698,6 +714,8 @@ const commands: Record<string, () => Promise<unknown>> = {
   refresh: () => act("refresh"),
   reload,
   repair: () => repairCommands(repairContext()).open(),
+  "repair-next": () => repairCommands(repairContext()).next(),
+  "repair-blocked": () => repairCommands(repairContext()).liveBlocker(),
   fixing: () => repairCommands(repairContext()).own(),
   retry: () => repairCommands(repairContext()).retry(),
   refill: () => repairCommands(repairContext()).refill(),
@@ -731,16 +749,18 @@ if (!run) {
   refresh <application> reload its page, as after a reload (not while it is being filled)
   repair <application> --report <id> | --capture <id> | --defect "<what>"
                       open a repair from what shows the problem (needs fixing)
+  repair-next [<application>] [--json]  inspect the oldest actionable repair, or the named repair
+  repair-blocked <application> "<reason>" [--applicant]  record a concrete live-page blocker
   fixing [<application> [next action]]  the fixer owns it (being fixed); alone, list open repairs
   retry <application> --reason repair|profile|page  refill it on the newest build, with a reason
   refill <application> --reason repair|profile|page [--reload] [--persist] [--json]
                       start one repair refill and report its capture and verdict
-  inspect <application> [--json]  read the current form and blockers without a fill
+  inspect <application> [--json]  read the form without a fill and record the live review if held
   capture <application> [--json]  save the current page as evidence and print its ID
   evidence <application> --capture <id> [--before <id>] [--field <label>]
                       summarize local field changes and failed site requests
   check <application> [--confirm <n>]  check the settled page; releases it once every defect is gone
-                      --cleanup records a manual correction
+                      --cleanup records a manual correction; add --release to hand back a verified form
                       --prove <n> --before <capture> [--field <label>] verifies a reproduced fix
   fixed <application> the same check
   release <application> "<why>" [--blocked]  return a corrected page or report the applicant's access step

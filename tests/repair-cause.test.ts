@@ -122,9 +122,9 @@ test("new live reviews take precedence over active code checks and manual verifi
   let now = 10_000;
   const [first, second, third] = apps;
   const reportId = "new-report";
-  const store = Object.fromEntries([first, second].map(({ id }) => {
+  const store: Record<string, Repair> = Object.fromEntries([first, second].map(({ id }) => {
     const active = claim(openRepair(undefined, { applicationId: id, defects: [{ ...repair(id).defects[0], status: "open" }], userActions: [] }, now), "fixer", now, "Running regression tests");
-    return [id, { ...active, live: { queuedAt: now, inspectedAt: now + LIVE_REVIEW_MS - 10 } }];
+    return [id, { ...active, live: { queuedAt: now, inspectedAt: now + 100, correctedAt: now + 200 } }];
   }));
   store[third.id] = queueReport(undefined, third.id, reportId, now + 100);
   assert.equal(store[third.id].state, "needs-fixing");
@@ -149,6 +149,7 @@ test("new live reviews take precedence over active code checks and manual verifi
   assert.deepEqual(JSON.parse(next.printed[0]).pendingReports, [reportId]);
   assert.equal(store[third.id].state, "being-fixed");
   assert.equal(store[third.id].live?.inspectedAt, now);
+  assert.equal(liveReview(store[third.id], deadline)?.overdue, true, "inspection alone leaves the live handoff deadline in place");
   await writeFile(join(dir, "issues", `${reportId}.json`), JSON.stringify({ id: reportId, applicationId: third.id }));
   await (await harness(["initech", "--report", reportId, "--defect", "City needs correction"], store, dir, live)).commands.open();
   assert.equal(store[third.id].defects.length, 1);

@@ -168,7 +168,7 @@ export function liveReview(repair: Repair, now: number) {
   if (!section(repair)) return;
   const queuedAt = repairQueuedAt(repair);
   const { inspectedAt, correctedAt, blocker } = repair.live || {};
-  const dueAt = Math.max(queuedAt, inspectedAt ?? 0, correctedAt ?? 0, blocker?.at ?? 0) + LIVE_REVIEW_MS;
+  const dueAt = Math.max(queuedAt, correctedAt ?? 0, blocker?.at ?? 0) + LIVE_REVIEW_MS;
   const waiting = blocker?.applicant === true || Boolean(blocker && now < dueAt);
   return { queuedAt, inspectedAt, dueAt, overdue: !waiting && now >= dueAt, waiting, blocker };
 }
