@@ -7,6 +7,7 @@ import { canonicalURL, postingGuess, proposals, historyRowMap } from "../../shar
 import { configEngineEnabled } from "../../engine/mode";
 import { documentKind, type DocumentKind } from "../semantics";
 import { pickTranscript } from "../../shared/transcripts";
+import { writtenAnswerForDate } from "../../shared/dates";
 import { storeBuild } from "../../shared/store-build";
 import { trustedTypingAvailable, releaseTrustedInput } from "../trusted-input";
 import { rowHolds } from "../row-holds";
@@ -624,8 +625,10 @@ export async function run(app: Application, operation: number) {
           if (!answer.fieldId.startsWith(prefix)) continue;
           const field = frame.observation.fields.find((f) => f.id === answer.fieldId.slice(prefix.length));
           if (!field || field.protected || field.value || leftAsLegal(field.label)) continue;
-          noteAiFilled(app, field.label, answer.value);
-          early.push({ fieldId: field.id, value: answer.value, expectedValue: field.value, revision: field.revision, source: "confirmed-facts" });
+          const value = writtenAnswerForDate(answer.value, field, profile);
+          if (!value) continue;
+          noteAiFilled(app, field.label, value);
+          early.push({ fieldId: field.id, value, expectedValue: field.value, revision: field.revision, source: "confirmed-facts" });
         }
         if (!early.length) continue;
         touch(app, "filling", "Writing the answers while the documents are tailored…");
@@ -785,11 +788,14 @@ export async function run(app: Application, operation: number) {
         issues.push(`Legal or eligibility question left for you: ${field.label}`);
         continue;
       }
-      if (field && !field.protected && !field.value) noteAiFilled(app, field.label, answer.value);
-      if (field && !field.protected && !field.value)
+      // A date-only box takes a date: "Immediately" is today's, and another
+      // answer that is no date is left (writtenAnswerForDate).
+      const value = field ? writtenAnswerForDate(answer.value, field, profile) : undefined;
+      if (field && !field.protected && !field.value && value) noteAiFilled(app, field.label, value);
+      if (field && !field.protected && !field.value && value)
         pending.push({
           fieldId: field.id,
-          value: answer.value,
+          value,
           expectedValue: field.value,
           revision: field.revision,
           source: "confirmed-facts",

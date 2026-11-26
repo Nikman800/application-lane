@@ -114,6 +114,9 @@ test("a saved willingness to complete a background check answers whether they ar
   assert.equal(ask(willing), "Yes");
   assert.equal(ask(willing, ["Yes"]), "Yes");
   assert.equal(ask("Would you be willing to submit to a drug screen?"), "Yes");
+  // Asked as what they will do once offered the job (Oracle Recruiting).
+  assert.equal(ask("If you receive a conditional offer of employment, will you submit to a drug test and background check?"), "Yes");
+  assert.equal(ask("Will you complete a background check?"), "Yes");
   // Consent or authorization, or nothing saved: not this one's to say.
   assert.notEqual(ask("Do you consent to a background check?"), "Yes");
   assert.notEqual(ask("Are you willing to authorize a background check?"), "Yes");

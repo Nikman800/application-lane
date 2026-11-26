@@ -1328,7 +1328,12 @@ function studyAndPayAnswer({ field, profile, label, saved, asked, educationRow }
   }
   // A GPA is its own row's, on that row's scale: the row asked about, or
   // the program held now or ended last.
-  const gpaRow = educationRow ?? latestRow(profile.education.filter((row) => row.gpa?.trim()));
+  // A question about the highest degree earned ("…for your highest earned
+  // degree") is the last finished one's, never the program still under way:
+  // with no GPA saved for that degree it is left.
+  const earned = /\b(highest|most recent|last) (earned|completed|conferred) degree\b|\b(highest|most recent) degree (earned|completed|conferred)\b/.test(label);
+  const finished = latestRow(profile.education.filter((row) => !row.current && !(row.endDate && row.endDate.slice(0, 10) > localDate())));
+  const gpaRow = educationRow ?? (earned ? (finished?.gpa?.trim() ? finished : undefined) : latestRow(profile.education.filter((row) => row.gpa?.trim())));
   const gpa = gpaRow?.gpa?.trim() || "";
   // The scale a question states ("out of 4.0", "on a 10-point scale",
   // "percentage"), when it states one.
@@ -1366,9 +1371,11 @@ function studyAndPayAnswer({ field, profile, label, saved, asked, educationRow }
       : [`GPA/Grade (out of ${scale})`, `GPA (out of ${scale})`, `Grade (out of ${scale})`, `${scale}.0 scale`];
     return { value: choices[0], choices: choices.slice(1) };
   }
+  // "on a 4.0 scale" says which scale the GPA asked is on; it does not ask for the scale.
+  const scaleWords = label.replace(/\bon an? \d+( \d+)?( point)? scale\b/g, " ");
   if (
     /\b(c?gpa|grade point average)\b/.test(label) &&
-    !/\b(scale|maximum|max|weighted)\b/.test(label) &&
+    !/\b(scale|maximum|max|weighted)\b/.test(scaleWords) &&
     gpa &&
     (!educationRow || educationRow.gpa?.trim())
   ) {
@@ -1381,7 +1388,7 @@ function studyAndPayAnswer({ field, profile, label, saved, asked, educationRow }
     return { value: gpa, ...(gpaRow?.gpaScale === "4" || asked ? { numeric: Number(gpa), ...(Number.isFinite(scale) && scale > 0 ? { scale } : {}) } : {}) };
   }
   // The scale itself, when asked: "GPA scale", "out of".
-  if (/\b(c?gpa|grade point average)\b/.test(label) && /\b(scale|out of|maximum|max)\b/.test(label) && gpaRow?.gpaScale && gpaRow.gpaScale !== "other" && gpa)
+  if (/\b(c?gpa|grade point average)\b/.test(label) && /\b(scale|out of|maximum|max)\b/.test(scaleWords) && gpaRow?.gpaScale && gpaRow.gpaScale !== "other" && gpa)
     return { value: gpaRow.gpaScale, choices: [`${gpaRow.gpaScale}.0`], numeric: Number(gpaRow.gpaScale) };
   // "Do you have previous internship, co-op, and/or directly relevant work
   // experience?" (Oracle's pills: "No" / "Yes- other company"): yes when the
@@ -1706,7 +1713,10 @@ function screeningAnswer({ field, profile, label, qualified, saved, immigration,
   const checkAsked = normalize(askedPart(field.label));
   if (
     /^willing\b/i.test((profile.legal?.screening || "").trim()) &&
-    /^(are|would) you\b.*\b(willing|able|prepared)\b.*\b(undergo|complete|submit to|pass|take)\b.*\b(background (check|investigation|screening)|drug (test|screen)\w*)\b/.test(checkAsked) &&
+    // "If you receive a conditional offer of employment, will you submit to
+    // a drug test and background check?" (an Oracle questionnaire) asks the same.
+    (/^(are|would) you\b.*\b(willing|able|prepared)\b.*\b(undergo|complete|submit to|pass|take)\b.*\b(background (check|investigation|screening)|drug (test|screen)\w*)\b/.test(checkAsked) ||
+      /^(if you (receive|are (offered|extended)|accept)\b.*\b)?will you (undergo|complete|submit to|take)\b.*\b(background (check|investigation|screening)|drug (test|screen)\w*)\b/.test(checkAsked)) &&
     !/\b(consent\w*|authori[sz]\w*|agree\w*|sign\w*|acknowledg\w*)\b/.test(checkAsked)
   )
     return { value: "Yes" };

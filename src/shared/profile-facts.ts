@@ -4,6 +4,7 @@ import { normalize, type Field, type Profile, type Proposal } from "./model";
 import { degreeAliases, degreeLevel, graduated, highestRow, latestRow, levelRank, studying } from "./education";
 import { writtenDate } from "./dates";
 import { schoolNames } from "./schools";
+import { timeZoneAnswer, timeZoneQuestion } from "./time-zone";
 
 type Answer = Pick<Proposal, "value" | "choices" | "numeric">;
 type Education = Profile["education"][number];
@@ -27,7 +28,7 @@ export function ageInYears(dateOfBirth: string, now = new Date()): number | unde
   return age >= 0 && age < 130 ? age : undefined;
 }
 
-type AgeTest = { minimum: number; inclusive: boolean; below: boolean };
+type AgeTest = { minimum: number; inclusive: boolean; below: boolean; onlyYes?: boolean };
 function ageTest(text: string): AgeTest | undefined {
   // A second question or condition is not proved by a birthday alone.
   const tail = text.split("?").slice(1).join("?").trim();
@@ -35,8 +36,15 @@ function ageTest(text: string): AgeTest | undefined {
   let q = question(text).replace(/\beighteen\b/g, "18").replace(/\bsixteen\b/g, "16").replace(/\btwenty one\b/g, "21");
   q = q.replace(/^at the time of (application|applying) /, "").replace(/ (as of today|today)$/, "");
   q = q.replace(/^(are you|is your age) /, "").replace(/^(age|aged) /, "");
+  // "Are you over the age of 18 or will you be within the next 6 months?"
+  // (an Oracle questionnaire): anyone of that age now is, and only a Yes
+  // can be said for it.
+  const soon = / or will you be (within the next \d{1,2} months?|by (the )?(start|time)\b.*)$/;
+  const later = soon.test(q);
+  q = q.replace(soon, "");
   const lower = q.match(/^(at least|over|older than|under|younger than|less than) (?:the age of )?(\d{1,3})(?: years?(?: of age| old)?)?$/);
-  if (lower) return { minimum: Number(lower[2]), inclusive: lower[1] === "at least", below: /under|younger|less/.test(lower[1]) };
+  if (lower && later && /under|younger|less/.test(lower[1])) return;
+  if (lower) return { minimum: Number(lower[2]), inclusive: later || lower[1] === "at least", below: /under|younger|less/.test(lower[1]), ...(later ? { onlyYes: true } : {}) };
   const after = q.match(/^(\d{1,3})(?: years?(?: of age| old)?)? (?:or|and) (older|over|above|younger)(?: years?(?: of age| old)?)?$/);
   if (after) return { minimum: Number(after[1]), inclusive: true, below: after[2] === "younger" };
 }
@@ -54,7 +62,8 @@ export function ageAnswer(field: Field, profile: Profile, now = new Date()): Ans
     // Conflicting explicit profile facts need review rather than a guess.
     const saved = profile.age18OrOlder.trim().toLowerCase();
     if ((saved === "yes" && age < 18) || (saved === "no" && age >= 18)) return;
-    return binary(test.below ? (test.inclusive ? age <= test.minimum : age < test.minimum) : (test.inclusive ? age >= test.minimum : age > test.minimum), field);
+    const meets = test.below ? (test.inclusive ? age <= test.minimum : age < test.minimum) : (test.inclusive ? age >= test.minimum : age > test.minimum);
+    return meets || !test.onlyYes ? binary(meets, field) : undefined;
   }
   // A saved 18+ answer is not evidence of being over 21, or strictly over 18.
   if (test.minimum === 18 && ((!test.below && test.inclusive) || (test.below && !test.inclusive))) {
@@ -64,6 +73,7 @@ export function ageAnswer(field: Field, profile: Profile, now = new Date()): Ans
     })?.answer;
     if (/^(yes|no)$/i.test(own?.trim() || "")) {
       const yes = own!.trim().toLowerCase() === "yes";
+      if (test.onlyYes && !yes) return;
       // Only the profile's 18+ flag is inverted for an under-18 question.
       return binary(profile.age18OrOlder && test.below ? !yes : yes, field);
     }
@@ -109,7 +119,7 @@ function degreeHeldQuestion(field: Field): { levels: string[]; fields?: string[]
 // fact is a reason to leave them for the applicant, not to ask AI to guess.
 export function profileFactQuestion(field: Field): boolean {
   const q = question(field.label);
-  return Boolean(ageTest(field.label) || educationQuestion(field) || degreeHeldQuestion(field) ||
+  return Boolean(timeZoneQuestion(field.label) || ageTest(field.label) || educationQuestion(field) || degreeHeldQuestion(field) ||
     /^(what (is|s) )?(your )?(current )?age( range| group| bracket)?$|^how old are you$|^(date of birth|birth date|birthdate|dob)( (mm dd yyyy|dd mm yyyy|yyyy mm dd))?$/.test(q));
 }
 
@@ -165,6 +175,7 @@ function programmingAnswer(field: Field, profile: Profile): Answer | undefined {
 
 export function profileFactAnswer(field: Field, profile: Profile, now = new Date()): Answer | undefined {
   const q = question(field.label);
+  if (timeZoneQuestion(field.label)) return timeZoneAnswer(field.label, field.options, profile.timeZone, now);
   if (ageTest(field.label)) return ageAnswer(field, profile, now);
   // "If you are under the age of 18, please list your age. If not
   // applicable, enter N/A." (UKG Pro): an adult enters N/A.

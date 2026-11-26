@@ -2075,6 +2075,22 @@ test("a minimum-GPA question is answered by comparing the saved GPA, on the same
   assert.equal(proposals([field("Do you have a 3.0 gpa or higher?", { kind: "combobox", options: [] })], withGPA(profile, "3.84"))[0]?.value, "Yes");
 });
 
+// iCIMS screening: "…GPA on a 4.0 scale for your highest earned degree"
+// over four-point bands. The degree earned is the last finished one, and
+// "on a 4.0 scale" names the scale of the GPA asked, never asks the scale.
+test("a GPA asked for the highest earned degree is the finished degree's, on the scale the question names", () => {
+  const bands = ["2.99 or lower", "3.0 - 3.24", "3.25 - 3.49", "3.50 - 3.74", "3.75 - 3.99", "4.0 or above"];
+  const ask = (label: string, who: typeof profile) => proposals([field(label, { kind: "select", options: bands })], who)[0]?.value;
+  const studying = { organization: "Virginia Tech", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2099-05", current: true, location: "", details: "" };
+  const done = { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-08", endDate: "2024-05", location: "", details: "" };
+  const earned = "What is/was your cumulative grade point average (GPA) on a 4.0 scale for your highest earned degree (for degrees earned in the United States)?";
+  const noBachelorGPA = profileSchema.parse({ ...profile, education: [{ ...studying, gpa: "3.84", gpaScale: "4" }, done] });
+  assert.equal(ask(earned, noBachelorGPA), undefined);
+  const both = profileSchema.parse({ ...profile, education: [{ ...studying, gpa: "3.84", gpaScale: "4" }, { ...done, gpa: "3.3", gpaScale: "4" }] });
+  assert.equal(ask(earned, both), "3.25 - 3.49");
+  assert.equal(ask("What is your cumulative GPA on a 4.0 scale?", noBachelorGPA), "3.75 - 3.99");
+});
+
 test("a graduation date split in three after its question gets each part", () => {
   // one employer's Oracle form: each box got "May 2027" or "2027".
   const dated = { ...profile, education: [{ ...profile.education[0], endDate: "2099-12-13" }] };

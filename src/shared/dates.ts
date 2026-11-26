@@ -85,3 +85,22 @@ export function letterDateText(profile?: Pick<Profile, "country"> & { locale?: P
   const dayFirst = profile && profileDateFormat(profile) !== undefined && profileDateFormat(profile) !== "MM/DD/YYYY";
   return now.toLocaleDateString(dayFirst ? "en-GB" : "en-US", { year: "numeric", month: "long", day: "numeric" });
 }
+
+// A written answer for a box that takes only a date (a date box, a picker,
+// or one whose placeholder shows a date format). A picker drops anything
+// else when it is left: "Immediately", from the applicant's tailoring
+// notes, was typed into a BambooHR "Date Available" box (mm/dd/yyyy) and
+// cleared twice. "Immediately" is today's date there; another answer that
+// is no date is left for the applicant (undefined).
+export function writtenAnswerForDate(
+  value: string,
+  field: Pick<Field, "kind" | "label"> & { format?: string },
+  profile: Pick<Profile, "country"> & { locale?: Profile["locale"] },
+): string | undefined {
+  const dateOnly = /date/i.test(field.kind) || /\b(dd|mm|yyyy|yy)\b[\s./-]+\b(dd|mm|yyyy|yy)\b/i.test(field.format || "");
+  if (!dateOnly) return value;
+  if (/\d{1,4}[./-]\d{1,2}[./-]\d{1,4}/.test(value)) return value;
+  if (/^\s*(available\s+)?(immediately|immediate|asap|as soon as possible|right away|now)\b/i.test(value))
+    return writtenDate(localDate(), field, profile);
+  return undefined;
+}

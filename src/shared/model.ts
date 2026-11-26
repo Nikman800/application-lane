@@ -300,6 +300,8 @@ const profileObject = z.object({
   gender: z.string().max(300).default(""),
   ethnicity: z.string().max(300).default(""),
   pronouns: z.string().max(100).default(""),
+  // IANA zone id ("America/Phoenix") for a form that asks the time zone.
+  timeZone: z.string().max(100).default(""),
   sexualOrientation: z.string().max(100).default(""),
   transgender: z.string().max(100).default(""),
   // How the applicant's name is said ("NICK-hill"), for a form that asks.
@@ -504,7 +506,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-25-document-step-forms";
+export const CONTENT_VERSION = "2026-11-26-time-zone";
 export type Proposal = {
   fieldId: string;
   value: string;

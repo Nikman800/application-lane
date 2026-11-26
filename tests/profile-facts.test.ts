@@ -47,6 +47,17 @@ test("age comparisons distinguish strict, inclusive and inverse boundaries", () 
     assert.equal(ageAnswer(field(label), birthday, now)?.value, expected, label);
 });
 
+// "…or will you be within the next 6 months?" (Oracle Recruiting) makes the
+// question true for anyone of age now or soon: Yes for an adult, and nothing
+// rather than a No for someone younger, who may turn 18 in time.
+test("an age question that also counts the coming months says Yes for an adult and never No", () => {
+  const label = "Are you over the age of 18 or will you be within the next 6 months?";
+  assert.equal(value(label), "Yes");
+  assert.equal(value(label, { ...profile, dateOfBirth: "", age18OrOlder: "Yes" }), "Yes");
+  const younger = { ...profile, dateOfBirth: `${new Date().getFullYear() - 16}-01-01` };
+  assert.equal(value(label, younger), undefined);
+});
+
 test("missing or contradictory birthdays never invent age answers", () => {
   assert.equal(value("Are you 18 or older?", { ...profile, dateOfBirth: "" }), undefined);
   assert.equal(value("Are you 18 or older?", { ...profile, dateOfBirth: "2001-02-29" }), undefined);

@@ -2,6 +2,7 @@
 import { OnboardingChecklist, ConnectCard } from "../onboarding";
 import { type Profile, legalDetailLabels, type LegalDetailKey, type RoleOverride } from "../../shared/model";
 import { WorkAuthorizationEditor, CareerEditor, SalaryEditor, LocaleEditor } from "../profile-fields";
+import { timeZoneChoices, timeZoneLabel } from "../../shared/time-zone";
 import { RecurringAnswers } from "../recurring-answers";
 import { ChoiceSelect, Icon, LegalDetail, TranscriptPicker, api, type PanelState } from "../panel";
 
@@ -164,6 +165,15 @@ export function ProfilePage({ panel }: { panel: PanelState }) {
                   />
                 </label>
               ))}
+              <label>
+                Time zone (optional)
+                <select value={profile.timeZone || ""} onChange={(e) => edit("timeZone", e.target.value)}>
+                  <option value="">Not said</option>
+                  {timeZoneChoices().map((zone) => (
+                    <option key={zone} value={zone}>{timeZoneLabel(zone)}</option>
+                  ))}
+                </select>
+              </label>
             </div>
           </section>
           <WorkAuthorizationEditor profile={profile} edit={edit} />

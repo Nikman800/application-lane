@@ -9214,6 +9214,24 @@ test("a Jobvite Application Sent page after the form marks the application submi
   await expect.poll(async () => (await state()).applications[0].workflowStage, { timeout: 20000 }).toBe("submitted");
 });
 
+// A Lever form sent the tab after Submit to the employer's own page,
+// "Application Received!" as its title heading, above a newsletter signup
+// (email, ZIP code, website). Its boxes kept it from being read.
+test("an employer's Application Received page with a newsletter signup marks the application submitted", async () => {
+  await context.route(`${origin}/lever-form/apply`, (route) =>
+    route.fulfill({ contentType: "text/html; charset=utf-8", body: `<!doctype html><title>Acme - Data Intern</title><h2>Data Intern</h2><form onsubmit="return false"><label>Email<input name="email" type="email"></label><label>Phone<input name="phone"></label><button type="submit">Submit application</button></form>` }));
+  await context.route(`${origin}/confirmation**`, (route) =>
+    route.fulfill({ contentType: "text/html; charset=utf-8", body: `<!doctype html><title>Confirmation | Acme</title><header><nav><a href="/ride">How to ride</a></nav></header><main><h1>Application Received!</h1><p>Subscribe to the Acme Newsletter for the latest updates and announcements sent directly to your inbox.</p><a href="/news">SIGN UP HERE</a><p>Check out our latest video content.</p></main><footer><form onsubmit="return false"><label>Email Address<input name="email" type="email"></label><label>Zip Code<input name="zip"></label><label>Website<input name="website"></label><button>Subscribe</button></form></footer>` }));
+  const page = await context.newPage();
+  await page.goto(`${origin}/lever-form/apply`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect((await state()).applications[0].workflowStage).not.toBe("submitted");
+  await page.goto(`${origin}/confirmation?LeverAppId=abc`);
+  await expect.poll(async () => (await state()).applications[0].workflowStage, { timeout: 20000 }).toBe("submitted");
+});
+
 // General Dynamics' iCIMS: after submitting, the job page shows
 // its confirmation in message boxes drawn as divs, not headings or
 // paragraphs, beside the posting's own text. (Its markup was not captured;
@@ -18304,6 +18322,53 @@ test("a step's written answers are on the page while its documents are still bei
   // Written once: the documents' pass found it there.
   expect(await writes.jsonValue()).toEqual(["Built interfaces at Acme."]);
   delete appConfig.tailorDir;
+});
+
+// BambooHR: "Date Available" is a picker box showing "mm/dd/yyyy" that
+// clears anything but a date when left. The applicant's tailoring notes
+// say their earliest start is "Immediately", and the written answer typed
+// that word into it, twice; the box was left empty.
+test("a written Immediately for a date-only box is today's date in its format", async () => {
+  await context.route(`${origin}/bamboo-date`, (route) =>
+    route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: `<!doctype html><title>Associate Engineer</title><form onsubmit="return false">
+        <label>Email<input name="email" type="email"></label>
+        <div class="MuiFormControl-root"><label class="MuiFormLabel-root MuiInputLabel-root" for="FabricTextField-100">Date Available</label>
+          <div class="MuiInputBase-root"><input id="FabricTextField-100" type="text" class="MuiInputBase-input MuiInputBase-inputAdornedEnd" placeholder="mm/dd/yyyy" name="dateAvailable">
+          <button type="button" aria-label="Choose date">📅</button></div></div>
+        <label>Describe a project you are proud of<textarea name="project"></textarea></label>
+        <button type="submit">Submit</button></form>
+        <script>const box = document.querySelector('[name=dateAvailable]');
+          box.addEventListener('change', () => { if (!/^\\d{2}\\/\\d{2}\\/\\d{4}$/.test(box.value)) box.value = ''; });</script>`,
+    }),
+  );
+  // Written answers go on the page while the documents are tailored.
+  const checkout = await scratch("lane-tailoring-");
+  await writeFile(join(checkout, "profile.md"), "## Experience\n- Built things.\n");
+  appConfig.tailorDir = checkout;
+  runtimeTailor = async () => {
+    throw new Error("no tailoring in this test");
+  };
+  const asked: string[] = [];
+  const written = async (req: { fields: { id: string; label: string }[] }) => {
+    asked.push(...req.fields.map((f) => f.label));
+    return req.fields.filter((f) => /date available/i.test(f.label)).map((f) => ({ fieldId: f.id, value: "Immediately", factIds: [] }));
+  };
+  runtimeAnswer = async (req) => ({ answers: await written(req), warnings: [], withheld: [], sources: {} });
+  runtimeGenerate = async (req, p) =>
+    groundNarrative({ resume: p.facts.map((f) => ({ factId: f.id, text: f.text })), coverLetter: [{ text: "", factIds: ["fact-1"] }], answers: await written(req) }, p, req);
+  const page = await context.newPage();
+  await page.goto(`${origin}/bamboo-date`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect(asked).toContain("Date Available");
+  const today = await page.evaluate(() => {
+    const now = new Date();
+    const two = (n: number) => String(n).padStart(2, "0");
+    return `${two(now.getMonth() + 1)}/${two(now.getDate())}/${now.getFullYear()}`;
+  });
+  await expect(page.locator("[name=dateAvailable]")).toHaveValue(today, { timeout: 15000 });
 });
 
 // iCIMS' sign-in step asks only for an email and a phone. Both were

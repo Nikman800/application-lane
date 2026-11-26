@@ -191,8 +191,18 @@ export function confirmationInPlace(): boolean {
       'input:not([type="hidden"]):not([type="search"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]),textarea,select',
     ),
   ].filter(shown);
-  if (boxes.length > 1) return false;
   const says = (text: string) => text.length > 0 && text.length <= 200 && confirmationWording.test(text);
+  // The page's own title heading saying nothing but that it went in
+  // ("Application Received!") is the page's subject, boxes or not: an
+  // employer's page a Lever form sent the tab to after Submit also held a
+  // newsletter signup (email, ZIP, website), and was never read. A form
+  // page's title heading names its job, not its submission.
+  if ([...document.querySelectorAll("h1")].some((heading) => {
+    const text = (heading.textContent || "").replace(/\s+/g, " ").trim();
+    return text.length <= 60 && confirmationWording.test(text) && shown(heading);
+  }))
+    return true;
+  if (boxes.length > 1) return false;
   if ([...document.querySelectorAll("h1,h2,h3,h4,h5,p,[role='status'],[role='alert']")].some((element) =>
     says((element.textContent || "").replace(/\s+/g, " ").trim()) && shown(element)))
     return true;
