@@ -3305,3 +3305,16 @@ test("open-on-click self-ID lists: Man/Male, a lone Ethnicity as Hispanic or not
   assert.equal(ask("Ethnicity", profileSchema.parse({ ...who, ethnicity: "Hispanic/Latinx", hispanic: "Yes" }))!.value, "Hispanic or Latino");
   assert.ok(ask("Race")!.choices?.includes("Asian"));
 });
+
+test("a race asked as one checkbox per group under its question ticks the profile's group, a plain Asian for any Asian", () => {
+  // Oracle Recruiting: "Select the races you identify with." over one box
+  // per group, each labelled only with the group's name.
+  const question = "Select the races you identify with.";
+  const boxes = ["American Indian or Alaska Native", "Asian", "Black or African American", "Native Hawaiian or other Pacific Islander", "White"]
+    .map((label, index) => field(label, { id: `race-${index}`, kind: "checkbox", required: false, options: ["Yes", "No"], question }));
+  const ticked = (ethnicity: string) =>
+    proposals(boxes, profileSchema.parse({ ...profile, ethnicity })).filter((proposal) => proposal.value === "Yes").map((proposal) => proposal.fieldId);
+  assert.deepEqual(ticked("South Asian"), [boxes[1]!.id]);
+  assert.deepEqual(ticked("White"), [boxes[4]!.id]);
+  assert.deepEqual(ticked(""), []);
+});

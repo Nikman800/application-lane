@@ -1498,6 +1498,11 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
       .map(([pattern, topic]) => ({ topic, at: label.search(pattern) }))
       .filter((found) => found.at >= 0 && !(found.topic === "gender" && genderAtBirth.test(label)))
       .sort((a, b) => a.at - b.at)[0]?.topic ||
+    // A race list drawn as one checkbox per group under its question
+    // ("Select the races you identify with." over "Asian", "White"… on
+    // Oracle Recruiting): each box's label is only a group's name, so the
+    // question says the topic.
+    (field.kind === "checkbox" && /\braces?\b|\bethnicit/.test(normalize(field.question || "")) ? "ethnicity" : undefined) ||
     (["Yes", "No"].every((answer) =>
       disabilityOptions.some((option) => readOption("disabilityStatus", option) === answer),
     )
@@ -1543,7 +1548,11 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
     const answer = canonicalAnswer(demographic, profile[demographic]);
     if (!answer) return;
     const stated = readOption(demographic, groupName(label));
-    return { value: stated === answer ? "Yes" : "No" };
+    // A plain "Asian" box is the U.S. group for the profile's East, South
+    // and Southeast Asian, as in a list below.
+    const plainAsian = demographic === "ethnicity" && / Asian$/.test(answer) && stated === "East Asian" &&
+      /\basian\b/i.test(groupName(label)) && !/\b(east|south|southeast|central|west)\b/i.test(groupName(label));
+    return { value: stated === answer || plainAsian ? "Yes" : "No" };
   }
   // A race list whose options load only when it opens (Greenhouse's
   // "Please identify your race", a report): the answer and the
