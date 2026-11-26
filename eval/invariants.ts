@@ -161,7 +161,9 @@ const shapes: Shape[] = [
     wants: "a web address",
   },
   { asks: /\b(gpa|grade point)\b/i, except: /\bscale|out of|type\b/i, fits: (v) => /^\d(\.\d{1,3})?(\s*\/\s*\d(\.\d+)?)?$/.test(v), wants: "a grade point average" },
-  { asks: /\b(zip|postal) ?(code)?\b/i, fits: (v) => /^[a-z0-9][a-z0-9 -]{1,9}$/i.test(v), wants: "a postal code" },
+  // Not a whole address that lists the code among its parts ("Please enter
+  // your address (Street Address, City, State, Zip Code)", Lever).
+  { asks: /\b(zip|postal) ?(code)?\b/i, except: /\b(street|address)\b/i, fits: (v) => /^[a-z0-9][a-z0-9 -]{1,9}$/i.test(v), wants: "a postal code" },
   { asks: /^(year|start year|end year|graduation year|year of graduation)$/i, fits: (v) => /^(19|20)\d\d$/.test(v), wants: "a year" },
   { asks: /^(month|start month|end month)$/i, fits: (v) => /^(0?[1-9]|1[0-2])$/.test(v) || monthNames.test(v), wants: "a month" },
   {
