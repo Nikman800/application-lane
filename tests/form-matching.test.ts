@@ -1660,6 +1660,8 @@ test("a question naming a level of study is answered from the education row at t
   // the finished degree and the one under way; a list takes the finished one.
   assert.equal(ask("What is your highest level of education?", { kind: "textarea" })?.value, "Bachelors of Science (Masters of Science in progress, expected May 2099)");
   assert.equal(ask("What is your highest level of education?", { kind: "select", options: ["-- No answer --", "Bachelor", "Master", "PhD"] })?.value, "Bachelor");
+  // Worded "highest education level" (a career page's list): the finished degree.
+  assert.equal(ask("What's your highest education level?", { kind: "select", options: ["High School Diploma or GED", "Some college coursework completed", "Bachelor’s degree", "Master’s degree"] })?.value, "Bachelor’s degree");
   assert.equal(ask("Completion date of your highest degree (mm/yyyy)")?.value, "05/2099");
   assert.equal(ask("Name of the School: Undergraduate Degree", { kind: "select", options: schools })?.value, "Virginia Polytechnic Institute and State University");
   assert.equal(ask("Name of the School: Graduate/MBA/PhD Degree", { kind: "select", options: schools })?.value, "Michigan State University");
@@ -3023,6 +3025,7 @@ test("a LinkedIn yes/no and a URL-only request are answered from the saved addre
   assert.equal(valueOf("Please enter only the URL to your LinkedIn profile. Do not include any additional text."), "https://linkedin.com/in/alex-rivera");
   // Asked as a question (SmartRecruiters): the saved addresses, not the AI step's.
   assert.equal(valueOf("What is your LinkedIn profile URL?"), "https://linkedin.com/in/alex-rivera");
+  assert.equal(valueOf("What is your physical address?", { kind: "textarea" }), "100 Mill Way, Blacksburg, Virginia 24060");
   assert.equal(valueOf("What is your personal website URL?", {}, profileSchema.parse({ ...rivera, website: "alexrivera.dev" })), "https://alexrivera.dev");
 });
 

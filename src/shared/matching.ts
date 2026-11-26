@@ -371,8 +371,9 @@ export function deterministicAnswer(
   // without one the applicant is left to say (they may have one unsaved).
   if (/^do you have an? linkedin( profile| account| page)?$/.test(label))
     return profile.linkedin?.trim() ? "Yes" : undefined;
-  // "Physical Address" in one box: the street and where it is.
-  if (/^(physical|residential) address$/.test(label) && /^(text|textarea)$/.test(field.kind) && !field.options.length && profile.address?.trim())
+  // "Physical Address" in one box: the street and where it is. Also asked
+  // "What is your physical address?" (it was left to the AI step).
+  if (/^(what is your )?(physical|residential) address$/.test(label) && /^(text|textarea)$/.test(field.kind) && !field.options.length && profile.address?.trim())
     return [profile.address, profile.city, [profile.state, profile.postalCode].filter(Boolean).join(" ")].map((part) => (part || "").trim()).filter(Boolean).join(", ");
   // Workday's box that shows the preferred-name fields: ticked only for a
   // name that differs from the first one. The model ticked it from a saved
@@ -1174,7 +1175,7 @@ function educationAndPlaceAnswer({ field, profile, label, asked, educationRow }:
   // diploma received. What is the highest level of education you've
   // received?".
   const lastAsk = normalize(field.label.match(/([^.?!]*\?)\s*$/)?.[1] || "");
-  const highestPattern = /^(?:what(?: i|'| )?s )?(?:the |your )?highest (?:level of )?(?:degree|education)(?: (?:that )?you (?:have|ve))?((?: (?:earned|obtained|completed|attained|received|pursuing|in progress))*)$/;
+  const highestPattern = /^(?:what(?: i|'| )?s )?(?:the |your )?highest (?:level of )?(?:degree|education)(?: level)?(?: (?:that )?you (?:have|ve))?((?: (?:earned|obtained|completed|attained|received|pursuing|in progress))*)$/;
   // "Degree you are currently pursuing or have completed" (Oracle): the same
   // highest degree, held or under way.
   const pursuedOrHeld = /^(?:the |your )?degree you are (?:currently )?pursuing or have completed$/;
