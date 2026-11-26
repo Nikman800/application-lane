@@ -15,7 +15,7 @@ import {
   type Profile,
   type Proposal,
 } from "./model";
-import { legalQuestion } from "./questions";
+import { legalQuestion, startDateMonth } from "./questions";
 import { degreeAliases, degreeLevel, expectedGraduation, graduated, highestRow, latestRow, levelRank, studying, thisMonth as currentMonth } from "./education";
 import { localDate, writtenDate } from "./dates";
 import { schoolNames } from "./schools";
@@ -1987,6 +1987,21 @@ export function proposals(fields: Field[], profile: Profile): Proposal[] {
     ...proposalsFor(fields.filter((field) => !completedEducation(field)), profile),
     ...proposalsFor(fields.filter(completedEducation), { ...profile, education: top ? [top] : [] }),
   ];
+}
+
+// A written answer to a start date split in three ("When are you available to
+// start?: Month", Day, Year): "Immediately" or a date is written into the
+// parts as the saved availability would be. Another answer is left.
+export function startPartProposals(answer: string, field: Field, fields: Field[], profile: Profile): Proposal[] {
+  if (!startDateMonth(field)) return [];
+  const stem = field.label.replace(/\s*month\s*$/i, "");
+  const parts = fields.filter((other) => !other.protected && !other.value.trim() && other.label.startsWith(stem));
+  const us = answer.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+  const iso = answer.match(/\b\d{4}-\d{2}-\d{2}\b/);
+  const date = iso ? iso[0] : us ? `${us[3]}-${us[1].padStart(2, "0")}-${us[2].padStart(2, "0")}` : undefined;
+  const availableFrom = date || (/^\s*(available\s+)?(immediately|immediate|asap|as soon as possible|right away|now)\b/i.test(answer) ? "immediately" : undefined);
+  if (!availableFrom) return [];
+  return proposals(parts, { ...profile, availableFrom, answers: [] }).map((proposal) => ({ ...proposal, source: "confirmed-facts" as const }));
 }
 
 // An unticked box the profile answers No to ("Disabled Veteran" for a saved

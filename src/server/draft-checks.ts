@@ -4,6 +4,7 @@ import { type GenerationRequest, type Field, type Profile, type Narrative, type 
 import { namedInOneEntry, sentences } from "./verify";
 import { createHash } from "node:crypto";
 import { shortLabel, applicationQuestion, screenAnswer } from "./answers";
+import { writerLabel } from "../shared/questions";
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { schoolNames } from "../shared/schools";
@@ -127,7 +128,9 @@ export function documentsKey(profile: Profile): string {
   return createHash("sha256").update(JSON.stringify(rest)).digest("hex");
 }
 export function questionKey(field: Field) {
-  const words = field.label.toLowerCase().replace(/\(required\)/gu, " ").replace(/[*\s]+/gu, " ").trim();
+  // Keyed by the question the writer was asked (writerLabel): a split start
+  // date's month named alone is not an answer to the whole date.
+  const words = writerLabel(field).toLowerCase().replace(/\(required\)/gu, " ").replace(/[*\s]+/gu, " ").trim();
   return JSON.stringify([words, field.maxLength ?? null, field.maxWords ?? null]);
 }
 

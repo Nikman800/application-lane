@@ -22,7 +22,7 @@ import { expectedGraduation } from "../shared/education";
 // skill answers them: from its master profile, its question guide and its
 // anti-fabrication rules, with logistics taken from the stored preferences.
 
-import { applicationQuestion, fitAnswerLength, logisticsQuestion as logistics } from "../shared/questions";
+import { applicationQuestion, fitAnswerLength, logisticsQuestion as logistics, writerLabel } from "../shared/questions";
 import { questionTopic } from "../shared/standing";
 import { proposals } from "../shared/matching";
 import { withinTime } from "./deadline";
@@ -303,7 +303,7 @@ export async function writeAnswers(
             pageFields: pageFields(request, new Set(fields)),
             questions: [...refs].map(([id, field]) => ({
               id,
-              label: field.label,
+              label: writerLabel(field),
               required: field.required,
               ...(asksForToolList(field.label) ? { note: TOOL_LIST_NOTE } : {}),
               ...(field.maxLength ? { maxLength: field.maxLength } : {}),

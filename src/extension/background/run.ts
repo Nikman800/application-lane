@@ -3,7 +3,7 @@
 import { bg } from "./state";
 import { type Application, type Profile, type GenerationJob, type Observation, type Proposal, normalize, type Field, type Artifact, type RowPick } from "../../shared/model";
 import { genericTitle, singlePostingUrl } from "../../shared/titles";
-import { canonicalURL, postingGuess, proposals, historyRowMap } from "../../shared/matching";
+import { canonicalURL, postingGuess, proposals, historyRowMap, startPartProposals } from "../../shared/matching";
 import { configEngineEnabled } from "../../engine/mode";
 import { documentKind, type DocumentKind } from "../semantics";
 import { pickTranscript } from "../../shared/transcripts";
@@ -625,6 +625,14 @@ export async function run(app: Application, operation: number) {
           if (!answer.fieldId.startsWith(prefix)) continue;
           const field = frame.observation.fields.find((f) => f.id === answer.fieldId.slice(prefix.length));
           if (!field || field.protected || field.value || leftAsLegal(field.label)) continue;
+          const parts = startPartProposals(answer.value, field, frame.observation.fields, profile);
+          if (parts.length) {
+            for (const part of parts) {
+              noteAiFilled(app, field.label, part.value);
+              early.push(part);
+            }
+            continue;
+          }
           const value = writtenAnswerForDate(answer.value, field, profile);
           if (!value) continue;
           noteAiFilled(app, field.label, value);
@@ -790,6 +798,14 @@ export async function run(app: Application, operation: number) {
       }
       // A date-only box takes a date: "Immediately" is today's, and another
       // answer that is no date is left (writtenAnswerForDate).
+      if (field && !field.protected && !field.value) {
+        const parts = startPartProposals(answer.value, field, frame.observation.fields, profile);
+        if (parts.length) {
+          noteAiFilled(app, field.label, answer.value);
+          pending.push(...parts);
+          continue;
+        }
+      }
       const value = field ? writtenAnswerForDate(answer.value, field, profile) : undefined;
       if (field && !field.protected && !field.value && value) noteAiFilled(app, field.label, value);
       if (field && !field.protected && !field.value && value)

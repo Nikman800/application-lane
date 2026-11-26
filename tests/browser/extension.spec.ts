@@ -18371,6 +18371,44 @@ test("a written Immediately for a date-only box is today's date in its format", 
   await expect(page.locator("[name=dateAvailable]")).toHaveValue(today, { timeout: 15000 });
 });
 
+// Workday asks a start date as three spinbuttons (Month, Day, Year) under one
+// question. The applicant's tailoring notes say "Immediately"; the question
+// was never answered because no one of the three parts is a written question.
+test("a written Immediately for a start date split in Month, Day and Year is today's date", async () => {
+  await context.route(`${atsOrigins[0]}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: `<!doctype html><title>Application Questions</title><main><div data-automation-id="formField-10bc"><fieldset><legend><div data-automation-id="richText"><p><span>When are you available to start?</span></p></div></legend>
+        <div role="group" data-automation-id="dateInputWrapper">${["Month", "Day", "Year"].map((part) => `<div><input role="spinbutton" aria-label="${part}" name="start${part}" data-automation-id="dateSection${part}-input"></div>`).join("/")}</div></fieldset></div></main>`,
+    }),
+  );
+  const checkout = await scratch("lane-tailoring-");
+  await writeFile(join(checkout, "profile.md"), "## Experience\n- Built things.\n");
+  appConfig.tailorDir = checkout;
+  runtimeTailor = async () => {
+    throw new Error("no tailoring in this test");
+  };
+  const asked: string[] = [];
+  const written = async (req: { fields: { id: string; label: string }[] }) => {
+    asked.push(...req.fields.map((f) => f.label));
+    return req.fields.filter((f) => /available to start/i.test(f.label)).map((f) => ({ fieldId: f.id, value: "Immediately", factIds: [] }));
+  };
+  runtimeAnswer = async (req) => ({ answers: await written(req), warnings: [], withheld: [], sources: {} });
+  runtimeGenerate = async (req, p) =>
+    groundNarrative({ resume: p.facts.map((f) => ({ factId: f.id, text: f.text })), coverLetter: [{ text: "", factIds: ["fact-1"] }], answers: await written(req) }, p, req);
+  const page = await context.newPage();
+  await page.goto(`${atsOrigins[0]}/en-US/acme/job/Remote/Engineer_JR1/apply/applyManually`);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  expect(asked.join(" / ")).toMatch(/available to start.*month/i);
+  const today = await page.evaluate(() => {
+    const now = new Date();
+    return [String(now.getMonth() + 1), String(now.getDate()), String(now.getFullYear())];
+  });
+  const part = async (name: string) => Number(await page.locator(`[name=${name}]`).inputValue());
+  await expect.poll(async () => [await part("startMonth"), await part("startDay"), await part("startYear")], { timeout: 15000, message: "the start date's three parts are today's date" }).toEqual(today.map(Number));
+});
+
 // iCIMS' sign-in step asks only for an email and a phone. Both were
 // filled at once, and the step then sat in "Tailoring" for half a minute,
 // waiting for documents it had nowhere to put.

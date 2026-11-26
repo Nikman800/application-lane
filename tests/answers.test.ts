@@ -26,6 +26,7 @@ import { structuredFallbackField } from "../src/shared/questions";
 import { CHECKING_BUDGET_MS, GenerationQueue, postingReadable, unsupportedClaims, wantsLetter } from "../src/server/generation";
 import { evidenceEntries, heldByOneEntry, supportedBy, talksAboutSources, unclaimed, checkers, verifier, secondCheckAvailable, type Draft, type Verdict } from "../src/server/verify";
 import { configSchema, Store } from "../src/server/store";
+import { questionKey } from "../src/server/draft-checks";
 
 const field = (label: string, overrides: Partial<Field> = {}): Field => ({
   id: label,
@@ -210,6 +211,22 @@ test("the model's answers are grounded, cleaned and fitted before use", async (t
     ],
   );
   assert.match(result.warnings.join(" "), /Left "Tell us about your leadership experience" for you: .*Globex/);
+});
+
+test("a start date split in Month, Day and Year is asked of the writer as the whole start date, not its month", async (t) => {
+  const { config, sent } = await endpoint(t, [{ fieldId: "q1", text: "Immediately" }]);
+  const parts = ["Month", "Day", "Year"].map((part) =>
+    field(`When are you available to start?: ${part}`, { kind: "spinbutton", required: false }),
+  );
+  const context = await skillContext(await checkout());
+  await writeAnswers(config, request(parts), { ...profile, availableFrom: undefined }, context, new AbortController().signal);
+  const input = JSON.parse(sent().messages[1].content);
+  const labels = input.questions.map((q: { label: string }) => q.label);
+  assert.equal(labels.length, 1, "the three parts are one question");
+  assert.match(labels[0], /^When are you available to start\? \(the whole start date/, "the writer is asked the whole start date");
+  assert.doesNotMatch(labels[0], /:\s*Month/);
+  // An answer delivered for the month alone (by an earlier build) is not given again.
+  assert.doesNotMatch(questionKey(parts[0]), /:\s*month/, "a delivered answer is keyed by the whole start date");
 });
 
 test("the queue uses the profile's answers in place of the letter request's, and survives their failure", async () => {

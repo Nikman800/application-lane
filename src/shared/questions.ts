@@ -1,5 +1,6 @@
 import { normalize, type Field, type LegalDetailKey } from "./model";
 import { missingOptionalProfileField, profileFactQuestion } from "./profile-facts";
+import { questionTopic } from "./standing";
 
 const identity =
   /^(first|last|full|legal|preferred|middle|given|family)?\s*name\b|\be-?mail\b|\bphone\b|\bmobile\b|linkedin|github|\bwebsite\b|portfolio|\burl\b|\baddress\b|^(city|state|province|zip|postal|country)\b|twitter|behance|dribbble|pronoun|\bzip\b|postal code|post code|street|residen(ce|tial) address/i;
@@ -17,7 +18,29 @@ const manualOnly =
 export const logisticsQuestion =
   /salary|compensation|pay (expectation|requirement|range)|hourly (rate|pay)|start date|when can you start|availab|notice period|relocat|remote|on-?site|hybrid|work authori[sz]|sponsor|\bvisa\b/i;
 
+// The Month box of a start date split in three after its question (Workday's
+// "When are you available to start?: Month" beside Day and Year): one
+// question, asked of the written answer once, for the Month box.
+export function startDateMonth(field: Pick<Field, "label" | "kind" | "value" | "protected">): boolean {
+  return (
+    !field.protected &&
+    !field.value.trim() &&
+    ["spinbutton", "text", "number"].includes(field.kind) &&
+    /(?:\?\s*:?|[.:]\s*:|\bdate\s*:|\bstart\??\s*:)\s*month\s*$/i.test(field.label) &&
+    questionTopic(field.label) === "start"
+  );
+}
+
+// The label a writer is asked for a field: the Month box of a split start
+// date stands for the whole question, answered as a date or "Immediately"
+// (asked as "…: Month", a model named a month and nothing else).
+export function writerLabel(field: Pick<Field, "label" | "kind" | "value" | "protected">): string {
+  if (!startDateMonth(field)) return field.label;
+  return `${field.label.replace(/\s*:?\s*month\s*$/i, "")} (the whole start date: answer with a date as mm/dd/yyyy, or "Immediately")`;
+}
+
 export function applicationQuestion(field: Field): boolean {
+  if (startDateMonth(field)) return true;
   if (field.protected || field.value.trim() || field.options.length)
     return false;
   if (!["textarea", "text"].includes(field.kind)) return false;
