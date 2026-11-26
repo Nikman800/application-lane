@@ -1189,6 +1189,9 @@ test("a saved answer covers the same standing question in other words, and no ot
   assert.equal(value("What are your hourly pay requirements", { kind: "number" }), undefined);
   assert.equal(value("Interns attend an on-site summit in Arlington and are able to join weekly sessions online. Which cohort are you applying to?", { kind: "select", options: ["Yes", "No"] }), undefined);
   assert.equal(value("This is an in-person role at our Lehi HQ. Are you able and willing to commute and/or relocate to Utah?", { kind: "select", options: ["Yes", "No"] }), "Yes");
+  // Workable's radio of capitals: relocating or commuting to the job's city
+  // is the saved willingness to relocate (it was left to the AI step).
+  assert.equal(value("Are you willing to relocate or able to commute to Atlanta, GA?", { kind: "radio", options: ["YES", "NO"] }), "YES");
   // "Either of these" is answered by a citizen, and weekday hours by
   // full-time availability.
   const more = profileSchema.parse({ ...saved, answers: [...saved.answers, { question: "Are you available to work full-time?", answer: "Yes" }] });

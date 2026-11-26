@@ -792,6 +792,15 @@ export function profileAnswer(
   if (/^(please )?(provide|enter)\b.*\bpermanent address\b/.test(label)) return;
   // (A commute to the job's own location is answered from where the job is
   // and where the applicant lives: standing.ts' "commute".)
+  // "Willing to relocate or able to commute to Atlanta, GA?": either one
+  // will do, so an applicant who will relocate says yes (Workable's YES/NO
+  // radio was left to the AI step). One who will not is left to the
+  // commute's own answer below.
+  if (/\brelocat\w*\b.*\bor\b.*\bcommut|\bcommut\w*\b.*\bor\b.*\brelocat/.test(label)) {
+    const willing = standingAnswer({ ...field, kind: "radio", label: "Are you willing to relocate?", question: undefined, options: ["Yes", "No"] }, profile);
+    const yes = field.options.find((option) => normalize(option) === "yes");
+    if (willing && normalize(willing.value) === "yes" && (yes || !field.options.length)) return { value: yes || "Yes" };
+  }
   if (/\bable to commute\b|\bwilling and able\b.*\bon site\b/.test(label)) return questionTopic(field.label) === "commute" ? standingAnswer(field, profile) : undefined;
   // "What is your preferred geographic location?" as a box to type in: where
   // the applicant would work, not how. A model wrote "I prefer onsite work and
