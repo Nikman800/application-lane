@@ -10913,6 +10913,12 @@ test("Oracle education entries are each filled from lists and saved before the n
           block.append(form);
           const school = form.querySelector('#educationalEstablishment');
           school.addEventListener('input', () => showList(school, school.value ? [school.value] : []));
+          // Major is a searched list too (recordings): its matches are options, and the typed text stays only once one is picked.
+          const major = form.querySelector('#major');
+          major.addEventListener('input', () => {
+            showList(major, major.value ? [major.value] : []);
+            for (const item of lists.children) item.setAttribute('role', 'option');
+          });
           for (const id of ['month-startDate', 'month-endDate']) { const input = form.querySelector('#' + id); input.addEventListener('click', () => showList(input, months)); }
           for (const id of ['year-startDate', 'year-endDate']) { const input = form.querySelector('#' + id); input.addEventListener('click', () => showList(input, years)); }
           const graduated = form.querySelector('#graduated');
@@ -11398,6 +11404,20 @@ test("Oracle's profile-item Add button that stays disabled while the draft is st
               + '<div class="profile-item-footer"><div class="app-dialog__buttons-bar"><button class="button app-dialog__footer-button cancel-btn"><span class="button__label">Cancel</span></button><button class="button app-dialog__footer-button save-btn"><span class="button__label">Add Education</span></button></div></div></div>' : '')
             + '</div></div>';
           block.querySelector('.profile-add-item button').addEventListener('click', () => { open = true; render(); });
+          // Major and School are searched lists (recordings): their matches are drawn as options once something is typed.
+          for (const input of block.querySelectorAll('.profile-item-content input')) input.addEventListener('input', () => {
+            const lists = document.getElementById('lists') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'lists' }));
+            lists.innerHTML = '';
+            // The site lists only the names it holds ("Virginia Tech", not the long wording).
+            for (const name of ['Penn State', 'Virginia Tech', 'Computer Science', 'Data Analytics'].filter((name) => name.toLowerCase() === input.value.toLowerCase())) {
+              const item = document.createElement('div');
+              item.setAttribute('role', 'option');
+              item.className = 'cx-select__list-item';
+              item.textContent = name;
+              item.addEventListener('click', () => { input.value = name; lists.innerHTML = ''; });
+              lists.append(item);
+            }
+          });
           block.querySelector('.save-btn')?.addEventListener('click', () => {
             window.saved.push([...block.querySelectorAll('.profile-item-content input')].map((input) => input.value).join(' / '));
             setTimeout(() => { open = false; tiles++; enabledAt = Date.now() + 3500; render(); setTimeout(() => { if (!open) render(); }, 3600); }, 400);
