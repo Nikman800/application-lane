@@ -4,14 +4,14 @@ import { signatureField, signingAllowed, signatureLeftReason } from "../../engin
 import { tell, paylocityAddressBox, ripplingLocation, radioGroup, associatedNativeChoice, takesSeveralPicks } from "../content-dom";
 import { tdsDateBox, pickTdsDate } from "../../engine/page/tds-date-picker";
 import { pickOption } from "../../shared/answers";
-import { writable, isToggleChoice, toggleGroup, wfnDropdown } from "../semantics";
+import { writable, isToggleChoice, toggleGroup, wfnDropdown, placePickerBox } from "../semantics";
 import { fillClick } from "../../engine/page/click-gate";
 import { type Proposal, normalize } from "../../shared/model";
 import { cs } from "./state";
 import { Command, calendarBox, legacyReactSelect, listButton, pause } from "./core";
 import { changed, guardedRecord, valid } from "./guards";
 import { awaitSiteSave, documentId, nodeRecords, ownLabel, records } from "./tracking";
-import { checkControl, clickBox, fillPaylocityAddress, fillRipplingLocation, selectCustom, typeTrusted } from "./choose";
+import { checkControl, clickBox, fillPaylocityAddress, fillPlacePicker, fillRipplingLocation, selectCustom, typeTrusted } from "./choose";
 import { valueOf } from "./controls";
 import { inspect } from "./inspect";
 
@@ -83,6 +83,13 @@ export async function apply(command: Command) {
       // it is set as a select.
       if (paylocityAddressBox(element)) {
         for (const settled of await fillPaylocityAddress(command, proposal, record)) typedWhole.add(settled);
+        await awaitSiteSave(savesBefore);
+        record.fillWarning = undefined;
+        results.push({ id: proposal.fieldId, ok: true });
+        continue;
+      }
+      if (placePickerBox(element)) {
+        await fillPlacePicker(command, proposal, record);
         await awaitSiteSave(savesBefore);
         record.fillWarning = undefined;
         results.push({ id: proposal.fieldId, ok: true });

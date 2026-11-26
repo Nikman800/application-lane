@@ -192,6 +192,12 @@ export function confirmationInPlace(): boolean {
     ),
   ].filter(shown);
   const says = (text: string) => text.length > 0 && text.length <= 200 && confirmationWording.test(text);
+  // A value a label names is a field's value, not a message: SuccessFactors'
+  // candidate profile lists the applicant's earlier applications, each with
+  // "Status" labelling a span "Application Received", and that list once
+  // marked the application on the tab submitted when its form was left.
+  const labelledValue = (element: Element) =>
+    !!element.id && !!document.querySelector(`label[for="${CSS.escape(element.id)}"]`);
   // The page's own title heading saying nothing but that it went in
   // ("Application Received!") is the page's subject, boxes or not: an
   // employer's page a Lever form sent the tab to after Submit also held a
@@ -214,7 +220,7 @@ export function confirmationInPlace(): boolean {
   // block holding a whole posting is never read as one message.
   return [...document.querySelectorAll("*")].filter((element) => /^(div|span)$|-/i.test(element.localName)).some((element) => {
     const own = [...element.childNodes].filter((node) => node.nodeType === Node.TEXT_NODE).map((node) => node.textContent || "").join(" ");
-    return says(own.replace(/\s+/g, " ").trim()) && shown(element);
+    return says(own.replace(/\s+/g, " ").trim()) && shown(element) && !labelledValue(element);
   });
 }
 

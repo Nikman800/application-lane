@@ -2,6 +2,8 @@
 // Split out of content.ts as it was; see content.ts for how it starts.
 import { requestMainWorld } from "../../engine/page/bridge";
 import { nameVariants } from "../../shared/matching";
+import globals from "../../engine/config/globals.json" with { type: "json" };
+import { findRegion, type Geography } from "../../shared/geography";
 import { type Proposal, normalize } from "../../shared/model";
 import { controlledList, fabricToggle, fabricMenu, fabricOptions, fabricDrawn, pressFabric, ashbyToggle, successFactorsPicklist, ripplingSelect, shadowedOptions, deepOption, pressOutside, splChosen, picksOf, closeSuccessFactorsList, menuEntries } from "../content-dom";
 import { writable, rendered, wfnDropdown } from "../semantics";
@@ -1424,6 +1426,62 @@ export async function fillRipplingLocation(command: Command, proposal: Proposal,
   if (choice && !plain(element.value).startsWith(plain(wanted)))
     throw new Error("The location was not kept. Pick it from the site's suggestions.");
   if (!choice) throw new Error("No suggestion matched the location. Pick it from the site's suggestions.");
+  record.last = valueOf(element);
+  record.revision++;
+  record.automationWritten = true;
+}
+
+// A Google place picker (gmpx-place-picker, placePickerBox): the saved city
+// is typed in its box inside the component, and the suggestion in the
+// page's .pac-container whose query is that city and whose rest names the
+// saved state (by code or by name) is picked. The site stores the place
+// (its hidden latitude and longitude) only on a pick.
+export async function fillPlacePicker(command: Command, proposal: Proposal, record: RecordEntry) {
+  const element = record.element as HTMLInputElement;
+  const parts = proposal.value.split(",").map((part) => part.trim()).filter(Boolean);
+  const city = parts[0] || "";
+  if (!city) throw new Error("No saved city to search for.");
+  const stateWords = new Set(parts.slice(1).filter((part) => !/^(usa?|united states( of america)?)$/i.test(part)).flatMap((part) => {
+    const region = findRegion(globals as Geography, part);
+    return region ? [region.code, ...region.names].map(normalize) : [normalize(part)];
+  }));
+  const safe = () => valid(command) && !record.protected && element.isConnected;
+  const typed = await typeTrusted(command, element, city, safe, new AbortController().signal, true, false, true, true);
+  if (!safe()) throw new Error("Custom selection was superseded.");
+  if (!typed || element.value !== city) {
+    element.focus({ preventScroll: true });
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(element, city);
+    element.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  }
+  record.writePendingAt = performance.now();
+  const items = () => [...document.querySelectorAll<HTMLElement>(".pac-container .pac-item")].filter((item) => rendered(item));
+  const queryOf = (item: HTMLElement) => normalize(item.querySelector(".pac-item-query")?.textContent || "");
+  const fits = (item: HTMLElement) => {
+    if (queryOf(item) !== normalize(city)) return false;
+    if (!stateWords.size) return true;
+    const rest = normalize((item.textContent || "").replace(item.querySelector(".pac-item-query")?.textContent || "", ""));
+    return rest.split(" ").some((word) => stateWords.has(word)) || [...stateWords].some((state) => state.includes(" ") && rest.includes(state));
+  };
+  let choice: HTMLElement | undefined;
+  for (let waited = 0; waited < 6_000 && safe(); waited += 150) {
+    choice = items().find(fits);
+    if (choice) break;
+    await pause(150);
+  }
+  if (!safe()) throw new Error("Custom selection was superseded.");
+  cs.searchSettle = { element, until: performance.now() + 2000 };
+  if (!choice) {
+    element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true, cancelable: true, composed: true }));
+    pressOutside();
+    throw new Error("No suggestion matched the city. Pick it from the site's suggestions.");
+  }
+  for (const type of ["mousedown", "mouseup", "click"])
+    choice.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window, button: 0 }));
+  await pause(300);
+  if ((element.getRootNode() as ShadowRoot).activeElement === element) element.blur();
+  await pause(0);
+  if (!safe()) throw new Error("Custom selection was superseded.");
+  if (!normalize(element.value).startsWith(normalize(city))) throw new Error("The city was not kept. Pick it from the site's suggestions.");
   record.last = valueOf(element);
   record.revision++;
   record.automationWritten = true;

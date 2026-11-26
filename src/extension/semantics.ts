@@ -24,6 +24,24 @@ export function fieldWordLimit(element: Element, label: string): number | undefi
   return wordLimit(texts.join(" "));
 }
 
+// A Google place picker (<gmpx-place-picker>): its visible box lives in the
+// component's open shadow root and is named by a label before the component
+// whose "for" points at a hidden input (the answer's stored field).
+export const placePickerBox = (element: Element): element is HTMLInputElement =>
+  element instanceof HTMLInputElement && element.classList.contains("pac-target-input") &&
+  (element.getRootNode() as ShadowRoot).host?.localName === "gmpx-place-picker";
+function placePickerLabel(element: HTMLInputElement): string {
+  const host = (element.getRootNode() as ShadowRoot).host;
+  const scope = host?.parentElement;
+  if (!host || !scope) return "";
+  for (const label of scope.querySelectorAll<HTMLLabelElement>("label[for]")) {
+    if (!(label.compareDocumentPosition(host) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+    const target = (host.getRootNode() as Document | ShadowRoot).getElementById(label.htmlFor);
+    if (target instanceof HTMLInputElement && target.type === "hidden") return label.textContent || "";
+  }
+  return "";
+}
+
 export type Control =
   HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLElement;
 const controlSelector =
@@ -938,6 +956,10 @@ function ownLabelRaw(element: Control): string {
     const shell = element.closest(".react-select");
     const title = shell?.previousElementSibling;
     if (title?.matches("label") && !(title as HTMLLabelElement).htmlFor && labelText(title)) return labelText(title);
+  }
+  if (placePickerBox(element)) {
+    const asked = cleanLabel(placePickerLabel(element));
+    if (asked) return asked;
   }
   const cellAsked = icimsCellQuestion(element);
   if (cellAsked) return cellAsked;

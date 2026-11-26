@@ -9298,6 +9298,39 @@ test("a confirmation drawn in a message box div marks the application submitted"
   await expect.poll(async () => (await state()).applications[0].workflowStage, { timeout: 20000 }).toBe("submitted");
 });
 
+// SuccessFactors: after its form was left, the tab showed the candidate
+// profile, which lists the applicant's earlier applications as cards, each
+// with a "Status" label naming a span "Application Received". That status of
+// another job was read as this application's confirmation, and it was marked
+// submitted though it never was.
+test("a status of Application Received in a list of earlier applications does not mark the application submitted", async () => {
+  await context.route(`${origin}/profile-applications`, (route) =>
+    route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: `<!doctype html><title>Career Opportunities: Apply</title><h1>Engineering Intern</h1>
+        <div id="apply"><form onsubmit="return false"><label>Email<input name="email" type="email"></label><label>Phone<input name="phone"></label><button type="submit">Submit</button></form></div>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/profile-applications`);
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  await page.evaluate(() => {
+    const card = (n: number, title: string, status: string) =>
+      `<div class="fieldComponentInput"><div role="link" tabindex="0" class="rcmjobAppCanCard">` +
+      `<div class="jobAppCandInfo"><label for="${n}:_jobTitle" class="hiddenAriaContent" aria-hidden="true">Job Title</label><span id="${n}:_jobTitle"><span role="heading" aria-level="3" class="sfLabel jobTitle">${title}</span></span></div>` +
+      `<div class="jobAppCandInfo"><label for="${n}:_jobStatus" class="hiddenAriaContent" aria-hidden="true">Status</label><span id="${n}:_jobStatus">${status}</span></div>` +
+      `<div class="jobAppCandInfo"><label for="${n}:_jobLastModified" class="hiddenAriaContent" aria-hidden="true">Last Modified</label><span id="${n}:_jobLastModified">11/07/2026</span></div></div></div>`;
+    document.title = "Career Opportunities: My Profile";
+    document.getElementById("apply")!.outerHTML =
+      "<h2>My Applications</h2><div>You've applied to 2 jobs.</div>" +
+      card(161, "Software Intern", "Application Received") + card(171, "Test Engineer", "Requisition Closed");
+  });
+  await page.waitForTimeout(8000);
+  expect((await state()).applications[0].workflowStage, "a status in the list of earlier applications").not.toBe("submitted");
+});
+
 // ADP Workforce Now: after Submit, its confirmation is an <sdf-alert>
 // "Application Submitted!" with the text as its own, and the page's
 // "Thank You! We have received your application." sits behind a modal offering
@@ -24575,6 +24608,70 @@ test("Rippling's Location box has its suggestion picked, or its list closed when
   expect(await none.evaluate(() => (window as any).picks)).toBe(0);
   expect(await none.locator("[data-places]").count()).toBe(0);
   expect(await none.evaluate(() => (window as any).submissions)).toBe(0);
+});
+
+// A Google place picker (gmpx-place-picker): the visible box sits in the
+// component's open shadow root, the question's label points at a hidden
+// input, and the places are drawn in a .pac-container outside the form. The
+// box read as an unlabelled field and was left; the hidden latitude is set
+// only when a place is picked.
+test("A Google place picker's city search is labelled by its question and has the matching place picked", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, city: "Blacksburg", state: "Virginia" } });
+  await context.route(`${origin}/place-picker`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Form</title><form onsubmit="window.submissions++; return false">
+        <input type="hidden" name="longitude" value=""><input type="hidden" name="latitude" value="">
+        <div class="location-field"><label class="location-field-label" id="loc-label" for="loc-hidden"><span>Your Location <span>(Search by City)</span></span></label>
+        <div><input type="hidden" name="location" id="loc-hidden" value=""></div></div>
+        <gmpx-place-picker class="lf__place-picker" type="(cities)"></gmpx-place-picker>
+        <button type="submit">Submit application</button></form>
+        <script>
+          window.submissions = 0;
+          class Picker extends HTMLElement {
+            constructor() {
+              super();
+              const root = this.attachShadow({ mode: "open" });
+              root.innerHTML = '<div class="container"><input placeholder="" class="pac-target-input" autocomplete="off"></div>';
+              const input = root.querySelector("input");
+              let timer;
+              const close = () => document.querySelectorAll(".pac-container").forEach((box) => box.remove());
+              input.addEventListener("input", () => {
+                clearTimeout(timer); close();
+                const typed = input.value;
+                if (!typed) return;
+                timer = setTimeout(() => {
+                  const box = document.createElement("div");
+                  box.className = "pac-container";
+                  for (const [state, lat] of [["TX", "31.5"], ["VA", "37.2296"]]) {
+                    const item = document.createElement("div");
+                    item.className = "pac-item";
+                    item.innerHTML = '<span class="pac-icon"></span><span class="pac-item-query"><span class="pac-matched">' + typed + '</span></span><span>' + state + ', USA</span>';
+                    item.addEventListener("mousedown", () => {
+                      input.value = typed + ", " + state + ", USA";
+                      document.querySelector('input[name="latitude"]').value = lat;
+                      document.querySelector('input[name="longitude"]').value = "-80.4";
+                      close();
+                    });
+                    box.append(item);
+                  }
+                  document.body.append(box);
+                }, 400);
+              });
+            }
+          }
+          customElements.define("gmpx-place-picker", Picker);
+        </script></form>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${origin}/place-picker`);
+  await enqueue([page]);
+
+  await expect(page.locator('input[name="latitude"]')).toHaveValue("37.2296", { timeout: 45000 });
+  expect(await page.evaluate(() => document.querySelector("gmpx-place-picker")!.shadowRoot!.querySelector("input")!.value)).toBe("Blacksburg, VA, USA");
+  expect(await page.locator(".pac-container").count()).toBe(0);
+  expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
 });
 
 // iCIMS' own education blocks: the boxes are
