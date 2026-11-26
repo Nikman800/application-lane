@@ -5,7 +5,7 @@ import { Command, pause } from "../core";
 import { records, nodeRecords, fieldLabel, documentId, lockedLabels, lockOrigins } from "../tracking";
 import { cs } from "../state";
 import { guardedRecord, valid, guard, changed } from "../guards";
-import { replacesForm, currentFileName, uploadError } from "../../semantics";
+import { replacesForm, currentFileName, listedFileName, uploadError } from "../../semantics";
 import { valueOf, hasEditLock, markEngineWrite, elementLockKeys, applicantLock } from "../controls";
 import { inspect } from "../inspect";
 import { checkControl } from "../choose";
@@ -26,7 +26,7 @@ const held = records.get(command.fieldId!);
 // account's resume) changed the value outside a fill, and that is locked
 // under the field's name: a file shown that way is the site's too, not one
 // the applicant chose.
-if (command.replaceExisting && held?.protected) {
+if (command.replaceExisting && held?.protected && !listedFileName(held.element)) {
   const keys = held.element instanceof HTMLInputElement && held.element.type === "file" ? elementLockKeys(held.element, held.label) : [];
   const siteLocked = keys.filter((key) => lockedLabels.has(key) && !applicantLock(key));
   if (held.protectedBy === "existing value" ||
