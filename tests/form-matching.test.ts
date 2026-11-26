@@ -2422,6 +2422,29 @@ test("a related-to-an-employee question is No unless a reference or a job is at 
   assert.equal(employed(profileSchema.parse({ ...profile, work: [{ organization: "Acme", title: "Analyst", startDate: "2020-01", endDate: "2021-01", location: "", details: "" }] })), undefined);
 });
 
+// Avature: an education row's "Type of degree" list names each degree with its
+// abbreviation; "Masters of Science" matched none and went to the AI step.
+test("an education row's degree list with abbreviations takes the saved degree's own entry", () => {
+  const options = ["Bachelor of Arts (B.A.)", "Bachelor of Science (B.S.)", "Master of Arts (M.A.)", "Master of Science (M.S.)", "Masters of Criminal Justice (M.C.J.)", "None"];
+  const p = profileSchema.parse({ ...profile, education: [
+    { organization: "Penn State", title: "Masters of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-12", location: "", details: "" },
+    { organization: "Virginia Tech", title: "Bachelors of Science", fieldOfStudy: "Computer Science", startDate: "2020-08", endDate: "2024-06", location: "", details: "" },
+  ] });
+  const ask = (index: number) => proposals([field("Type of degree", { kind: "select", options, section: "Education History", index })], p)[0]?.value;
+  assert.equal(ask(0), "Master of Science (M.S.)");
+  assert.equal(ask(1), "Bachelor of Science (B.S.)");
+});
+
+// Greenhouse: "Now or in the future will you need immigration assistance?"
+// was left unanswered.
+test("a need for immigration assistance is answered as sponsorship", () => {
+  const ask = (sponsorship: string) => proposals([field("Now or in the future will you need immigration assistance?", { kind: "combobox", options: ["Yes", "No"] })], profileSchema.parse({ ...profile, sponsorship }))[0]?.value;
+  assert.equal(ask("No"), "No");
+  assert.equal(ask("Yes"), "Yes");
+  // Greenhouse's list has no options until opened.
+  assert.equal(proposals([field("Now or in the future will you need immigration assistance?", { kind: "combobox", options: [] })], profileSchema.parse({ ...profile, sponsorship: "No" }))[0]?.value, "No");
+});
+
 // A field-of-study list of broad areas was left to the AI step.
 test("a field-of-study list of broad areas takes the computer science area for a computing degree", () => {
   const options = ["Business & Management", "Engineering (Non-Computer Science)", "Engineering – Computer Science & Technology", "Physical Sciences", "Other"];
@@ -3048,6 +3071,8 @@ test("a LinkedIn yes/no and a URL-only request are answered from the saved addre
   // Asked as a question (SmartRecruiters): the saved addresses, not the AI step's.
   assert.equal(valueOf("What is your LinkedIn profile URL?"), "https://linkedin.com/in/alex-rivera");
   assert.equal(valueOf("What is your physical address?", { kind: "textarea" }), "100 Mill Way, Blacksburg, Virginia 24060");
+  // Lever: the street named among the parts asked was left out.
+  assert.equal(valueOf("Please enter your address (Street Address, City, State, Zip Code)", { kind: "text" }), "100 Mill Way, Blacksburg, Virginia 24060");
   assert.equal(valueOf("What is your personal website URL?", {}, profileSchema.parse({ ...rivera, website: "alexrivera.dev" })), "https://alexrivera.dev");
 });
 

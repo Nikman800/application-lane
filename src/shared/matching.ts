@@ -216,8 +216,18 @@ export function deterministicAnswer(
     )
       return row.organization;
     // iCIMS: "Type of Degree (High School/GED/Bachelor/etc.)".
-    if (/^(job )?title$|^position$|^degree( dropdown)?$/.test(label) || (/education/.test(section) && /^type of degree\b/.test(label)))
+    if (/^(job )?title$|^position$|^degree( dropdown)?$/.test(label) || (/education/.test(section) && /^type of degree\b/.test(label))) {
+      // A list naming each degree with its abbreviation ("Master of Science
+      // (M.S.)", beside "Masters of Criminal Justice (M.C.J.)"): the one whose
+      // name is the saved degree's. "Masters of Science" matched none and was
+      // left to the AI step.
+      if (/education/.test(section) && field.options.length && row.title) {
+        const names = new Set(degreeAliases(row.title).map(normalize));
+        const named = field.options.filter((option) => names.has(normalize(option.replace(/\s*\([^)]*\)\s*$/, ""))));
+        if (named.length === 1) return named[0];
+      }
       return row.title;
+    }
     if (/^(major|discipline|field of study)( dropdown)?$|^major area of study$/.test(label))
       return row.fieldOfStudy;
     if (/^(start|from)( date)?( month| day| year)?$/.test(label))
@@ -510,7 +520,10 @@ function screeningQuestion(
     // "…will/might you need [the employer] to file an H-1B transfer (or other
     // status) OR register you in the H-1B lottery to work in the U.S.?"
     // (iCIMS): a visa the employer files is sponsorship.
-    /\b(file|submit)\b( \w+){0,3} h ?1 ?b\b|\bh ?1 ?b (lottery|cap|registration|transfer|petition)\b/.test(label);
+    /\b(file|submit)\b( \w+){0,3} h ?1 ?b\b|\bh ?1 ?b (lottery|cap|registration|transfer|petition)\b/.test(label) ||
+    // "Now or in the future will you need immigration assistance?"
+    // (Greenhouse) was left unanswered.
+    /\b(need|needs|require|requires)\b( \w+){0,2} (immigration|visa) (assistance|support|help)\b/.test(label);
   if (sponsorship) {
     const without = /\bwithout\b/.test(label);
     // "Are you authorized to work here, and will you need sponsorship?" asks
@@ -1479,7 +1492,11 @@ function experienceAndDemographicsAnswer({ field, profile, label, saved, asked }
   // the city, state, and zip code you'd be moving from" was answered "Yes", as relocation is.
   if ((field.kind === "text" || field.kind === "textarea") && profile.city &&
       (/\bcity\b.*\bstate\b.*\b(zip|postal)\b/.test(label) || /\b(moving|relocating) from\b/.test(label))) {
-    const place = [profile.city, [profile.state, profile.postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+    // A label that also names the street ("Please enter your address (Street
+    // Address, City, State, Zip Code)") asks for the street too: it was given
+    // the city, state and code alone.
+    const street = /\bstreet\b/.test(label) && profile.address?.trim() ? profile.address.trim() : "";
+    const place = [street, profile.city, [profile.state, profile.postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
     return { value: place };
   }
   // Years with one skill or in one kind of work ("…professional work
@@ -1764,7 +1781,9 @@ function screeningAnswer({ field, profile, label, qualified, saved, immigration,
   // Remote menus have no options until opened. The confirmed binary answer
   // can reach that menu; the page still requires one exact matching option.
   const remoteBinary = ["combobox", "listbox"].includes(field.kind) &&
-    /^(are|do|will|would|can)\b/.test(normalize(askedPart(field.label))) &&
+    // Also after "Now or in the future" ("Now or in the future will you need
+    // immigration assistance?", a Greenhouse list read only when opened).
+    /^((now|currently|today) or in the future )?(are|do|will|would|can)\b/.test(normalize(askedPart(field.label))) &&
     // "…to work in the country in which you are applying" names no country
     // (one employer's Greenhouse form); "which country" asks one.
     !/\b(temporary|present employer|current employer|country|location|netherlands|portugal|proof|document|permit type)\b/.test(
