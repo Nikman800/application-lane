@@ -42,13 +42,18 @@ export function human(event: Event) {
   if (event.isTrusted && event.type === "change" && since !== undefined && cs.applicantGesture < since && !actingOn(event.composedPath())) return;
   if (
     cs.searchSettle &&
-    performance.now() < cs.searchSettle.until &&
     event.isTrusted &&
     !userAttention() &&
     ["input", "change"].includes(event.type) &&
     event.composedPath().includes(cs.searchSettle.element)
-  )
-    return;
+  ) {
+    // Oracle leaves School focused while it fills the dates and saves the
+    // row. The browser can commit the already recorded selection on blur
+    // after the short search window has elapsed.
+    const record = nodeRecords.get(cs.searchSettle.element as HTMLElement);
+    if (performance.now() < cs.searchSettle.until ||
+        (event.type === "change" && record?.automationWritten && !record.protected && valueOf(record.element) === record.last)) return;
+  }
   // A modifier pressed alone changes nothing on the page: the applicant's
   // Win+Shift+S for a screenshot, landing on the question the fill had
   // focused, paused a Workday fill as their edit (report 45c45d09).

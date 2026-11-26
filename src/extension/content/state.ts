@@ -48,8 +48,8 @@ export const cs = {
   // A search box our real Enter searched: the site answers on its own a
   // moment later, moving focus into its results, and the box's trusted
   // input or change that follows is still ours (one employer's field of study paused
-  // the fill as the applicant's edit). Only those two events,
-  // only on that box, only briefly, and never while the applicant is active.
+  // the fill as the applicant's edit). After that window, a change can
+  // still commit the box's already recorded automated value on blur.
   searchSettle: undefined as { element: Element; until: number } | undefined,
   applicantGesture: -Infinity,
   applicantControl: undefined as Element | undefined,

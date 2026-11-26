@@ -12031,11 +12031,13 @@ test("Oracle's work and education timeline School entry that names the school wi
           form.querySelector('.save-btn').addEventListener('click', () => {
             const name = kind === 'education' ? picked(form, 'input[name="educationalEstablishment"]') : form.querySelector('input[name="employerName"]').value;
             window.saved.push(kind + ': ' + name + ' | ' + entryDates(form));
+            // School keeps focus until the saved row is removed, so its
+            // native change arrives after the fill's search window.
             setTimeout(() => {
               slot.innerHTML = '';
               document.getElementById('items').insertAdjacentHTML('beforeend', '<div class="timeline-item">' + name + '</div>');
               actions.classList.remove('work-and-education-timeline__actions-container--disabled');
-            }, 400);
+            }, 1000);
           });
         };
         document.getElementById('timeline-add-experience-button').addEventListener('click', () => open('experience'));

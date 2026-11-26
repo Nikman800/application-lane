@@ -187,8 +187,11 @@ export async function run(app: Application, operation: number) {
     await persist();
     return;
   }
-  const eligible = observed.filter(({ observation }) => applicationForm(observation));
   const repairAttempt = app.attempts.at(-1);
+  // An explicitly requested fill can start on a step that only asks for a
+  // named document. A repair must first identify its application form.
+  const eligible = observed.filter(({ observation }) =>
+    applicationForm(observation, { allowNamedUpload: !repairAttempt?.repair }));
   if (repairAttempt?.repairDocument) {
     if (!eligible.some(({ observation }) => observation.documentId === repairAttempt.repairDocument)) {
       app.missing = ["The application document changed after the repair check. Inspect it before refilling."];

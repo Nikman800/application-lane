@@ -58,13 +58,17 @@ export function differentApplicationStep(expected: string, current: string): boo
   }
 }
 
-export function applicationForm(page: Observation): boolean {
+export function applicationForm(page: Observation, { allowNamedUpload = false } = {}): boolean {
   const url = new URL(page.url);
-  if (knownNonApplication(page.url) || page.blockers.some((blocker) => /^Sign in or create/.test(blocker))) return false;
+  if (knownNonApplication(page.url)) return false;
+  const applicationPath = /\/(apply|application|applications)(\/|$)/i.test(url.pathname);
+  // Some application forms also let applicants create a password. Their
+  // application controls are fillable while sign-in and submission stay manual.
+  if (page.blockers.some((blocker) => /^Sign in or create/.test(blocker)) && !page.applicationContainer) return false;
   return Boolean(page.canAdvance || page.atReview || page.addable?.length || page.foldedSections ||
     page.documentSlots?.length || page.uploadSlots?.length ||
     page.pendingFields?.length ||
-    page.fields.some((field) => field.kind !== "file" && !/^(search|filter|keyword|job alert)(s| jobs)?$/i.test(field.label.trim())) ||
-    (page.fields.some((field) => field.kind === "file") &&
-      (page.applicationContainer || /\/(apply|application|applications)(\/|$)/i.test(url.pathname))));
+    page.fields.some((field) => field.kind === "file"
+      ? Boolean(page.applicationContainer || applicationPath || (allowNamedUpload && field.documentKind))
+      : !/^(search|filter|keyword|job alert)(s| jobs)?$/i.test(field.label.trim())));
 }

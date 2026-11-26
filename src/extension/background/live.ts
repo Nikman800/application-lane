@@ -28,7 +28,7 @@ async function inspectApplication(app: Application) {
   const documents = page.frames.map(({ observation }) => observation);
   const form = knownNonApplication(page.tab.url || app.url) ||
     postingMismatch(page.tab.url || app.url, posting) || documents.some((document) => postingMismatch(document.url, posting))
-    ? undefined : documents.find(applicationForm);
+    ? undefined : documents.find((document) => applicationForm(document));
   return { page, documents, form };
 }
 

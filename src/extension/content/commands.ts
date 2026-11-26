@@ -50,7 +50,8 @@ export async function executeCommand(command: Command): Promise<unknown> {
   if (!valid(command)) throw new Error(`Operation is paused or stale (${command.type}: ${invalidCommandReason(command) || "unknown"})`);
   if (["APPLY", "ATTACH", "CONFIG_FILL", "OPTIONS"].includes(command.type) && knownNonApplication(location.href))
     throw new Error("This page is outside the application form.");
-  if ((command.type === "ATTACH" || (command.type === "CONFIG_FILL" && command.uploads)) && !applicationForm(inspect()))
+  if ((command.type === "ATTACH" || (command.type === "CONFIG_FILL" && command.uploads)) &&
+      !applicationForm(inspect(), { allowNamedUpload: true }))
     throw new Error("Document attachment requires a recognized application form.");
   if (command.type === "AUTHORIZE_MAIN") return handleAuthorizeMain(command);
   const write = command.type === "CONFIG_FILL" && configEngineEnabled ? handleConfigFill :

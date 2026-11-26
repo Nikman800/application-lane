@@ -416,15 +416,11 @@ export function inspect(): Observation {
   if (captchas.length && !solved)
     blockers.push(captchas.some(shown) ? "Complete the site’s CAPTCHA if requested." : INVISIBLE_CAPTCHA);
   const next = nextButton();
-  const atReview = [
-    ...document.querySelectorAll('button, input[type="submit"]'),
-  ].some(
-    (b) =>
-      b.getClientRects().length &&
-      /^(submit( application)?|send application|complete application)$/i.test(
-        clip(b.textContent || b.getAttribute("value") || ""),
-      ),
-  );
+  const submitLabels = [...document.querySelectorAll('button, input[type="submit"]')]
+    .filter(rendered)
+    .map((button) => clip(button.textContent || button.getAttribute("value") || ""));
+  const submitsApplication = submitLabels.some((label) => /^(submit|send|complete) application$/i.test(label));
+  const atReview = submitsApplication || submitLabels.some((label) => /^submit$/i.test(label));
   const pendingFields = [...document.querySelectorAll('[role="progressbar"][aria-label], [aria-busy="true"][aria-label]')]
     .filter(rendered)
     .flatMap((widget) => {
@@ -436,7 +432,7 @@ export function inspect(): Observation {
       if (/\boptional\b/i.test(label)) return [];
       return field && (namedControl || widget.getAttribute("role") === "progressbar") ? [clip(field, 150)] : [];
     });
-  const applicationContainer = [...document.querySelectorAll('form[id*="application" i], form[class*="application" i], [data-automation-id="applicationPage"], .apply-flow-section')]
+  const applicationContainer = submitsApplication || [...document.querySelectorAll('form[id*="application" i], form[class*="application" i], [data-automation-id="applicationPage"], .apply-flow-section')]
     .some(rendered);
   for (const field of fields) cs.seenFields.add(field.id);
   return {
