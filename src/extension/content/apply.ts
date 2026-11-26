@@ -58,6 +58,9 @@ export async function apply(command: Command) {
       continue;
     }
     let selectedLabel = proposal.value;
+    // What a Workday date part was typed as: its digits ("11"), not the
+    // answer's words ("November"), are what it then holds.
+    let typedText: string | undefined;
     let typedDate = false;
     let vdlFocused = false;
     const savesBefore = cs.savesFinished;
@@ -213,6 +216,7 @@ export async function apply(command: Command) {
             ? wanted.value.trim()
             : (wanted.choices || []).find((choice) => /^\d+$/.test(choice.trim()))?.trim() || wanted.value;
           const typed = digits(proposal);
+          typedText = typed;
           // The whole date from its Month, as a person types it: Workday
           // moves focus on to the Day and the Year as each is typed, and a
           // Day or Year typed on its own after that had focus taken back to
@@ -259,8 +263,15 @@ export async function apply(command: Command) {
               const kept = () => same(month, monthText) && same(day, dayText) && same(year, yearText);
               // Workday draws the parts at once but gives their inputs the
               // values about a second after the Year (all three read empty
-              // at 300 ms, the date kept): waited for, up to 3 s.
-              for (const until = performance.now() + 3000; !kept() && performance.now() < until; ) await pause(150);
+              // at 300 ms, the date kept): waited for, up to 6 s (a tab out
+              // of view runs its timers about once a second). Read only
+              // once the parts have emptied, or 400 ms on: read at once, the
+              // date was still as typed, and emptied after the check passed.
+              const emptied = () => [month, day, year].every((input) => !input || !input.value);
+              for (const until = performance.now() + 400; !emptied() && performance.now() < until; ) await pause(50);
+              // Held twice in a row, 150 ms apart.
+              const held = async () => kept() && (await pause(150), kept());
+              for (const until = performance.now() + 6000; !(await held()) && performance.now() < until; ) await pause(150);
               if (!kept()) throw new Error("Site did not retain the value.");
               // Every part typed is this fill's at once: the Year's change,
               // seen before its own proposal came up, was taken for the
@@ -353,7 +364,9 @@ export async function apply(command: Command) {
             ? element.checked === (proposal.value === "Yes")
             : element.getAttribute("role") === "checkbox"
               ? (element.getAttribute("aria-checked") === "true") === (proposal.value === "Yes")
-            : valueOf(element) === proposal.value;
+            : typedDate && typedText !== undefined && /^\d+$/.test(typedText)
+              ? Number(valueOf(element)) === Number(typedText) && valueOf(element).trim() !== ""
+              : valueOf(element) === proposal.value;
       if (accepted) record.fillWarning = undefined;
       results.push({
         id: proposal.fieldId,

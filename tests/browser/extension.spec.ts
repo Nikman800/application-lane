@@ -18812,13 +18812,14 @@ test("a written Immediately for a start date split in Month, Day and Year is tod
         <div role="group" data-automation-id="dateInputWrapper">${["Month", "Day", "Year"].map((part) => `<div><input role="spinbutton" aria-label="${part}" name="start${part}" data-automation-id="dateSection${part}-input"></div>`).join("/")}</div></fieldset></div></main>
         <script>
           // As Workday does: focus moves on as each part is typed, and the
-          // inputs hold their values only about a second after the Year.
+          // inputs read empty a moment after the Year (by 300 ms) and hold
+          // their values again only about a second after it.
           const parts = [...document.querySelectorAll("[role=spinbutton]")];
           parts.forEach((input, i) => input.addEventListener("input", () => {
             if (input.value.length < (i === 2 ? 4 : 2)) return;
             if (i < 2) return parts[i + 1].focus();
             const values = parts.map((p) => p.value);
-            parts.forEach((p) => (p.value = ""));
+            setTimeout(() => parts.forEach((p) => (p.value = "")), 150);
             setTimeout(() => parts.forEach((p, j) => (p.value = values[j])), 900);
           }));
         </script>`,
