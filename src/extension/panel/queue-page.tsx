@@ -12,7 +12,7 @@ import { uncheckedText } from "../../shared/model";
 import { AppIssues, DraftingLink, FillProgress, Icon, PostingPrompt, TailoringBars, active, command, finished, hostname, labels, matchesQuery, openDashboard, postingMissing, postingSource, suggesting, type PanelState } from "../panel";
 
 export function QueuePage({ panel }: { panel: PanelState }) {
-  const { abandon, access, action, add, attachChoice, attention, busy, checkFit, clock, connected, documents, fillPrerequisite, filter, linkedApplication, linkedFilling, listed, loadBackend, markSubmitted, onboardingSteps, pickerQuery, profile, progress, progressing, queue, ready, recordingHere, refreshRecordings, saveBlob, savePosting, scanActive, scanError, search, selected, setActiveRecordings, setAnswerSuggestions, setAttachChoice, setClock, setFilter, setIssueTarget, setNotice, setPage, setPickerQuery, setQueue, setRecordings, setSearch, setSelected, setShowArchived, setShowTabs, setTabs, setURLs, showArchived, showTabs, siteAccess, submissions, submittedCount, switching, tabContext, tabs, uploadFiles, urls } = panel;
+  const { abandon, access, action, add, attachChoice, attention, busy, checkFit, clock, checked, connected, documents, fillPrerequisite, filter, linkedApplication, linkedFilling, listed, loadBackend, markSubmitted, onboardingSteps, pickerQuery, profile, progress, progressing, queue, ready, recordingHere, refreshRecordings, saveBlob, savePosting, scanActive, scanError, search, selected, setActiveRecordings, setAnswerSuggestions, setAttachChoice, setClock, setFilter, setIssueTarget, setNotice, setPage, setPickerQuery, setQueue, setRecordings, setSearch, setSelected, setShowArchived, setShowTabs, setTabs, setURLs, showArchived, showTabs, siteAccess, submissions, submittedCount, switching, tabContext, tabs, uploadFiles, urls } = panel;
   return (
     <>
       <div className="page-heading">
@@ -496,7 +496,7 @@ export function QueuePage({ panel }: { panel: PanelState }) {
         </section>
       )}
       {!connected ? (
-        <ConnectCard
+        checked && <ConnectCard
           onConnected={() => action(loadBackend, "Connected to Application Lane on this computer.")}
           onUseToken={() => setPage("settings")}
         />

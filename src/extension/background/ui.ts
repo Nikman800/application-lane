@@ -121,7 +121,7 @@ export async function uiMessage(message: any) {
       }
       await persist();
     }
-    const result = await api(message.path, message.method, message.body);
+    const result = await api(message.path, message.method, message.body, { retry: false });
     if (message.path === "/v1/data" && message.method === "DELETE") {
       bg.state.applications = [];
       bg.locks = {};

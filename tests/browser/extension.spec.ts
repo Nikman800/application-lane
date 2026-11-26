@@ -6,7 +6,7 @@ import {
   type Page,
   type Worker,
 } from "@playwright/test";
-import { createServer, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, cp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1154,6 +1154,45 @@ test("captured Workday address lines do not share the line-one value", async () 
   await expect(page.locator("#address--regionSubdivision1")).toHaveValue(
     county,
   );
+});
+
+// The line to the backend can drop for a few seconds (WSL's network resetting)
+// with the backend still running: three fills failed at once as if it had
+// stopped. A fill's reads are asked again until the line is back.
+test("a fill rides out a few seconds when the backend cannot be reached", async () => {
+  const workdayOrigin = atsOrigins[0];
+  const address = "100 Test Way";
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, address } });
+  await context.route(`${workdayOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main data-automation-id="applicationPage"><form>
+        <div data-automation-id="formField-addressLine1" data-fkit-id="address--addressLine1">
+          <label for="address--addressLine1"><span>Address Line 1<abbr aria-hidden="true">*</abbr></span></label>
+          <input type="text" id="address--addressLine1" name="addressLine1" aria-required="true">
+        </div>
+      </form></main>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${workdayOrigin}/en-US/acme/job/backend-blip`);
+  await panel.bringToFront();
+  await background(page);
+  // For two seconds every read of the profile is cut off unanswered.
+  let dropped = 0;
+  let downUntil = Date.now() + 2000;
+  const handlers = backend.listeners("request") as Array<(req: IncomingMessage, res: ServerResponse) => void>;
+  backend.removeAllListeners("request");
+  backend.on("request", (req: IncomingMessage, res: ServerResponse) => {
+    if (req.method === "GET" && req.url === "/v1/profile" && Date.now() < downUntil) {
+      dropped++;
+      req.socket.destroy();
+    } else handlers.forEach((handler) => handler(req, res));
+  });
+  downUntil = Date.now() + 2000;
+  await enqueue([page]);
+  await expect(page.locator("#address--addressLine1")).toHaveValue(address, { timeout: 30_000 });
+  expect(dropped).toBeGreaterThan(0);
 });
 
 test("the captured Workday state dropdown accepts a state abbreviation", async () => {
@@ -11476,6 +11515,19 @@ test("Oracle's profile-item entry form holding an in-progress degree stays untic
         const box = document.getElementById('af-checkbox-graduatedFlag-63');
         const drawn = document.getElementById('graduated-button');
         box.addEventListener('change', () => drawn.classList.toggle('apply-flow-input-checkbox__button--checked', box.checked));
+        // Major and School are searched lists, as Oracle draws them: their matches show once something is typed.
+        for (const input of document.querySelectorAll('.profile-item-content input:not([type=checkbox])')) input.addEventListener('input', () => {
+          const lists = document.getElementById('lists') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'lists' }));
+          lists.innerHTML = '';
+          for (const name of ['Penn State', 'Virginia Tech', 'Computer Science', 'Data Analytics'].filter((name) => name.toLowerCase() === input.value.toLowerCase())) {
+            const item = document.createElement('div');
+            item.setAttribute('role', 'option');
+            item.className = 'cx-select__list-item';
+            item.textContent = name;
+            item.addEventListener('click', () => { input.value = name; lists.innerHTML = ''; });
+            lists.append(item);
+          }
+        });
         // The save is refused (the form stays open, its values kept).
         document.querySelector('.save-btn').addEventListener('click', () => {
           window.saved.push([...document.querySelectorAll('.profile-item-content input:not([type=checkbox])')].map((input) => input.value).join(' / '));
@@ -18106,6 +18158,28 @@ test("the side panel holds only applications; the rest opens as a dashboard tab"
   expect(context.pages().filter((page) => page.url().includes("dashboard.html"))).toHaveLength(1);
 });
 
+// The dashboard read "Local backend not connected" for the second or two the
+// issue reports and recordings took to load, though the backend answered at
+// once: it waited on every read before counting itself connected.
+test("the dashboard shows the backend connected while its issue reports still load", async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const handlers = backend.listeners("request") as Array<(req: IncomingMessage, res: ServerResponse) => void>;
+  backend.removeAllListeners("request");
+  backend.on("request", (req: IncomingMessage, res: ServerResponse) => {
+    if (req.method === "GET" && /^\/v1\/(issues|recordings)(\?|$)/.test(req.url || "")) void held.then(() => handlers.forEach((handler) => handler(req, res)));
+    else handlers.forEach((handler) => handler(req, res));
+  });
+  try {
+    await showDashboard("settings");
+    await expect(panel.getByText("Connected to your local backend")).toBeVisible();
+    await expect(panel.getByText("Local backend not connected")).toHaveCount(0);
+    await expect(panel.getByRole("region", { name: "Connect to Application Lane" })).toHaveCount(0);
+  } finally {
+    release();
+  }
+});
+
 // Pairing used to mean copying a 64-character token out of a config file:
 // the dashboard now asks for the six-digit code the backend shows.
 test("the dashboard connects to an unpaired backend with the code it shows", async () => {
@@ -19629,6 +19703,37 @@ const smartRecruitersWidgets = `
     });
     return box;
   };`;
+
+// SmartRecruiters draws each box before its label: the box reads first by
+// its id ("spl-form-element_10"), then as "City" once the label is drawn.
+// That change was locked as an edit, and the lock held once the fill had
+// typed the city: the pick after the search was refused and the box dropped
+// what was typed.
+test("a SmartRecruiters City whose label is drawn after its box is still chosen", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, city: "Blacksburg", state: "VA" } });
+  await context.route(`${smartRecruitersOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><main><oc-personal-information><label for="email">Email</label><input id="email" type="email"><oc-location-autocomplete></oc-location-autocomplete></oc-personal-information></main><script>${smartRecruitersWidgets}
+        const box = splAutocomplete(document.querySelector("oc-location-autocomplete"), { label: "City", test: "location-autocomplete", suggest: (text) => ["Blacksburg, VA, US", "Blacksburg, SC, US"].filter((name) => name.toLowerCase().startsWith(text.toLowerCase())) });
+        const field = box.shadowRoot.querySelector("spl-input");
+        const label = field.shadowRoot.querySelector("label");
+        const input = field.shadowRoot.querySelector("input");
+        input.id = "spl-form-element_10";
+        field.removeAttribute("label");
+        label.remove();
+        setTimeout(() => { field.setAttribute("label", "City"); label.htmlFor = input.id; input.before(label); }, 1500);
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${smartRecruitersOrigin}/oneclick-ui/company/Acme/publication/2`);
+  await page.waitForTimeout(2500);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => document.querySelector("spl-autocomplete")!.getAttribute("value")), { timeout: 45_000 }).toBe("Blacksburg, VA, US");
+});
 
 // SmartRecruiters' City: the city alone ("Blacksburg")
 // lists several places, and the box drops what was typed but not chosen.

@@ -586,6 +586,8 @@ function usePanel() {
   const setProfile = (update: Profile | ((profile: Profile) => Profile)) =>
     dispatchProfile({ type: "edit", update });
   const [connected, setConnected] = useState(false);
+  // Whether the backend has answered (or failed to) since the page opened.
+  const [checked, setChecked] = useState(false);
   // Whether any drafting provider is set (Settings → Drafting).
   const [draftingReady, setDraftingReady] = useState(true);
   const [error, setError] = useState("");
@@ -791,19 +793,26 @@ function usePanel() {
       );
     return imported.tailoring.length;
   }
+  // Connected once the profile and status answer: the issue reports and
+  // recordings (over a megabyte, seconds to read) follow on their own, or the
+  // dashboard read "not connected" for as long as they took.
   async function loadBackend() {
-    const [p, status, savedIssues, savedRecordings] = await Promise.all([
-      api<Profile>("/v1/profile"),
-      api<any>("/v1/status"),
-      api<Array<Omit<IssueReport, "frames">>>("/v1/issues"),
-      api<Recording[]>("/v1/recordings"),
-    ]);
-    setProfile(p);
-    setWaitingBuild(newerBuild(extensionBuild, status?.extensionBuild));
-    setDraftingReady(Boolean(status?.configured));
+    const issuesRead = api<Array<Omit<IssueReport, "frames">>>("/v1/issues");
+    const recordingsRead = api<Recording[]>("/v1/recordings");
+    issuesRead.catch(() => { /* reported by the connection check below */ });
+    recordingsRead.catch(() => { /* reported by the connection check below */ });
+    try {
+      const [p, status] = await Promise.all([api<Profile>("/v1/profile"), api<any>("/v1/status")]);
+      setProfile(p);
+      setWaitingBuild(newerBuild(extensionBuild, status?.extensionBuild));
+      setDraftingReady(Boolean(status?.configured));
+      setConnected(true);
+    } finally {
+      setChecked(true);
+    }
+    const [savedIssues, savedRecordings] = await Promise.all([issuesRead, recordingsRead]);
     setIssues(savedIssues);
     setRecordings(savedRecordings);
-    setConnected(true);
   }
   // Single-page apps (Ashby, Workday) report a finished load before they
   // draw the form, so a scan that finds nothing looks again for a while
@@ -1243,13 +1252,13 @@ function usePanel() {
     : !profile.confirmed
       ? "Confirm your profile before filling."
       : "";
-  return { page, showPage, setPage, queue, setQueue, profile, imports, dispatchProfile, conflicts, setConflicts, setProfile, connected, setConnected, draftingReady, setDraftingReady, error, setError, notice: noticeTab === undefined || noticeTab === tabContext?.tabId ? notice : "", setNotice: (value: string) => { setNoticeTab(undefined); setNotice(value); }, busy, setBusy, pairToken, setPairToken, urls, setURLs, tabs, setTabs, selected, setSelected, showTabs, setShowTabs, review, setReview, filter, setFilter, showArchived, setShowArchived, tabContext, setTabContext, scanError, setScanError, attachChoice, setAttachChoice, pickerQuery, setPickerQuery, search, setSearch, issueTarget, setIssueTarget, sharing, setSharing, issueCategory, setIssueCategory, issueNote, setIssueNote, issueConsent, setIssueConsent, issueImages, setIssueImages, issueImageError, setIssueImageError, addIssueImages, clipboardImages, pasteIssueImage, issues, setIssues, submissions, setSubmissions, fixer, setFixer, waitingBuild, setWaitingBuild, fixerSettings, setFixerSettings, recordings, setRecordings, activeRecordings, setActiveRecordings, clock, setClock, answerSuggestions, setAnswerSuggestions, deleteConfirm, setDeleteConfirm, deleteDocuments, setDeleteDocuments, dailyGoal, exportProfile, importProfile, loadBackend, rescan, scanned, switching, setSwitching, scanActive, shownTab, holder, submittedNow, refreshRecordings, markSubmitted, abandon, action, edit, cleanLines, importResumes, add, saveBlob, exportIssue, shareIssue, openSharedIssue, copyIssue, siteAccess, access, savePosting, checkFit, documents, download, documentLabel, copyPath, uploadFiles, listed, progressing, ready, attention, submittedCount, linkedApplication, linkedFilling, recordingHere, progress, fillRunning, onboardingSteps, fillPrerequisite };
+  return { page, showPage, setPage, queue, setQueue, profile, imports, dispatchProfile, conflicts, setConflicts, setProfile, connected, setConnected, checked, draftingReady, setDraftingReady, error, setError, notice: noticeTab === undefined || noticeTab === tabContext?.tabId ? notice : "", setNotice: (value: string) => { setNoticeTab(undefined); setNotice(value); }, busy, setBusy, pairToken, setPairToken, urls, setURLs, tabs, setTabs, selected, setSelected, showTabs, setShowTabs, review, setReview, filter, setFilter, showArchived, setShowArchived, tabContext, setTabContext, scanError, setScanError, attachChoice, setAttachChoice, pickerQuery, setPickerQuery, search, setSearch, issueTarget, setIssueTarget, sharing, setSharing, issueCategory, setIssueCategory, issueNote, setIssueNote, issueConsent, setIssueConsent, issueImages, setIssueImages, issueImageError, setIssueImageError, addIssueImages, clipboardImages, pasteIssueImage, issues, setIssues, submissions, setSubmissions, fixer, setFixer, waitingBuild, setWaitingBuild, fixerSettings, setFixerSettings, recordings, setRecordings, activeRecordings, setActiveRecordings, clock, setClock, answerSuggestions, setAnswerSuggestions, deleteConfirm, setDeleteConfirm, deleteDocuments, setDeleteDocuments, dailyGoal, exportProfile, importProfile, loadBackend, rescan, scanned, switching, setSwitching, scanActive, shownTab, holder, submittedNow, refreshRecordings, markSubmitted, abandon, action, edit, cleanLines, importResumes, add, saveBlob, exportIssue, shareIssue, openSharedIssue, copyIssue, siteAccess, access, savePosting, checkFit, documents, download, documentLabel, copyPath, uploadFiles, listed, progressing, ready, attention, submittedCount, linkedApplication, linkedFilling, recordingHere, progress, fillRunning, onboardingSteps, fillPrerequisite };
 }
 export type PanelState = ReturnType<typeof usePanel>;
 
 function App() {
   const panel = usePanel();
-  const { action, addIssueImages, answerSuggestions, busy, connected, dispatchProfile, download, error, fillRunning, issueCategory, issueConsent, issueImageError, issueImages, issueNote, issueTarget, notice, openSharedIssue, page, pasteIssueImage, profile, review, saveBlob, setAnswerSuggestions, setError, setIssueCategory, setIssueConsent, setIssueImageError, setIssueImages, setIssueNote, setIssueTarget, setIssues, setNotice, setPage, setQueue, setReview, setSharing, sharing, uploadFiles, waitingBuild } = panel;
+  const { action, addIssueImages, answerSuggestions, busy, checked, connected, dispatchProfile, download, error, fillRunning, issueCategory, issueConsent, issueImageError, issueImages, issueNote, issueTarget, notice, openSharedIssue, page, pasteIssueImage, profile, review, saveBlob, setAnswerSuggestions, setError, setIssueCategory, setIssueConsent, setIssueImageError, setIssueImages, setIssueNote, setIssueTarget, setIssues, setNotice, setPage, setQueue, setReview, setSharing, sharing, uploadFiles, waitingBuild } = panel;
   return (
     <div className="shell">
       <header>
@@ -1309,10 +1318,12 @@ function App() {
         {page === "settings" && <SettingsPage panel={panel} />}
       </main>
       <footer>
-        <span className={`dot ${connected ? "" : "offline"}`} />
+        <span className={`dot ${connected ? "" : checked ? "offline" : "checking"}`} />
         {connected
           ? "Connected to your local backend"
-          : "Local backend not connected"}
+          : checked
+            ? "Local backend not connected"
+            : "Connecting to your local backend…"}
         <span>Review before submitting</span>
       </footer>
       {issueTarget && (

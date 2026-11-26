@@ -7,7 +7,7 @@ import { RecurringAnswers } from "../recurring-answers";
 import { ChoiceSelect, Icon, LegalDetail, TranscriptPicker, api, type PanelState } from "../panel";
 
 export function ProfilePage({ panel }: { panel: PanelState }) {
-  const { action, busy, cleanLines, conflicts, connected, dispatchProfile, edit, exportProfile, importProfile, importResumes, imports, loadBackend, onboardingSteps, profile, setNotice, setPage, setProfile } = panel;
+  const { action, busy, cleanLines, conflicts, checked, connected, dispatchProfile, edit, exportProfile, importProfile, importResumes, imports, loadBackend, onboardingSteps, profile, setNotice, setPage, setProfile } = panel;
   return (
     <>
       {connected && <OnboardingChecklist steps={onboardingSteps} />}
@@ -35,7 +35,7 @@ export function ProfilePage({ panel }: { panel: PanelState }) {
         </div>
       )}
       {!connected ? (
-        <ConnectCard
+        checked && <ConnectCard
           onConnected={() => action(loadBackend, "Connected to Application Lane on this computer.")}
           onUseToken={() => setPage("settings")}
         />

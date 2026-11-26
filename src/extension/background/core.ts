@@ -121,21 +121,31 @@ export async function adoptToken(next: string) {
   connectLive();
 }
 
-export async function api(path: string, method = "GET", body?: unknown): Promise<any> {
+// `retry: false` for the panel, which says at once that the backend is not
+// reached and asks again on its own.
+export async function api(path: string, method = "GET", body?: unknown, { retry = true } = {}): Promise<any> {
   if (!bg.token) throw new Error("Pair with the local backend first.");
-  let response: Response;
-  try {
-    response = await fetch(`${BACKEND}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${bg.token}`,
-        "Content-Type": "application/json",
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(15000),
-    });
-  } catch {
-    throw new Error(BACKEND_DOWN);
+  let response: Response | undefined;
+  // A read the backend did not answer is asked again for a while: the line to
+  // it can drop for seconds (WSL's network resetting) with the backend still
+  // running, and every fill waiting on it failed as if it had stopped. A write
+  // is never sent twice, as it may have been carried out.
+  const waits = method === "GET" && retry ? [1000, 2000, 4000, 8000] : [];
+  for (let attempt = 0; !response; attempt++) {
+    try {
+      response = await fetch(`${BACKEND}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${bg.token}`,
+          "Content-Type": "application/json",
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch {
+      if (attempt >= waits.length) throw new Error(BACKEND_DOWN);
+      await new Promise((resolve) => setTimeout(resolve, waits[attempt]));
+    }
   }
   const data = await response.json();
   if (!response.ok)

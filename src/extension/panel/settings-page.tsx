@@ -8,7 +8,7 @@ import { emptyProfile, withPermissions, type SignaturePolicy } from "../../share
 import { Icon, api, command, type PanelState } from "../panel";
 
 export function SettingsPage({ panel }: { panel: PanelState }) {
-  const { action, busy, connected, deleteConfirm, deleteDocuments, loadBackend, pairToken, profile, queue, setDeleteConfirm, setDeleteDocuments, setIssues, setPairToken, setProfile, setQueue, waitingBuild } = panel;
+  const { action, busy, checked, connected, deleteConfirm, deleteDocuments, loadBackend, pairToken, profile, queue, setDeleteConfirm, setDeleteDocuments, setIssues, setPairToken, setProfile, setQueue, waitingBuild } = panel;
   // What a fill may agree to and sign: Settings once set here, until then
   // what an older version saved on Your profile (withPermissions).
   const permissions = withPermissions(profile, queue.settings);
@@ -28,10 +28,10 @@ export function SettingsPage({ panel }: { panel: PanelState }) {
         <div className="section-title">
           <h2>Backend connection</h2>
           <span className={`status ${connected ? "ready" : "paused"}`}>
-            {connected ? "Connected" : "Not connected"}
+            {connected ? "Connected" : checked ? "Not connected" : "Connecting…"}
           </span>
         </div>
-        {!connected && <ConnectCard onConnected={() => action(loadBackend, "Connected to Application Lane on this computer.")} />}
+        {!connected && checked && <ConnectCard onConnected={() => action(loadBackend, "Connected to Application Lane on this computer.")} />}
         <p className="help">
           The backend runs on this computer (<code>npm start</code> in the
           Application Lane folder). Connect with the six-digit code it shows,

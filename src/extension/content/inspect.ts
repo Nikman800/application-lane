@@ -181,7 +181,13 @@ export function inspect(): Observation {
     }
     for (const member of group) nodeRecords.set(member, record);
     if (record.label !== label) {
-      if (!writePending(record)) {
+      // A box read by its id or another bare name ("first-name-input",
+      // "spl-form-element_10") before the site drew its label has not
+      // changed questions when the label appears: SmartRecruiters draws
+      // its boxes first. Locked as an edit, City's lock held once the
+      // fill had typed the city, and the pick after its search was refused.
+      const drawnLate = /^[a-z0-9]+(?:[-_.][a-z0-9]+)+$/i.test(record.label.trim()) || record.label === "Unlabelled field" || !record.label.trim();
+      if (!writePending(record) && !drawnLate) {
         record.protected = true;
         record.protectedBy = `label changed from ${JSON.stringify(record.label.slice(0, 60))}`;
         addLock(lockKey({ label, ...section }), `${label}: ${record.protectedBy}`);

@@ -1,5 +1,6 @@
 // Part of the extension's service worker (background.ts): the command line's live line, the inbox of queued links, and the queue sent to the backend.
 // Split out of background.ts as it was; see background.ts for how it starts.
+import { noteDashboardsNow } from "./dashboard-tabs";
 import { type QueueSummaryItem, BACKEND, type Application, CONTENT_VERSION } from "../../shared/model";
 import { reportOpen } from "../../shared/reload-gate";
 import { extensionBuild } from "../../shared/build";
@@ -197,6 +198,8 @@ export async function liveCommand(message: { action?: string; applicationId?: st
     // memory, and a fill's recording was left with its first 9 events
     // (Enovation's Paylocity rows).
     await Promise.allSettled([...recordings.keys()].map((tabId) => saveRecording(tabId)));
+    // Where the dashboard tabs are, to open them again after the reload.
+    await noteDashboardsNow().catch(() => { /* best effort */ });
     setTimeout(() => chrome.runtime.reload(), 300);
     return "Reloading the extension. A page open before it is on the old build until refreshed.";
   }

@@ -17,6 +17,7 @@ import { assisting } from "./background/field-fallback";
 import { invalidate } from "./background/run";
 import { connectLive, pickUpInbox } from "./background/live";
 import { tabGroupsSoon } from "./background/tab-groups";
+import "./background/dashboard-tabs";
 
 // The fixer's records change on the backend, not in the extension: the badge
 // asks again every fifteen seconds (sendBadges sends only what changed), and
