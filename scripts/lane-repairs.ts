@@ -127,6 +127,14 @@ export function repairCommands(ctx: RepairContext) {
     if (!existsSync(file)) throw new Error(`No ${kind === "issues" ? "report" : "capture"} ${id} in ${join(ctx.dataDirectory, kind)}.`);
     return JSON.parse(await readFile(file, "utf8")) as Evidence;
   };
+  const optionalJson = async (path: string) => {
+    const raw = await readFile(path, "utf8").catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return undefined;
+      throw error;
+    });
+    return raw === undefined ? undefined : JSON.parse(raw);
+  };
+  const captureHar = (capture: Evidence) => optionalJson(join(ctx.dataDirectory, "captures", `${capture.id}.har.json`));
   const list = (repair: Repair) => {
     repair.defects.forEach((defect, index) =>
       print(`  ${String(index + 1).padStart(2)}. ${defect.status === "open" ? "open    " : "resolved"} ${defect.kind.padEnd(16)} ${describe(defect).slice(0, 140)}${defect.cleanedIn && defect.status === "open" ? "  (page corrected, automation proof pending)" : defect.manual && defect.status === "open" ? "  (confirm with --confirm)" : ""}`),
@@ -201,7 +209,9 @@ export function repairCommands(ctx: RepairContext) {
     // for its build: the refusal must not depend on Chrome being open.
     if (!reason) throw new Error("Not refilled. Say why a refill should go differently now with --reason repair|profile|page.");
     const newest = await ctx.distBuild();
-    let state = await about(app);
+    let state = reload
+      ? await waitForPage(app, () => true, "Could not reach the extension before refilling.")
+      : await about(app);
     if (newest && buildKey(newest) !== buildKey(state.build)) {
       if (!reload) throw new Error("The extension is on a different build from dist/extension. Run lane refill with --reload.");
       const deadline = now() + 120_000;
@@ -266,16 +276,9 @@ export function repairCommands(ctx: RepairContext) {
     const capture = await readEvidence("captures", id);
     const before = beforeId ? await readEvidence("captures", beforeId) : undefined;
     if (capture.applicationId !== app.id || (before && before.applicationId !== app.id)) throw new Error("A capture belongs to another application.");
-    const optional = async (path: string) => {
-      const raw = await readFile(path, "utf8").catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") return undefined;
-        throw error;
-      });
-      return raw === undefined ? undefined : JSON.parse(raw);
-    };
     const [recording, har] = await Promise.all([
-      capture.recordingId && /^[\w-]+$/.test(capture.recordingId) ? optional(join(ctx.dataDirectory, "recordings", `${capture.recordingId}.json`)) : undefined,
-      optional(join(ctx.dataDirectory, "captures", `${capture.id}.har.json`)),
+      capture.recordingId && /^[\w-]+$/.test(capture.recordingId) ? optionalJson(join(ctx.dataDirectory, "recordings", `${capture.recordingId}.json`)) : undefined,
+      captureHar(capture),
     ]);
     print(JSON.stringify(summarizeEvidence(capture, recording?.events || [], har?.log?.entries || [], field, before), null, 2));
   }
@@ -313,13 +316,14 @@ export function repairCommands(ctx: RepairContext) {
     }
     // The fill finished, and the site had time for its own late changes.
     let state = await about(app);
-    const deadline = now() + 10 * 60_000;
-    for (let tried = 0; state.busy && now() < deadline && tried < 600; tried++) {
+    if (manual && state.busy) throw new Error("The fill is running. Check the manual correction after it ends.");
+    const deadline = expected ? repair.refill!.at + 5 * 60_000 : now() + 5 * 60_000;
+    for (let tried = 0; state.busy && now() < deadline && tried < 300; tried++) {
       if (expected && refillId(state.attempt) !== expected) throw new Error("Another fill replaced this repair attempt.");
       await sleep(1000);
       state = await about(app);
     }
-    if (state.busy) throw new Error("It is still being filled after ten minutes.");
+    if (state.busy) throw new Error("The fill is still running at the five-minute check deadline. Run lane check again for the same attempt after it ends.");
     if (expected && (refillId(state.attempt) !== expected || !state.attempt?.completedAt || buildKey(state.build) !== repair.refill?.build))
       throw new Error("This page is no longer on the tracked refill and build.");
     if (expected && ["error", "paused"].includes(state.attempt!.status))
@@ -339,10 +343,19 @@ export function repairCommands(ctx: RepairContext) {
         !next.tab.loading && Boolean(next.page?.documentId && next.page.documentId !== oldDocument && next.page.contentVersion === next.contentVersion),
       "The application page did not reload for the persistence check.");
     }
-    const capture = await takeCapture(app);
-    if (expected && (refillId(capture.application?.attempts?.at(-1)) !== expected || capture.tab?.tabId !== repair.refill?.tabId))
-      throw new Error("The captured page belongs to another refill or tab.");
-    if (capture.form === false) throw new Error(`Capture ${capture.id} is outside the tracked application form.`);
+    const captureForCheck = async () => {
+      const evidence = await takeCapture(app);
+      if (expected && (refillId(evidence.application?.attempts?.at(-1)) !== expected || evidence.tab?.tabId !== repair.refill?.tabId))
+        throw new Error("The captured page belongs to another refill or tab.");
+      if (evidence.form === false) throw new Error(`Capture ${evidence.id} is outside the tracked application form.`);
+      return evidence;
+    };
+    let capture = await captureForCheck();
+    const remaining = SETTLE_MS - settledFor(capture);
+    if (!manual && remaining > 0 && remaining <= SETTLE_MS) {
+      await sleep(remaining);
+      capture = await captureForCheck();
+    }
     if (before && (buildKey(state.build) !== repair.refill?.build && expected))
       throw new Error("The extension build changed during the persistence check.");
     const settled = settledFor(capture);
@@ -371,10 +384,15 @@ export function repairCommands(ctx: RepairContext) {
     const result = verifyLive(repair, { capture: capture.id, build: buildKey(state.build), settledMs: settled, found,
       codeChanged: Boolean(expected && repair.refill?.reason === "repair"), confirmed, proven }, now());
     await save(result.repair, repair.updatedAt);
+    const requestClues = result.ok ? [] : await captureHar(capture)
+      .then((har) => summarizeEvidence(capture, [], har?.log?.entries || []).requests.slice(-5), () => []);
     if (ctx.json) print(JSON.stringify({ ok: result.ok, captureId: capture.id, attemptId: expected, build: buildKey(state.build),
-      ...(result.ok ? {} : { why: result.why }), repair: result.repair }, null, 2));
+      ...(result.ok ? {} : { why: result.why, requestClues }), repair: result.repair }, null, 2));
     else if (result.ok) print(`${ctx.name(app)}: verified live in capture ${capture.id}. Released to the applicant${result.repair.regression === "pending" ? " with regression pending publication" : ""}.`);
-    else print(`${ctx.name(app)}: not verified. ${result.why}`);
+    else {
+      print(`${ctx.name(app)}: not verified in capture ${capture.id}. ${result.why}`);
+      for (const request of requestClues) print(`  Recent request: ${request.method || "request"} ${request.path} (${request.status})${request.kind ? `, ${request.kind}` : ""}${request.validation ? `, ${request.validation}` : ""}`);
+    }
     if (!ctx.json) list(result.repair);
     if (!result.ok) process.exitCode = 1;
   }

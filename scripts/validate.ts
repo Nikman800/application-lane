@@ -18,6 +18,9 @@
 // each step, --label <text>, --without "<path>" (check the regression fails
 // without a change: those files are taken from HEAD in the snapshot).
 // --expect-failure "<assertion message>" identifies the intended failure.
+// For browser checks, add --prove to check the first --test without the
+// change, then all named tests with it, from a single frozen checkout.
+// --base <commit> can pin the sources restored by --without (default HEAD).
 // --lock-timeout <minutes> bounds the browser lock wait (short checks default to 2).
 //
 // Every run tests a frozen copy of the tree as it is when the run starts
@@ -99,7 +102,13 @@ const expected = kind === "full" ? 3 : kind === "site" ? 1 + (canReplay ? Math.m
 // have to fail. The run succeeds when they do.
 const without = many("without");
 const assertion = option("expect-failure")?.trim();
+const prove = args.includes("--prove");
 if (without.length && !assertion) fail("Name the assertion that should fail on the baseline with --expect-failure.");
+if (prove && (kind !== "browser" || !without.length)) fail("Use --prove with browser, --without and --expect-failure. Name the regression as the first --test.");
+const commit = (ref: string) => execFileSync("git", ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`]).toString().trim();
+const head = without.length ? commit("HEAD") : "HEAD";
+const base = option("base") && without.length ? commit(option("base")!) : head;
+let baselineCheck: { tree: string; test: StepResult; proven: boolean } | undefined;
 const lockMinutes = Number(option("lock-timeout") ?? (kind === "full" ? 90 : 2));
 if (!Number.isFinite(lockMinutes) || lockMinutes <= 0) fail("--lock-timeout must be a positive number of minutes.");
 
@@ -108,7 +117,7 @@ function fail(message: string): never {
   process.exit(2);
 }
 function record(status = "running", why: string[] = []) {
-  const result = { id: runId, kind, label: option("label"), status, why, phase, checkout, tree, snapshot: tree ? join(treesDir, tree.slice(0, 12)) : undefined, build, titles, site, workers, retries, timing: { ...timing, totalMs: Date.now() - started }, startedAt: started, steps };
+  const result = { id: runId, kind, label: option("label"), status, why, phase, checkout, tree, snapshot: tree ? join(treesDir, tree.slice(0, 12)) : undefined, build, titles, site, workers, retries, timing: { ...timing, totalMs: Date.now() - started }, startedAt: started, steps, baselineCheck };
   writeFileSync(join(runDir, "result.json"), JSON.stringify(result, null, 2));
   return result;
 }
@@ -117,23 +126,24 @@ const say = (line: string) => console.log(`[validate ${kind}] ${line}`);
 // A frozen copy of the tree: git's own name for its content (tracked and new
 // files, through a scratch index so the real one is untouched), unpacked
 // once per tree and reused by later runs of the same tree.
-function snapshot(): string {
+function snapshot(sourceTree?: string): string {
   const begun = Date.now();
   const index = join(runDir, "index");
   const env = { ...process.env, GIT_INDEX_FILE: index };
-  execFileSync("git", ["read-tree", "HEAD"], { env });
-  // .claude is left out; where git already ignores it (the public checkout,
-  // whose private files are excluded), naming it fails the whole add.
-  let claudeIgnored = false;
-  try { execFileSync("git", ["check-ignore", "-q", ".claude"]); claudeIgnored = true; } catch { /* not ignored: leave it out of the add */ }
-  execFileSync("git", ["add", "-A", "--", ".", ...(claudeIgnored ? [] : [":!.claude"])], { env, stdio: ["ignore", "ignore", "pipe"] });
+  execFileSync("git", ["read-tree", sourceTree || head], { env });
+  if (!sourceTree) {
+    // A checkout with private .claude files commonly ignores the directory already.
+    let claudeIgnored = false;
+    try { execFileSync("git", ["check-ignore", "-q", ".claude"]); claudeIgnored = true; } catch { /* exclude it below */ }
+    execFileSync("git", ["add", "-A", "--", ".", ...(claudeIgnored ? [] : [":!.claude"])], { env, stdio: ["ignore", "ignore", "pipe"] });
+  }
   tree = execFileSync("git", ["write-tree"], { env }).toString().trim();
-  if (without.length) {
+  if (without.length && (!prove || sourceTree)) {
     // The same tree with these files as committed: the regression has to
     // fail here and pass in the tree itself.
     execFileSync("git", ["read-tree", tree], { env });
     for (const path of without) {
-      const committed = execFileSync("git", ["ls-tree", "HEAD", "--", path]).toString().trim();
+      const committed = execFileSync("git", ["ls-tree", base, "--", path]).toString().trim();
       if (committed) execFileSync("git", ["update-index", "--index-info"], { env, input: `${committed}\n` });
       else execFileSync("git", ["rm", "--cached", "-q", "--", path], { env });
     }
@@ -341,16 +351,22 @@ function finish(): never {
   // (not a build that broke, or a name that matched nothing).
   const tested = steps.filter((step) => step.kind === "unit" || step.kind === "browser");
   const failsWithout = Boolean(without.length && assertion && expectedRegressionFailure(tested, assertion));
-  if (without.length && !failsWithout) why.push("The baseline did not fail at the named assertion.");
-  const result = record(without.length ? (failsWithout ? "fails-without-change" : "does-not-fail-without-change") : verdict, why);
+  const baselineOnly = without.length > 0 && !prove;
+  const baselineFailed = prove && !baselineCheck?.proven;
+  if ((baselineOnly && !failsWithout) || baselineFailed) why.push("The baseline did not fail at the named assertion.");
+  const result = record(baselineOnly || baselineFailed ? (failsWithout ? "fails-without-change" : "does-not-fail-without-change") : verdict, why);
   const counts = steps.filter((step) => step.counts).map((step) => `${step.name}: ${step.counts!.passed} passed, ${step.counts!.failed} failed${step.counts!.flaky ? `, ${step.counts!.flaky} flaky` : ""}${step.counts!.skipped ? `, ${step.counts!.skipped} skipped` : ""}`);
   const replays = steps.filter((step) => step.replays).map((step) => `${step.name}: ${step.replays!.reproduced}/${step.replays!.chosen} forms replayed`);
-  console.log(`\n[validate ${kind}] ${without.length ? (failsWithout ? "FAILS WITHOUT THE CHANGE, as a regression should" : "DOES NOT FAIL WITHOUT THE CHANGE: not a regression for it") : verdict.toUpperCase()}  tree ${tree.slice(0, 12)}  build ${build ? `${build.commit} ${new Date(build.builtAt).toISOString()}` : "none"}`);
+  const summary = baselineOnly || baselineFailed
+    ? failsWithout ? "FAILS WITHOUT THE CHANGE, as a regression should" : "DOES NOT FAIL WITHOUT THE CHANGE: not a regression for it"
+    : verdict.toUpperCase();
+  console.log(`\n[validate ${kind}] ${summary}  tree ${tree.slice(0, 12)}  build ${build ? `${build.commit} ${new Date(build.builtAt).toISOString()}` : "none"}`);
   for (const line of [...counts, ...replays, ...why]) console.log(`  ${line}`);
   console.log(`  ${timingLine(result.timing)}`);
   console.log(`  ${join(runDir, "result.json")}`);
   writeFileSync(join(runsDir, "latest.json"), JSON.stringify(result, null, 2));
-  process.exit(without.length ? (failsWithout ? 0 : 1) : verdict === "passed" || verdict === "passed-after-retry" ? 0 : 1);
+  const passed = baselineOnly ? failsWithout : !baselineFailed && (verdict === "passed" || verdict === "passed-after-retry");
+  process.exit(passed ? 0 : 1);
 }
 
 function stop(signal: NodeJS.Signals) {
@@ -394,6 +410,28 @@ phase = "snapshot";
 record();
 const dir = snapshot();
 record();
+if (prove) {
+  const candidateTree = tree;
+  const baselineDir = snapshot(candidateTree);
+  phase = "baseline build";
+  record();
+  if (!(await buildIn(baselineDir))) finish();
+  const regression = [titles[0]!];
+  const waiter: Waiter = { pid: process.pid, kind: "short", since: Date.now(), label: option("label") || `baseline: ${regression[0]}` };
+  await takeLock(waiter);
+  phase = "baseline regression test";
+  record();
+  const baselineTest = await browser(baselineDir, "baseline regression", { grep: exactTitles(regression) }, regression);
+  releaseLock();
+  baselineCheck = { tree, test: baselineTest, proven: expectedRegressionFailure([baselineTest], assertion!) };
+  if (!baselineCheck.proven) {
+    steps.push(baselineTest);
+    finish();
+  }
+  say(`FAILS WITHOUT THE CHANGE: ${regression[0]} (${seconds(baselineTest.ms)})`);
+  tree = candidateTree;
+  build = undefined;
+}
 if (kind === "unit" || kind === "full") {
   if (kind === "full") {
     phase = "typecheck";

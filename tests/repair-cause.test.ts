@@ -78,6 +78,7 @@ test("repair refill waits for the exact build and uses its attempt's capture", a
   let loaded = false;
   let started = false;
   let readyReads = 0;
+  let captures = 0;
   const actions: string[] = [];
   const { commands, printed } = await harness(["acme", "--reason", "repair", "--reload"], store, dir, {
     json: true,
@@ -100,13 +101,15 @@ test("repair refill waits for the exact build and uses its attempt's capture", a
         return { ok: true, detail: JSON.stringify({ attemptId: "attempt", tabId: 2 }) };
       }
       assert.equal(action, "capture");
-      await writeFile(join(dir, "captures", "exact.json"), JSON.stringify({ id: "exact", applicationId: id, form: true,
-        createdAt: 20_000, tab: { tabId: 2 }, application: { attempts: [{ id: "attempt", completedAt: 2000 }] } }));
-      return { ok: true, detail: "exact" };
+      const capture = ++captures === 1 ? "early" : "exact";
+      await writeFile(join(dir, "captures", `${capture}.json`), JSON.stringify({ id: capture, applicationId: id, form: true,
+        createdAt: capture === "early" ? 16_999 : 20_000, tab: { tabId: 2 }, application: { attempts: [{ id: "attempt", completedAt: 2000 }] } }));
+      return { ok: true, detail: capture };
     },
   });
   await commands.refill();
   assert.equal(JSON.parse(printed[0]).captureId, "exact");
   assert.equal(store[id].verification?.capture, "exact");
   assert.equal(actions.filter((action) => action === "repair-fill").length, 1);
+  assert.equal(captures, 2, "an early capture is repeated without restarting the fill");
 });

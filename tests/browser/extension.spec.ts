@@ -13005,6 +13005,119 @@ test("Oracle's address search lists whole addresses drawn slowly, and the one wi
   await expect(page.locator('[role="combobox"][aria-expanded="true"]')).toHaveCount(0);
 });
 
+// Oracle's plain Address1 / Address2 boxes (no street search), which the
+// site pre-fills from the account's earlier address: the saved address
+// replaces it, and an Address2 the profile does not hold is emptied.
+test("Oracle's plain Address1 and Address2 that the site pre-filled with an older address are replaced by the saved one", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, address: "100 E. Main St", addressLine2: "", city: "Blacksburg", state: "VA", postalCode: "24060" } });
+  const row = (name: string, label: string, value: string, required: boolean) =>
+    `<div class="input-row input-row--text input-row--filled"><form-element-label><label class="input-row__label" for="${name}-123"><span class="input-row__linebreak">${label}</span>${required ? '<span class="input-row__label--required-star" aria-hidden="true"></span>' : ""}</label></form-element-label>
+      <div class="input-row__control-container"><input class="input-row__control" id="${name}-123" name="${name}" autocomplete="${name === "addressLine1" ? "address-line1" : "address-line2"}"${required ? ' aria-required="true"' : ""} aria-invalid="false" value="${value}"><div class="input-row__control-decorator"></div></div></div>`;
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Personal Info</title><main><div class="apply-flow-section" data-section-number="1">
+        <h3>Address</h3><p>Please enter your home address.</p>
+        ${row("addressLine1", "Address1", "22 Mustang Dr", true)}${row("addressLine2", "Address2", "Apt 22", false)}${row("addressLine3", "Address3", "", false)}
+      </div></main>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/1`);
+  await enqueue([page]);
+  await expect(page.locator('[name="addressLine1"]')).toHaveValue("100 E. Main St", { timeout: 45000 });
+  await expect(page.locator('[name="addressLine2"]')).toHaveValue("");
+});
+
+// Oracle's City and Postal Code are cx-select grids loaded from its
+// geography service after the click, each entry naming the places above
+// it ("Blacksburg, Montgomery, VA", "24060, Blacksburg, Montgomery, VA").
+// The saved city matched no entry, so the box was cleared, typed and
+// cleared again: a City the site already showed was left empty.
+test("Oracle's City and Postal Code lists whose entries name the county and state take the saved city and code", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, address: "100 E. Main St", addressLine2: "", city: "Blacksburg", state: "VA", postalCode: "24060" } });
+  const picker = (name: string, label: string, entries: string[]) => `
+    <div class="input-row input-row--has-picker geo-hierarchy-form-element"><label class="input-row__label cx-select-label" for="${name}-37"><span class="input-row__linebreak">${label}</span></label>
+      <div class="input-row__control-container reset-z-index"><div class="cx-select-container "><div class="input-field-container"><div class="input-field-container__left">
+        <input autocomplete="none" name="${name}" id="${name}-37" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="grid" aria-controls="${name}-37-listbox" aria-expanded="false" aria-required="true" class="cx-select-input" value=""></div>
+        <div class="input-field-container__right"><button type="button" id="${name}-37-toggle-button" tabindex="-1" aria-label="Open the drop-down list for ${label}." aria-expanded="false" aria-controls="${name}-37-listbox" class="icon-dropdown-arrow "></button></div>
+        <div id="${name}-37-cx-select__modal" class="cx-select__options" data-entries="${entries.join("|")}"></div></div></div></div></div>`;
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Personal Info</title><main><div class="apply-flow-section" data-section-number="1">
+        <h3>Address</h3><p>Please enter your home address.</p>
+        ${picker("city", "City", ["Bland, Bland, VA", "Blacksburg, Montgomery, VA", "Christiansburg, Montgomery, VA"])}
+        ${picker("postalCode", "Postal Code", ["24060, Blacksburg, Montgomery, VA", "24061, Blacksburg, Montgomery, VA", "24073, Christiansburg, Montgomery, VA"])}
+      </div></main><script>
+        window.picks = [];
+        for (const box of document.querySelectorAll('input.cx-select-input')) {
+          const modal = document.getElementById(box.id + '-cx-select__modal');
+          const entries = modal.dataset.entries.split('|');
+          const close = () => { box.setAttribute('aria-expanded', 'false'); modal.innerHTML = ''; };
+          const open = () => {
+            if (box.getAttribute('aria-expanded') === 'true') return;
+            box.setAttribute('aria-expanded', 'true');
+            modal.innerHTML = '<div class="cx-select-container cx-select-dropdown--open"><div class="cx-select__listbox"><div role="status" id="' + box.id + '-listbox" aria-busy="true" class="cx-select__list"></div></div></div>';
+            // Loaded from the geography service a moment after the click.
+            setTimeout(() => {
+              if (box.getAttribute('aria-expanded') !== 'true') return;
+              modal.innerHTML = '<div class="cx-select-container cx-select-dropdown--open"><div class="cx-select__listbox"><div role="grid" id="' + box.id + '-listbox" aria-busy="false" class="cx-select__list">' + entries.map((entry, index) => '<div role="row"><div tabindex="-1" role="gridcell" id="' + box.id + '-listitem-' + index + '" class="cx-select__list-item"><span>' + entry + '</span></div></div>').join('') + '</div></div></div>';
+              for (const cell of modal.querySelectorAll('[role="gridcell"]'))
+                cell.addEventListener('click', () => { window.picks.push(cell.textContent); box.value = cell.textContent.split(',')[0]; close(); });
+            }, 300);
+          };
+          box.addEventListener('click', open);
+          box.addEventListener('blur', () => setTimeout(close, 200));
+        }
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/1`);
+  await enqueue([page]);
+  await expect(page.locator('[name="city"]')).toHaveValue("Blacksburg", { timeout: 45000 });
+  await expect(page.locator('[name="postalCode"]')).toHaveValue("24060");
+  expect(await page.evaluate(() => (window as any).picks)).toEqual(["Blacksburg, Montgomery, VA", "24060, Blacksburg, Montgomery, VA"]);
+});
+
+// Oracle draws the step's own "pre-section" (the profile import: a resume
+// file box) as a visible apply-flow-section before the section holding the
+// personal information, and the later sections (Education, Experience, with
+// their saved tiles) hidden. The first visible section was the form's
+// container, so the plain keys looked for Address1 inside the import and
+// never found it: the site's older address stayed.
+test("Oracle's Address1 is replaced when a profile-import section comes before the personal information, and saved tiles in a later section are not added again", async () => {
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, address: "100 E. Main St", addressLine2: "", city: "Blacksburg", state: "VA", postalCode: "24060" } });
+  const row = (name: string, label: string, value: string) =>
+    `<div class="input-row input-row--text input-row--filled"><form-element-label><label class="input-row__label" for="${name}-123"><span class="input-row__linebreak">${label}</span></label></form-element-label>
+      <div class="input-row__control-container"><input class="input-row__control" id="${name}-123" name="${name}" value="${value}"><div class="input-row__control-decorator"></div></div></div>`;
+  const tile = (title: string, school: string) =>
+    `<article class="apply-flow-profile-item-tile"><div class="apply-flow-profile-item-tile__summary" data-profile-item-tile="true" role="group" tabindex="0" aria-label="${title} ${school}"><div class="apply-flow-profile-item-tile__summary-content"><div class="apply-flow-profile-item-tile__summary-title"><span>${title}</span></div><div class="apply-flow-profile-item-tile__summary-subtitle">${school}</div></div><div class="apply-flow-profile-item-tile__actions-container"><button class="apply-flow-profile-item-tile__edit-item-icon" title="Edit" aria-label="Edit"></button><button class="apply-flow-profile-item-tile__delete-icon" title="Delete" aria-label="Delete"></button></div></div></article>`;
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Personal Info</title><main>
+        <div class="apply-flow-section" data-section-number="1" id="presection-1"><ul class="apply-flow-page-list"><li><div class="apply-flow-block apply-flow-block--profile-import"><div class="apply-flow-block__form-list" role="region" aria-label="Import your profile from your resume"><div class="apply-flow-profile-import"><input type="file" class="apply-flow-profile-import-awli__file-upload" aria-label="Import your profile from resume"></div></div></div></li></ul></div>
+        <div class="apply-flow-section" data-section-number="1" id="section-1"><ul class="apply-flow-page-list"><li>
+          <div class="apply-flow-block apply-flow-block--personal-information-address-v2"><div class="apply-flow-block__form-list">
+            <h3>Address</h3>${row("addressLine1", "Address1", "22 Mustang Dr")}${row("addressLine2", "Address2", "Apt 22")}
+          </div></div></li></ul></div>
+        <div class="apply-flow-section" data-section-number="2" style="display: none;"><ul class="apply-flow-page-list"><li>
+          <div class="apply-flow-block apply-flow-block--tile-profile-items"><div class="apply-flow-block__form-list" role="region" aria-label="Education Required"><div class="profile-item-container"><div class="profile-item-list" role="group">${tile("Computer Science", "Penn State")}${tile("Data Science", "Virginia Tech")}</div><div class="profile-add-item"><button type="button" class="button apply-flow-profile-item-tile__new-tile" id="profileItemsAddButton-1"><span class="button__label">Add Education</span></button></div></div></div></div>
+        </li></ul></div></main><script>
+          window.added = 0;
+          document.querySelector('.apply-flow-profile-item-tile__new-tile').addEventListener('click', () => { window.added++; });
+        </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/1`);
+  await enqueue([page]);
+  await expect(page.locator('[name="addressLine1"]')).toHaveValue("100 E. Main St", { timeout: 45000 });
+  expect(await page.evaluate(() => (window as any).added)).toBe(0);
+});
+
 // Oracle's yes/no questions are cx-select-pills: buttons of role radio whose
 // option is their own text in a span, in a list labelled by the question, not
 // inputs with labels. Their options read as

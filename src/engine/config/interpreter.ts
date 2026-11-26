@@ -1423,15 +1423,25 @@ async function fillFallback(
         globals,
         questionText(element),
       );
-      return option
-        ? available.find(
-            (candidate) =>
-              (candidate.textContent?.trim() || "") === option.label &&
-              (candidate.getAttribute("data-value") ||
-                candidate.textContent?.trim() ||
-                "") === option.value,
-          )
-        : undefined;
+      if (option)
+        return available.find(
+          (candidate) =>
+            (candidate.textContent?.trim() || "") === option.label &&
+            (candidate.getAttribute("data-value") ||
+              candidate.textContent?.trim() ||
+              "") === option.value,
+        );
+      // Oracle's place lists (City, Postal Code, County) name each entry
+      // with the places above it: "Blacksburg, Montgomery, VA", "24060,
+      // Blacksburg, Montgomery, VA". The saved city or code is the entry's first part,
+      // taken only when exactly one entry starts with it.
+      if (!element.matches("input.cx-select-input")) return undefined;
+      const wanted = values.map((value) => value.trim().toLowerCase()).filter(Boolean);
+      const places = available.filter((candidate) => {
+        const parts = (candidate.textContent || "").split(",").map((part) => part.trim());
+        return parts.length >= 3 && /^[A-Z]{2}$/.test(parts.at(-1)!) && wanted.includes(parts[0].toLowerCase());
+      });
+      return places.length === 1 ? places[0] : undefined;
     };
     // The click opens the full list (Oracle's race list): choose from it.
     // Only when it holds no match is a search typed, since some lists show
@@ -2388,6 +2398,15 @@ export async function interpretConfig(
         options.valueContext?.collection !== "education" &&
         profile.work[options.valueContext?.index || 0]?.endDate === "";
       if (emptiesEnd) values = [""];
+      // A saved address that replaced the site's line 1 leaves the site's
+      // line 2 ("Apt 22", Oracle's account address) belonging to the old
+      // address: with no line 2 saved, it is emptied. Only a value the site
+      // put there (checked with the box found, below), never one typed.
+      const emptiesLine2 =
+        !values.length &&
+        key === "address_line_2" &&
+        results.some((result) => result.key === "address" && result.status === "filled");
+      if (emptiesLine2) values = [""];
       if (!values.length && selector.valueRequired !== false) {
         state.lastReason = "No confirmed profile value.";
         state.lastStatus = "skipped";
@@ -2618,6 +2637,11 @@ export async function interpretConfig(
         break;
       }
       // Only a date the site put there is emptied, and only when there is one.
+      if (emptiesLine2 && (!textValue(element).trim() || !options.isReplaceable?.(element))) {
+        results.push({ key, status: "skipped", reason: "The site's second address line was not its own." });
+        state.completed = true;
+        break;
+      }
       if (emptiesEnd && (!textValue(element).trim() || !options.isReplaceable?.(element))) {
         results.push({ key, status: "skipped", reason: "A current job has no end date." });
         state.completed = true;

@@ -7,7 +7,7 @@
   "embeddedPaths": [],
   "pathsExcluded": [],
   "containerPath": [
-    "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))]"
+    "//div[contains(@class,'apply-flow-section')][not(contains(translate(@style,' ',''),'display:none'))][not(.//div[contains(@class,'apply-flow-block--profile-import')])]"
   ],
   "containerRequired": false,
   "defaultMethod": "default",
