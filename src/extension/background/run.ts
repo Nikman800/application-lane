@@ -1091,6 +1091,10 @@ export async function run(app: Application, operation: number) {
         if (
           field.siteValue &&
           /education|experience|employment|work/.test(normalize(field.section || "")) &&
+          // A question grouped under its own wording is not a parsed row,
+          // though it asks about employment (Workday's "Are you subject to
+          // any restrictive covenants from prior employment…?").
+          normalize(field.section || "") !== normalize(field.label) &&
           // A list showing its prompt holds nothing the site parsed (Avature's
           // University/School, "Select an option").
           !/^(?:please )?(?:select|choose)(?: an?| one)?(?: option)?\.{0,3}$/i.test(field.value.trim()) &&

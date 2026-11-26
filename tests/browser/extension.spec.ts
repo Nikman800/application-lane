@@ -18379,7 +18379,19 @@ test("a written Immediately for a start date split in Month, Day and Year is tod
     route.fulfill({
       contentType: "text/html; charset=utf-8",
       body: `<!doctype html><title>Application Questions</title><main><div data-automation-id="formField-10bc"><fieldset><legend><div data-automation-id="richText"><p><span>When are you available to start?</span></p></div></legend>
-        <div role="group" data-automation-id="dateInputWrapper">${["Month", "Day", "Year"].map((part) => `<div><input role="spinbutton" aria-label="${part}" name="start${part}" data-automation-id="dateSection${part}-input"></div>`).join("/")}</div></fieldset></div></main>`,
+        <div role="group" data-automation-id="dateInputWrapper">${["Month", "Day", "Year"].map((part) => `<div><input role="spinbutton" aria-label="${part}" name="start${part}" data-automation-id="dateSection${part}-input"></div>`).join("/")}</div></fieldset></div></main>
+        <script>
+          // As Workday does: focus moves on as each part is typed, and the
+          // inputs hold their values only about a second after the Year.
+          const parts = [...document.querySelectorAll("[role=spinbutton]")];
+          parts.forEach((input, i) => input.addEventListener("input", () => {
+            if (input.value.length < (i === 2 ? 4 : 2)) return;
+            if (i < 2) return parts[i + 1].focus();
+            const values = parts.map((p) => p.value);
+            parts.forEach((p) => (p.value = ""));
+            setTimeout(() => parts.forEach((p, j) => (p.value = values[j])), 900);
+          }));
+        </script>`,
     }),
   );
   const checkout = await scratch("lane-tailoring-");
@@ -18407,6 +18419,8 @@ test("a written Immediately for a start date split in Month, Day and Year is tod
   });
   const part = async (name: string) => Number(await page.locator(`[name=${name}]`).inputValue());
   await expect.poll(async () => [await part("startMonth"), await part("startDay"), await part("startYear")], { timeout: 15000, message: "the start date's three parts are today's date" }).toEqual(today.map(Number));
+  // Values given late are kept values, not a refusal.
+  expect(JSON.stringify((await state()).applications[0]), "a date given its values late is not reported as refused").not.toMatch(/did not retain/);
 });
 
 // iCIMS' sign-in step asks only for an email and a phone. Both were
@@ -21214,6 +21228,8 @@ test("parsed education rows are corrected in profile order, and what cannot be c
           <label>Address<input name="address"></label><label>Zip/Postal Code<input name="zip"></label>
         </fieldset>
         <div id="education">${row(1)}</div>
+        <fieldset><legend>Are you subject to any restrictive covenants from prior employment?</legend>
+          <label>Are you subject to any restrictive covenants from prior employment?<input name="covenant" role="combobox"></label></fieldset>
       </form>
       <script>
         const parsed = sessionStorage.getItem("parsed");
@@ -21228,6 +21244,7 @@ test("parsed education rows are corrected in profile order, and what cannot be c
           set("major-1", "Computer Science"); set("grad-1", "Yes"); set("gpa-1", "3.84");
           set("school-2", "Michigan State University"); set("grad-2", "Yes");
           set("school-3", "Michigan State University");
+          set("covenant", "No");
         }
         document.querySelector('[name="Resume_File"]').addEventListener("change", (event) => {
           sessionStorage.setItem("parsed", event.target.files[0].name);
@@ -21261,6 +21278,8 @@ test("parsed education rows are corrected in profile order, and what cannot be c
   // is, and not flagged.
   await expect(page.locator('[name="gpa-1"]')).toHaveValue("3.84");
   expect(await review()).not.toContain('Overall Result (GPA): "3.84"');
+  // A question grouped under its own wording is not a parsed work row.
+  expect(await review(), "a question about prior employment is not flagged as parsed").not.toContain("restrictive covenants");
 });
 
 async function continuationFixture(mode: "in-place" | "reload") {

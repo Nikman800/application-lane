@@ -244,10 +244,13 @@ export async function apply(command: Command) {
                 await pause(200);
               }
               await typeTrusted(command, year!, yearText, () => valid(command), new AbortController().signal);
-              await pause(300);
               const same = (input: HTMLInputElement | undefined, text: string) => !input || Number(input.value) === Number(text);
-              if (!same(month, monthText) || !same(day, dayText) || !same(year, yearText))
-                throw new Error("Site did not retain the value.");
+              const kept = () => same(month, monthText) && same(day, dayText) && same(year, yearText);
+              // Workday draws the parts at once but gives their inputs the
+              // values about a second after the Year (all three read empty
+              // at 300 ms, the date kept): waited for, up to 3 s.
+              for (const until = performance.now() + 3000; !kept() && performance.now() < until; ) await pause(150);
+              if (!kept()) throw new Error("Site did not retain the value.");
               // Every part typed is this fill's at once: the Year's change,
               // seen before its own proposal came up, was taken for the
               // applicant's edit and locked.
