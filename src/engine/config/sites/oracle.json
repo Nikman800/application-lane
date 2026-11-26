@@ -412,7 +412,6 @@
                 {
                   "valueKey": "state_or_home",
                   "path": ".//input[@name='stateProvinceCode'][@role='combobox']",
-                  "time": 5000,
                   "actions": [
                     {
                       "method": "click"
@@ -435,7 +434,6 @@
               [
                 {
                   "path": ".//input[@name='city' or @name='employerCity'][not(@role='combobox')]",
-                  "time": 5000,
                   "valueKey": "city_or_home"
                 }
               ]
@@ -541,6 +539,11 @@
                       ],
                       "method": "click",
                       "time": 3000
+                    },
+                    {
+                      "path": ".//input[@name='stateProvinceCode'][@role='combobox']",
+                      "time": 5000,
+                      "allowFailure": true
                     }
                   ]
                 }
@@ -552,7 +555,6 @@
                 {
                   "valueKey": "state_or_home",
                   "path": ".//input[@name='stateProvinceCode'][@role='combobox']",
-                  "time": 5000,
                   "actions": [
                     {
                       "method": "click"
@@ -575,7 +577,6 @@
               [
                 {
                   "path": ".//input[@name='city' or @name='employerCity'][not(@role='combobox')]",
-                  "time": 5000,
                   "valueKey": "city_or_home"
                 }
               ]
