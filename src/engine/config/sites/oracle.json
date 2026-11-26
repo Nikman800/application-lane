@@ -385,6 +385,62 @@
               ]
             ],
             [
+              "country",
+              [
+                {
+                  "path": ".//input[@name='countryCode'][@role='combobox']",
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": [
+                        "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
+                      ],
+                      "method": "click",
+                      "time": 3000
+                    }
+                  ]
+                }
+              ]
+            ],
+            [
+              "state",
+              [
+                {
+                  "valueKey": "state_or_home",
+                  "path": ".//input[@name='stateProvinceCode'][@role='combobox']",
+                  "time": 5000,
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": [
+                        "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
+                      ],
+                      "method": "click",
+                      "time": 3000
+                    }
+                  ]
+                }
+              ]
+            ],
+            [
+              "city",
+              [
+                {
+                  "path": ".//input[@name='city' or @name='employerCity'][not(@role='combobox')]",
+                  "time": 5000,
+                  "valueKey": "city_or_home"
+                }
+              ]
+            ],
+            [
               "graduated",
               [
                 {
@@ -472,6 +528,7 @@
               [
                 {
                   "path": ".//input[@name='countryCode'][@role='combobox']",
+                  "repick": true,
                   "actions": [
                     {
                       "method": "click"
@@ -486,6 +543,40 @@
                       "time": 3000
                     }
                   ]
+                }
+              ]
+            ],
+            [
+              "state",
+              [
+                {
+                  "valueKey": "state_or_home",
+                  "path": ".//input[@name='stateProvinceCode'][@role='combobox']",
+                  "time": 5000,
+                  "actions": [
+                    {
+                      "method": "click"
+                    },
+                    {
+                      "path": [
+                        "//*[@role='gridcell' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[@role='option' and contains(@class,'cx-select__list-item')][normalize-space(.)='%VALUE%']",
+                        "//*[contains(@class,'cx-select__list')]//*[@role='row' or @role='gridcell'][normalize-space(.)='%VALUE%']"
+                      ],
+                      "method": "click",
+                      "time": 3000
+                    }
+                  ]
+                }
+              ]
+            ],
+            [
+              "city",
+              [
+                {
+                  "path": ".//input[@name='city' or @name='employerCity'][not(@role='combobox')]",
+                  "time": 5000,
+                  "valueKey": "city_or_home"
                 }
               ]
             ],
@@ -586,7 +677,7 @@
             [
               "description",
               [
-                ".//textarea[contains(@name,'esponsibilit')]"
+                ".//textarea[contains(@name,'esponsibilit') or @name='achievements']"
               ]
             ],
             [

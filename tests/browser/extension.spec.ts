@@ -11617,6 +11617,144 @@ test("Oracle's work and education timeline adds and saves one entry at a time, w
   expect(await page.evaluate(() => (window as any).refused)).toBe(0);
 });
 
+// Oracle's timeline dialogs require a Country, State and City, and refuse to
+// save without them: the dialog then stays open, the actions bar stays
+// disabled, and no later entry could be added (issue report: only the first
+// education was saved, no experience was added, and the page-wide fill wrote
+// into the open dialog).
+test("Oracle's timeline dialogs are given their required Country, State and City, so every education and experience is saved", async () => {
+  await ui({
+    type: "API",
+    path: "/v1/profile",
+    method: "PUT",
+    body: {
+      ...profile,
+      country: "United States of America",
+      state: "Arizona",
+      education: [
+        { organization: "Acme University", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08", endDate: "2027-05", location: "", details: "" },
+        { organization: "Penn State", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-09", endDate: "2024-06", location: "", details: "" },
+      ],
+      work: [
+        { organization: "Contoso", title: "Software Engineer Intern", location: "Phoenix, AZ", details: "Built APIs.", startDate: "2023-07", endDate: "2023-09" },
+        { organization: "Northwind", title: "Analyst", location: "", details: "Ran reports.", startDate: "2021-01", endDate: "2021-12" },
+      ],
+    },
+  });
+  await context.route(`${oracleOrigin}/**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Experience</title><main>
+        <div class="apply-flow-section" data-section-number="3">
+          <div class="apply-flow-block apply-flow-block--work-and-education-timeline">
+            <div class="apply-flow-block__form-list" role="region" aria-label="Work and Education History ">
+              <div class="timeline-container">
+                <div id="timeline-anchor" class="input-row__control-container work-and-education-timeline__actions-container">
+                  <div class="work-and-education-timeline__actions work-and-education-timeline__actions--pinned">
+                    <button id="timeline-add-experience-button" type="button" class="work-and-education-timeline-add-button timeline-work-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Experience</span></button>
+                    <button id="timeline-add-education-button" type="button" class="work-and-education-timeline-add-button timeline-education-add-button apply-flow-profile-item-button apply-flow-profile-item-button--add"><span class="apply-flow-profile-item-button__label">Add Education</span></button>
+                  </div>
+                </div>
+                <div id="items"></div>
+                <div id="slot"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main><div id="lists"></div><script>
+        ${oracleEntryLists}
+        window.saved = [];
+        window.refusedSaves = 0;
+        let n = 200;
+        const actions = document.getElementById('timeline-anchor');
+        const slot = document.getElementById('slot');
+        // The dialog opens with the site's own Country already chosen; an
+        // experience's State and City are drawn a moment later, once that country
+        // is known. Picking a country again resets what depends on it (the Degree).
+        window.countryPicks = 0;
+        const place = (kind) => select(kind === 'experience' ? 'Employer Country' : 'Country', 'countryCode-' + n, 'countryCode')
+          + (kind === 'experience' ? '<div class="late"></div>' : select('State', 'stateProvinceCode-' + n, 'stateProvinceCode') + text('City', 'city-' + n, 'city'));
+        const forms = {
+          experience: () => text('Employer Name', 'employerName-' + n, 'employerName') + text('Job Title', 'jobTitle-' + n, 'jobTitle') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n) + place('experience')
+            // A required Achievements box where other forms ask Responsibilities.
+            + '<div class="input-row"><label for="achievements-' + n + '"><span>Achievements</span><span class="input-row__label--required-star" aria-hidden="true"></span></label>'
+            + '<textarea class="input-row__control input-row__control--autoheight" rows="1" id="achievements-' + n + '" name="achievements" aria-required="true"></textarea></div>',
+          education: () => select('Degree', 'contentItemId-' + n, 'contentItemId') + select('Major', 'major-' + n, 'major') + select('School', 'educationalEstablishment-' + n, 'educationalEstablishment') + date('Start Date', 'startDate', n) + date('End Date', 'endDate', n) + place('education'),
+        };
+        const open = (kind) => {
+          if (actions.classList.contains('work-and-education-timeline__actions-container--disabled')) return;
+          n += 10;
+          actions.classList.add('work-and-education-timeline__actions-container--disabled');
+          const word = kind === 'education' ? 'Education' : 'Experience';
+          slot.innerHTML = '<div class="standard-apply-flow-timeline-form"><div class="timeline-form-content">' + forms[kind]() + '</div>'
+            + '<div class="timeline-form-footer"><div class="app-dialog__buttons-bar">'
+            + '<button class="button app-dialog__footer-button cancel-btn"><span class="button__label">Cancel</span></button>'
+            + '<button class="button app-dialog__footer-button save-btn"><span class="button__label">Add ' + word + '</span></button></div></div></div>';
+          const form = slot.firstElementChild;
+          wireLists(form);
+          const country = form.querySelector('input[name="countryCode"]');
+          // Chosen by the site itself when the dialog opens.
+          country.value = 'United States';
+          country.dataset.picked = 'United States';
+          country.addEventListener('click', () => showList(country, ['Canada', 'United States']));
+          const degree = form.querySelector('input[name="contentItemId"]');
+          if (degree) degree.addEventListener('click', () => showList(degree, ['Associate Degree', 'Bachelor of Science', 'Master of Science']));
+          lists.addEventListener('click', (event) => {
+            if (lists.owner === country && event.target.classList.contains('cx-select__list-item') && kind === 'education') {
+              window.countryPicks++;
+              for (const dependent of form.querySelectorAll('input[name="contentItemId"]')) { dependent.value = ''; delete dependent.dataset.picked; }
+            }
+          }, true);
+          const drawPlace = () => {
+            if (kind === 'experience') form.querySelector('.late').innerHTML = select('Employer State or Province', 'stateProvinceCode-' + n, 'stateProvinceCode') + text('Employer City', 'employerCity-' + n, 'employerCity');
+            const state = form.querySelector('input[name="stateProvinceCode"]');
+            state.addEventListener('click', () => showList(state, ['Alaska', 'Arizona', 'California']));
+          };
+          // An experience's country the dialog opens with is shown but not
+          // chosen: the page marks it invalid, and draws State and City only
+          // once a country is picked from its list.
+          if (kind === 'experience') {
+            delete country.dataset.picked;
+            // Shown chosen in one dialog, empty in the next: neither counts until picked.
+            if (n % 20 === 0) country.value = "";
+            lists.addEventListener('click', (event) => {
+              if (lists.owner === country && event.target.classList.contains('cx-select__list-item') && !form.querySelector('input[name="stateProvinceCode"]')) setTimeout(drawPlace, 1500);
+            }, true);
+          } else drawPlace();
+          form.querySelector('.save-btn').addEventListener('click', () => {
+            const name = kind === 'education' ? picked(form, 'input[name="educationalEstablishment"]') : form.querySelector('input[name="employerName"]').value;
+            const city = form.querySelector('input[name="city"], input[name="employerCity"]');
+            // Refused, as the page does, while a required field is empty.
+            if (!picked(form, 'input[name="countryCode"]') || !picked(form, 'input[name="stateProvinceCode"]') || !(city && city.value) || (kind === 'education' && !picked(form, 'input[name="contentItemId"]')) || (kind === 'experience' && !form.querySelector('textarea[name="achievements"]').value)) { window.refusedSaves++; return; }
+            window.saved.push(kind + ': ' + name + ' | ' + picked(form, 'input[name="countryCode"]') + ', ' + picked(form, 'input[name="stateProvinceCode"]') + (kind === 'experience' ? ' | ' + form.querySelector('textarea[name="achievements"]').value : ''));
+            setTimeout(() => {
+              slot.innerHTML = '';
+              document.getElementById('items').insertAdjacentHTML('beforeend', '<div class="timeline-item">' + name + '</div>');
+              actions.classList.remove('work-and-education-timeline__actions-container--disabled');
+            }, 400);
+          });
+        };
+        document.getElementById('timeline-add-experience-button').addEventListener('click', () => open('experience'));
+        document.getElementById('timeline-add-education-button').addEventListener('click', () => open('education'));
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${oracleOrigin}/hcmUI/CandidateExperience/en/sites/CX_1/job/1/apply/section/3`);
+  await enqueue([page]);
+  await expect.poll(() => page.evaluate(() => (window as any).saved.length), { timeout: 50000, message: "every education and experience saved with its place" }).toBe(4);
+  const saved: string[] = await page.evaluate(() => (window as any).saved);
+  expect([...saved].sort(), "every education and experience saved with its place").toEqual([
+    "education: Acme University | United States, Arizona",
+    "education: Penn State | United States, Arizona",
+    "experience: Contoso | United States, Arizona | Built APIs.",
+    "experience: Northwind | United States, Arizona | Ran reports.",
+  ]);
+  expect(await page.evaluate(() => (window as any).refusedSaves), "no save was refused for a missing Country, State, City or Achievements").toBe(0);
+  await expect(page.locator(".standard-apply-flow-timeline-form"), "no dialog left open").toHaveCount(0, { timeout: 5000 });
+  expect(await page.evaluate(() => (window as any).countryPicks), "an education's Country the dialog opened with is not picked again").toBe(0);
+});
+
 // Oracle's Major (recording, one employer's form): a cx-select box whose matches
 // the site fetches after the typing, one to four seconds later, and only while
 // the box keeps focus; its text is cleared when it blurs with no match picked.

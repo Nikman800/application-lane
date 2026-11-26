@@ -2625,7 +2625,7 @@ export async function interpretConfig(
       }
       // A site-filled value that is already the right one is left alone:
       // re-picking it can reset dependent fields (a country resets its state).
-      if (options.isReplaceable?.(element) && values.length) {
+      if (!selector.repick && options.isReplaceable?.(element) && values.length) {
         // Exactly, case included: a parser's "Michigan state university" is
         // free text, not the list's "Michigan State University".
         const current = textValue(element).trim();

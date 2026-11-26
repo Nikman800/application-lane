@@ -266,6 +266,15 @@ export function canonicalValues(
   }
   const history = historyValue(key, profile, context);
   if (history) return [history];
+  // A site that requires a place for every school or job (Oracle Recruiting's
+  // timeline dialogs, whose Save is refused without a City and State) takes
+  // the row's own, and the applicant's home when the row names none.
+  if (/^(city|state)_or_home$/.test(key)) {
+    const part = key.startsWith("city") ? "city" : "state";
+    const own = context.collection ? historyValue(part, profile, context) : undefined;
+    const home = part === "city" ? profile.city : profile.state;
+    return unique([own || home].filter((value): value is string => Boolean(value)));
+  }
   // A row that does not say where the employer or school is says nothing:
   // the applicant's home address is never theirs. (Country alone still
   // defaults to the applicant's, as sites that ask it of every row expect.)

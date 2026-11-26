@@ -97,6 +97,10 @@ export type SelectorConfig = {
   everyValue?: boolean;
   fieldWordings?: boolean;
   hidden?: boolean;
+  // A box the site filled with the answer is picked again anyway: the site
+  // shows it but counts it chosen only once picked (Oracle's experience
+  // Employer Country, whose State and City appear only after a pick).
+  repick?: boolean;
   inputSelectors?: InputSelector[];
   limit?: number;
   manual?: boolean;
@@ -140,6 +144,7 @@ export const selectorObjectSchema: z.ZodType<SelectorConfig> = z.lazy(() =>
       everyValue: z.boolean().optional(),
       fieldWordings: z.boolean().optional(),
       hidden: z.boolean().optional(),
+      repick: z.boolean().optional(),
       inputSelectors: z.array(inputSelectorSchema).optional(),
       limit: z.number().int().positive().optional(),
       manual: z.boolean().optional(),
