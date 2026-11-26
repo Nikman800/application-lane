@@ -143,6 +143,16 @@ test("citizenship and export-control answers follow the applicant's citizenships
   assert.equal(usPerson(resident), true);
   assert.equal(answer("Are you a U.S. person under ITAR?", resident), "Yes");
   assert.equal(answer("Are you a U.S. citizen?", resident), "No");
+  // A U.S. person question that lists and defines the statuses, "temporary
+  // residence" among them (Lever), is still one: a citizen is one, and is
+  // no foreign person of an embargoed country; a visa question for those
+  // who are not takes its option for citizens.
+  const usCitizenOnly = person({ country: "United States", workAuthorization: [{ country: "US", status: "citizen", needsSponsorship: false }], citizenships: ["US"] });
+  assert.equal(answer("Are you a U.S. person, which means you are one of the following: U.S. citizen; U.S. national under 8 U.S.C. 1408; alien lawfully admitted for permanent residence (green card holder); alien lawfully admitted for temporary residence under 8 U.S.C. 1160(a) or 8 U.S.C. 1255a(a); alien admitted as a refugee under 8 U.S.C. 1157; or alien granted asylum under 8 U.S.C. 1158. *Temporary residence does not mean visa status such as B, H, E, L, F, or J.", usCitizenOnly), "Yes");
+  assert.equal(answer("Are you a foreign person of an “Embargoed Country,” as denoted by the U.S. Department of Commerce? Examples of Embargoed Countries include: Iran, North Korea, Syria, Cuba, and the Crimea Region of Ukraine.", usCitizenOnly), "No");
+  const visaTypes = ["H1B visa", "F1 or OPT/CPT", "TN visa", "Other", "N/A - I am a US citizen, legal permanent resident, asylee or refugee"];
+  assert.equal(answer("If you answered no to the above question, what type of visa are you on", usCitizenOnly, { options: visaTypes }), "N/A - I am a US citizen, legal permanent resident, asylee or refugee");
+  assert.equal(answer("If you answered no to the above question, what type of visa are you on", indian, { options: visaTypes }), undefined);
   // Nothing saved: nothing said.
   assert.equal(answer("Are you a U.S. citizen?", person({})), undefined);
   assert.equal(answer("Are you a U.S. person under ITAR?", person({})), undefined);

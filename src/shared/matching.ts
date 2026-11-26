@@ -627,6 +627,19 @@ export function profileAnswer(
       if (/^(do|are|have|will|is)\b/.test(temporaryAsked)) return { value: "No" };
     }
   }
+  // "If you answered no to the above question, what type of visa are you
+  // on" beside an option for those on none ("N/A - I am a US citizen, legal
+  // permanent resident, asylee or refugee", Lever): that option, for an
+  // applicant whose U.S. status it names.
+  if (/\b(what|which) (type|kind) of (visa|work (visa|permit|authori[sz]ation))\b/.test(label) && field.options.length) {
+    const us = workAuthorizations(profile).find((entry) => entry.country === "US");
+    const status = usCitizen(profile) ? "citizen" : us?.status === "permanent-resident" ? "permanent resident" : "";
+    const none = status && field.options.filter((option) => {
+      const text = normalize(option);
+      return /^(n a|not applicable|none)\b/.test(text) && /\b(us|u s|united states)\b/.test(text) && text.includes(status);
+    });
+    if (none && none.length === 1) return { value: none[0] };
+  }
   // Generic authorization does not establish use of CPT or OPT.
   if (/^does your work authorization\b.*\binvolve (cpt|opt)\b/.test(normalize(askedPart(field.label)))) return;
   // A confirmed positive authorization answers this explicit OR question
@@ -658,8 +671,11 @@ export function profileAnswer(
   // (A "lawful temporary resident" listed among the statuses that count as
   // authorized, in "Are you authorized to work… as a (i) citizen; (ii)
   // permanent resident; (iii) lawful temporary resident…?", is a status in a
-  // list, not a temporary permit asked about (Oracle).)
-  if (/\b(proof|document\w*|verification|temporary|permit type)\b/.test(normalize(askedPart(field.label)).replace(/\blawful temporary resident\b/, "")) &&
+  // list, not a temporary permit asked about (Oracle). So is "temporary
+  // residence" in the statuses a U.S. person question lists and defines
+  // (Lever): that question is answered from citizenship below.)
+  if (!/\bu ?s person\b/.test(label) &&
+      /\b(proof|document\w*|verification|temporary|permit type)\b/.test(normalize(askedPart(field.label)).replace(/\blawful temporary resident\b/, "")) &&
       /authori[sz]|right to work|visa/.test(label)) return;
   // "Do you currently have an active immigration case (ex H-1B extension,
   // green card)?" (Ashby, an employer): a U.S. citizen has none in the
@@ -777,7 +793,9 @@ export function profileAnswer(
   // and home are all elsewhere (Woodgrove's Workday). Left when the profile does not say.
   // (Its question follows a paragraph with no space after the full stop:
   // "…if you are hired.Are you a citizen…".)
-  if (/\b(are|have) you (been |ever been )?(a |an )?(citizen|national|permanent resident|resident)\b/.test(label) && sanctionedPlaces.test(label)) {
+  // So is "Are you a foreign person of an Embargoed Country…? Examples …
+  // include: Iran, North Korea, Syria, Cuba" (Lever).
+  if (/\b(are|have) you (been |ever been )?(a |an )?(citizen|national|permanent resident|resident|foreign (person|national) (of|from))\b/.test(label) && sanctionedPlaces.test(label)) {
     const tie = sanctionedTie(profile);
     if (tie !== undefined) return { value: tie ? "Yes" : "No" };
   }
@@ -825,14 +843,18 @@ export function profileAnswer(
   // "When is your expected graduation date (month and year)?" as a list of
   // combined seasons ("Spring/Summer 2027", "Fall/Winter 2027", "Winter 2029
   // or later"): the option holding the coming end date's season and year.
+  // So is a list of single seasons beside a catch-all with no date ("Summer
+  // 2027", "Winter 2027", …, "Future Graduation Date", Lever): December is
+  // its Winter when the list offers no Fall of that year.
   if (/\b(anticipated|expected|projected)\b.*\bgraduat/.test(label) && field.options.length) {
-    const read = field.options.map((option) => ({
+    const dated = field.options.filter((option) => !/^(future|other|later)\b.*\b(date|graduation)?$/.test(normalize(option)) || /\b(19|20|21)\d{2}\b/.test(option));
+    const read = dated.map((option) => ({
       option,
       seasons: [...normalize(option).matchAll(/\b(spring|summer|fall|autumn|winter)\b/g)].map((m) => (m[1] === "autumn" ? "fall" : m[1])),
       year: Number(normalize(option).match(/\b((?:20|21)\d{2})\b/)?.[1]),
       later: /\bor later\b|\band (beyond|after)\b/.test(normalize(option)),
     }));
-    if (read.every((entry) => entry.seasons.length && entry.year) && read.some((entry) => entry.seasons.length > 1)) {
+    if (read.every((entry) => entry.seasons.length && entry.year) && (read.some((entry) => entry.seasons.length > 1) || (dated.length < field.options.length && read.length >= 2))) {
       const thisMonth = currentMonth();
       const coming = profile.education
         .map((row) => row.endDate)

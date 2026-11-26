@@ -1537,6 +1537,12 @@ test("a graduation date box gets the whole date, and a season its term", () => {
   assert.equal(pick("Anticipated graduation season", { kind: "radio", options: ["Spring 2099", "Fall 2099"] }, december), "Fall 2099");
   // A season with no year the list offers is left alone.
   assert.equal(pick("Anticipated graduation season", { kind: "radio", options: ["Spring 2098", "Fall 2098"] }), undefined);
+  // "Expected month and year of graduation" as single seasons beside a
+  // catch-all with no date (Lever): December takes the year's Winter when
+  // no Fall of it is offered; a month no option holds is left alone.
+  const single = { kind: "radio", options: ["Summer 2099", "Winter 2099", "Spring 2100", "Summer 2100", "Future Graduation Date"] };
+  assert.equal(pick("What is your expected month and year of graduation?", single, december), "Winter 2099");
+  assert.equal(pick("What is your expected month and year of graduation?", single), undefined);
   // A list of spans takes the one holding the month (one employer's
   // Oracle form), and a list read only when opened can match it.
   const quarters = { kind: "select", options: ["January - March 2099", "April - June 2099", "July - September 2099", "October - December 2099", "January - March 2100"] };
