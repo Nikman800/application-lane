@@ -233,6 +233,14 @@ export function rankOption(
       .find((degree) => degree && degree.level === listed.level && degree.subjects.length === 1);
     if (wanted && listed.subjects.length > 1 && listed.subjects.includes(wanted.subjects[0])) return 44;
   }
+  // A degree behind the list's own heading: "College - Bachelor of Science"
+  // (JazzHR's highest education) is the answer's Bachelor of Science.
+  const headed = optionText.match(/^[^-–:]+?\s+[-–:]\s+(.+)$/)?.[1];
+  const degree = headed ? degreeSubjects(headed) : undefined;
+  if (degree && [proposal.value, ...(proposal.choices || [])].some((wording) => {
+    const asked = degreeSubjects(wording);
+    return asked && asked.level === degree.level && asked.subjects.join("|") === degree.subjects.join("|");
+  })) return 44.2;
   // A plain Yes or No also answers a list that words it as a sentence
   // ("Yes, I am authorized to work…"). Two options beginning the same way
   // tie, and a tie is never chosen.

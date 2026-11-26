@@ -1140,13 +1140,14 @@ function educationAndPlaceAnswer({ field, profile, label, asked, educationRow }:
   // Undergraduate Degree", "Field of Study / Major: Graduate/MBA/PhD Degree".
   // "Earned" alone counts only a degree already finished.
   // Also as a sentence: "What is the highest level of education you have
-  // completed?" (SuccessFactors).
+  // completed?" (SuccessFactors), or "What's your highest level of education
+  // completed?" (JazzHR).
   // Or as the last question after a preamble: "If hired by an employer, we will
   // verify your most recent graduation date and the highest degree or
   // diploma received. What is the highest level of education you've
   // received?".
   const lastAsk = normalize(field.label.match(/([^.?!]*\?)\s*$/)?.[1] || "");
-  const highestPattern = /^(?:what is )?(?:the |your )?highest (?:level of )?(?:degree|education)(?: (?:that )?you (?:have|ve))?((?: (?:earned|obtained|completed|attained|received|pursuing|in progress))*)$/;
+  const highestPattern = /^(?:what(?: i|'| )?s )?(?:the |your )?highest (?:level of )?(?:degree|education)(?: (?:that )?you (?:have|ve))?((?: (?:earned|obtained|completed|attained|received|pursuing|in progress))*)$/;
   // "Degree you are currently pursuing or have completed" (Oracle): the same
   // highest degree, held or under way.
   const pursuedOrHeld = /^(?:the |your )?degree you are (?:currently )?pursuing or have completed$/;

@@ -1726,6 +1726,8 @@ test("SuccessFactors' education sentences and its availability date are answered
   // Bachelor of Science is its own option, not the Arts one or the Master's.
   const bamboo = ["GED or Equivalent", "High School", "Some College", "College - Associates", "College - Bachelor of Arts", "College - Bachelor of Fine Arts", "College - Bachelor of Science", "College - Master of Arts", "College - Master of Science", "College - Doctorate", "Other"];
   assert.equal(ask("Highest Education Obtained", { kind: "combobox", options: bamboo }), "College - Bachelor of Science");
+  // JazzHR asks the same list as a plain select, worded "What's …".
+  assert.equal(ask("What's your highest level of education completed?", { kind: "select", options: bamboo }), "College - Bachelor of Science");
   const today = new Date();
   const two = (n: number) => String(n).padStart(2, "0");
   assert.equal(ask("Date Available"), `${two(today.getMonth() + 1)}/${two(today.getDate())}/${today.getFullYear()}`);
