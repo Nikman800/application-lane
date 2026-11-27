@@ -645,6 +645,21 @@ function pursuingByDeadline(label: string, profile: Profile): string | undefined
   return fits ? "Yes" : undefined;
 }
 
+// "Are you a current college student majoring in computer science or
+// related field?": Yes when a school row still under way is in a field it
+// names, No with none under way; a field it does not name is left, as above.
+function currentMajor(label: string, profile: Profile): string | undefined {
+  const asked = label.match(/^are you (?:a |an )?(?:current|currently|presently) (?:a |an )?(?:enrolled )?(?:college |university |undergraduate |graduate )?student (?:majoring|studying|enrolled) in (.+)$/);
+  if (!asked) return;
+  const under = profile.education.filter((row) => studying(row));
+  if (!under.length) return profile.education.length ? "No" : undefined;
+  const named = asked[1].replace(/ or (?:a |an |any )?(?:closely )?related (?:technical )?(?:field|discipline|major|area)s?$/, "");
+  return under.some((row) => {
+    const field = normalize(row.fieldOfStudy || "");
+    return field && new RegExp(`(^| )${field}( |$)`).test(named);
+  }) ? "Yes" : undefined;
+}
+
 export function profileAnswer(
   field: Field,
   profile: Profile,
@@ -1023,6 +1038,8 @@ function educationAndPlaceAnswer({ field, profile, label, asked, educationRow }:
     return field.options.length ? { value: "Yes" } : undefined;
   const pursuing = pursuingByDeadline(label, profile);
   if (pursuing) return { value: pursuing };
+  const major = currentMajor(label, profile);
+  if (major) return { value: major };
   const skill = namedSkillLevel(field, label, profile);
   if (skill) return { value: skill };
   // "Anticipated graduation month/year" comes from the latest education end

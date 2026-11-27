@@ -3540,3 +3540,15 @@ test("hired-proof questions, a past-years government question and iForm educatio
   assert.equal(row("Name School 1", 1), "Penn State");
   assert.equal(row("Date of Graduation Year 1", 1), "2024", "the second block's graduation year was left");
 });
+
+// "Are you a current college student majoring in computer science or related
+// field?" went to the AI step: it is asked of the degree under way.
+test("a current student majoring in a named field is answered from the school row under way", () => {
+  const asked = "Are you a current college student majoring in computer science or related field?";
+  const studying = (fieldOfStudy: string, current: boolean) => profileSchema.parse({ ...rivera, education: [
+    { organization: "Virginia Tech", title: "Masters of Science", fieldOfStudy, startDate: "2025-08", endDate: current ? "2099-05" : "2024-05", current },
+  ] });
+  assert.equal(valueOf(asked, yesNo, studying("Computer Science", true)), "Yes", "the current major went to the AI step");
+  assert.equal(valueOf(asked, yesNo, studying("Computer Science", false)), "No");
+  assert.equal(valueOf(asked, yesNo, studying("Data Science", true)), undefined);
+});
