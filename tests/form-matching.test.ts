@@ -3514,3 +3514,29 @@ test("an ns2cloud HCM application page is tracked at the posting's public career
   assert.equal(publicPostingUrl(other), other);
   assert.equal(publicPostingUrl(`https://example.test/portalcareer?${crb}`), `https://example.test/portalcareer?${crb}`);
 });
+
+// iCIMS iForms: proof of age and the right to work asked "If you are hired,
+// can you …", a government question opening with "Within the past five (5)
+// years", and an education table whose labels carry the block's number.
+test("hired-proof questions, a past-years government question and iForm education labels are answered from the saved data", () => {
+  const who = profileSchema.parse({
+    ...rivera,
+    age18OrOlder: "Yes",
+    veteranStatus: "I am not a veteran",
+    legal: { ...rivera.legal, government: "Never employed by a government entity" },
+    workAuthorization: [{ country: "US", status: "citizen", needsSponsorship: false }],
+  });
+  assert.equal(valueOf("If you are hired, can you furnish proof that you are 18 years old or older, or, if you are under 18, do you have a permit to work?", yesNo, who), "Yes", "the 18-or-older proof was left");
+  assert.equal(valueOf("If you are hired, can you submit verification of your right to work in the U.S.?", yesNo, who), "Yes", "the right-to-work verification was left");
+  const government = "Within the past five (5) years have you served as a civilian employee or a U.S. Military Commissioned Officer for the U.S. Government?";
+  assert.equal(valueOf(government, yesNo, who), "No", "the government question went to the AI step");
+  assert.equal(valueOf(government, yesNo, profileSchema.parse({ ...who, veteranStatus: "I am a protected veteran" })), undefined);
+  const schools = profileSchema.parse({ ...who, education: [
+    { organization: "Virginia Tech", title: "Masters of Science", fieldOfStudy: "Data Science", startDate: "2025-08-21", endDate: "2027-05-10", current: true },
+    { organization: "Penn State", title: "Bachelors of Science", fieldOfStudy: "Computer Science", startDate: "2020-09-13", endDate: "2024-06-15" },
+  ] });
+  const row = (label: string, index: number, overrides: Partial<Field> = {}) => proposals([field(label, { section: "Education", index, ...overrides })], schools)[0]?.value;
+  assert.equal(row("Name School", 0), "Virginia Tech", "the school's name went unanswered");
+  assert.equal(row("Name School 1", 1), "Penn State");
+  assert.equal(row("Date of Graduation Year 1", 1), "2024", "the second block's graduation year was left");
+});

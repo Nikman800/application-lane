@@ -968,14 +968,19 @@ export async function run(app: Application, operation: number) {
       // page did not have when the resume went up, answered as the rest, and
       // what an answer there opens in turn (the address pane Country
       // reveals), each round looking again for what the last one opened.
+      // A field the last round's writes emptied (UKG Pro redraws its State
+      // list empty when Country is written) is answered in the next.
+      let heldBefore = new Map<string, string>();
       for (let round = 0; round < 4; round++) {
         const lost = [
           ...(round ? [] : emptied(frame.observation.fields)),
+          ...frame.observation.fields.filter((f) => f.kind !== "file" && !f.value && !f.protected && heldBefore.has(f.id)),
           ...frame.observation.fields.filter((f) => f.kind !== "file" && !f.value && !f.protected && !resume.fieldsBeforeResume?.has(f.id)),
         ];
         const again = lost.length ? proposals(frame.observation.fields, profile).filter((proposal) => lost.some((field) => field.id === proposal.fieldId)) : [];
         if (!again.length) break;
         for (const field of frame.observation.fields) resume.fieldsBeforeResume?.add(field.id);
+        heldBefore = new Map(frame.observation.fields.filter((f) => f.value).map((f) => [f.id, f.value]));
         const applied = await applyFrame(app, frame, again, operation);
         if (applied.navigationInterrupted) {
           await reviewInterruptedWrite(app, applied.observation);

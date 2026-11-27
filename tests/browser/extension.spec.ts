@@ -24,7 +24,7 @@ import {
   provider,
   type Generate,
 } from "../../src/server/generation";
-import { icimsCandidatePage, icimsProfileAfterUpload } from "./icims-fixture";
+import { icimsCandidatePage, icimsProfileAfterUpload, icimsIformEducation } from "./icims-fixture";
 import { realSchools, schoolsWithout } from "../support/schools";
 import { ssrSelectMarkup } from "./ssr-select-fixture";
 import { proposals as knownProposals } from "../../src/shared/matching";
@@ -17568,6 +17568,40 @@ test("a Workday questionnaire date's parts carry their question", async () => {
 // Wingtip's iCIMS form: a date's Month,
 // Day and Year and the salary's Amount sit under one line of text in their
 // table cell and were read only as their parts.
+// iCIMS iForms: every control of the education table read as row 0. The
+// first school's name went unanswered, the second block took the first
+// school again from the AI step, "Did you Graduate?" was left in both and the
+// second block's Year boxes were held back as twins of the first's.
+test("an iCIMS iForms education table answers each school block from its own saved row", async () => {
+  test.setTimeout(120000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, education: [
+    { organization: "Virginia Tech", title: "Masters of Science", fieldOfStudy: "Data Science", startDate: "2025-08-21", endDate: "2027-05-10", current: true, location: "Blacksburg, VA", details: "" },
+    { organization: "Penn State", title: "Bachelors of Science", fieldOfStudy: "Computer Science", startDate: "2020-09-13", endDate: "2024-06-15", location: "State College, PA", details: "" },
+  ] } });
+  const icims = atsOrigins.find((origin) => origin.includes(".icims.com"))!;
+  await context.route(`${icims}/**`, (route) =>
+    route.fulfill({ contentType: "text/html", body: `<!doctype html><title>Application</title><main><h1>Software Engineer</h1><form onsubmit="return false">${icimsIformEducation}</form></main>` }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${icims}/jobs/1/engineer/form`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 60000 }).toMatch(/ready|awaiting-user/);
+  await expect(page.locator("#icims_f_name_school"), "the first school was left unnamed").toHaveValue("Virginia Tech");
+  await expect(page.locator("#icims_f_graduate1_no")).toBeChecked();
+  await expect(page.locator("#icims_f_date_graduation_Year")).toHaveValue("2027");
+  await expect(page.locator("#icims_f_name_school_1"), "the second block did not take the second school").toHaveValue("Penn State");
+  await expect(page.locator("#icims_f_degree_1")).toHaveValue("Bachelors of Science");
+  await expect(page.locator("#icims_f_major_1")).toHaveValue("Computer Science");
+  await expect(page.locator("#icims_f_graduate2_yes")).toBeChecked();
+  await expect(page.locator("#icims_f_date_graduation_1_Month option:checked")).toHaveText("Jun");
+  await expect(page.locator("#icims_f_date_graduation_1_Date option:checked")).toHaveText("15");
+  await expect(page.locator("#icims_f_date_graduation_1_Year")).toHaveValue("2024");
+  // The technical school's block has no saved row.
+  await expect(page.locator("#icims_f_name_school_2")).toHaveValue("");
+});
+
 test("an iCIMS date's and salary's boxes carry the text above them", async () => {
   const months = ["Jan", "Feb", "Mar"].map((month) => `<option>${month}</option>`).join("");
   await context.route(`${atsOrigins[0]}/**`, (route) =>
@@ -25499,6 +25533,56 @@ test("a UKG Pro optional Country list is answered and the address pane it reveal
   await expect(page.locator("#City")).toHaveValue("Blacksburg", { timeout: 45_000 });
   await expect(page.locator("#State option:checked")).toHaveText("Virginia", { timeout: 45_000 });
   await expect(page.locator("#PostalCode")).toHaveValue("24060", { timeout: 45_000 });
+});
+
+// UKG Pro: a résumé upload emptied Country and left State showing the saved
+// state. Writing the country asks the server for its states and redraws the
+// State list empty; the state already there was not written again.
+test("a UKG Pro State list already showing the saved state is written again after Country redraws it", async () => {
+  test.setTimeout(120000);
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, address: "100 E. Mill Way", addressLine2: "", city: "Blacksburg", state: "Virginia", postalCode: "24060", country: "United States" } });
+  await context.route(`${ukgOrigin}/acme/JobBoard/job/States**`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(new URL(route.request().url()).searchParams.get("countryId") === "us-id" ? [{ Id: "va-id", Name: "Virginia" }, { Id: "az-id", Name: "Arizona" }] : [{ Id: "on-id", Name: "Ontario" }]) });
+  });
+  await context.route(`${ukgOrigin}/acme/JobBoard/job/OpportunityApply**`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><title>Data Analyst Intern | Apply</title><main><h1>Data Analyst Intern</h1>
+      <div class="form-group"><label for="resume">Upload Resume</label><input type="file" id="resume" name="file"></div>
+      <div class="panel panel-transparent" role="region" aria-label="Contact Information"><div class="panel-heading"><div class="panel-title"><h2 class="collapsible-panel-title">Contact Information</h2></div></div>
+      <div class="panel-collapse collapse in"><div class="panel-body"><form novalidate autocomplete="on">
+        <div class="row"><div class="col-md-8"><div class="form-group"><label for="Country" class="control-label">Country</label>
+          <select class="form-control focus-visible" id="Country" name="Country" autocomplete="country-name" aria-describedby="CountryError"><option value="">Choose...</option><option value="ca-id">Canada</option><option value="us-id" selected>United States</option></select>
+          <span id="CountryError" class="help-block" style="display: none;"></span></div></div></div>
+        <div class="collapse in" id="addressPane" aria-expanded="true">
+          <div class="row"><div class="col-md-16"><div class="form-group"><label id="AddressLine1Label" for="AddressLine1" class="control-label required">Address 1</label><input id="AddressLine1" type="text" class="form-control" autocomplete="address-line1" required value="100 E. Mill Way"></div></div></div>
+          <div class="row"><div class="col-md-8"><div class="form-group"><label for="City" class="control-label required">City</label><input id="City" type="text" class="form-control" autocomplete="address-level2" required value="Blacksburg"></div></div>
+            <div class="col-md-8" id="stateGroup"><div class="form-group"><label for="State" class="control-label required">State / Province</label><select class="form-control" id="State" required autocomplete="address-level1"><option value="">Choose...</option><option value="va-id" selected>Virginia</option><option value="az-id">Arizona</option></select></div></div>
+            <div class="col-md-8"><div class="form-group"><label for="PostalCode" class="control-label required">Zip / Postal Code</label><input type="text" id="PostalCode" class="form-control" autocomplete="postal-code" required value="24060"></div></div></div>
+        </div>
+      </form></div></div></div></main><script>
+        const country = document.getElementById("Country");
+        // Parsing the uploaded resume redraws the address and loses Country.
+        document.getElementById("resume").addEventListener("change", () => setTimeout(() => { country.value = ""; }, 1500));
+        country.addEventListener("change", async () => {
+          const state = document.getElementById("State");
+          const response = await fetch("/acme/JobBoard/job/States?countryId=" + country.value);
+          const items = await response.json();
+          state.innerHTML = '<option value="" selected>Choose...</option>';
+          for (const item of items) state.insertAdjacentHTML("beforeend", '<option value="' + item.Id + '">' + item.Name + '</option>');
+        });
+      </script>`,
+    }),
+  );
+  const page = await context.newPage();
+  await page.goto(`${ukgOrigin}/acme/JobBoard/job/OpportunityApply?opportunityId=1`);
+  await panel.bringToFront();
+  await background(page);
+  await enqueue([page]);
+  await expect(page.locator("#Country option:checked")).toHaveText("United States", { timeout: 45_000 });
+  await expect.poll(async () => (await state()).applications[0]?.status, { timeout: 45000 }).toMatch(/ready|awaiting-user/);
+  await expect(page.locator("#State option:checked"), "the state list the country redrew was left empty").toHaveText("Virginia");
 });
 
 test("ADP address step reads error-state labels ('City is required') by the input's validationmessage", async () => {

@@ -1216,6 +1216,22 @@ export function writable(element: Control): boolean {
   );
 }
 
+const iformEducationBase = (id: string) =>
+  id.replace(/^icims_f_/, "").replace(/_(yes|no)$/i, "").replace(/_(month|date|day|year)$/i, "").replace(/_?\d+$/, "");
+function iformEducationRow(element: Control): number | undefined {
+  if (!/^icims_f_/.test(element.id)) return;
+  const own = iformEducationBase(element.id);
+  if (!/^(name_school|location|degree|years_completed|major|graduate|date_graduation)$/.test(own)) return;
+  const root = element.getRootNode() as Document | ShadowRoot;
+  if (!root.querySelector?.("#icims_f_name_school")) return;
+  let row: number | undefined;
+  for (const control of root.querySelectorAll<HTMLElement>('[id^="icims_f_"]')) {
+    const start = control.id.match(/^icims_f_name_school(?:_(\d+))?$/);
+    if (start) row = Number(start[1] || 0);
+    if (control === element) return row;
+  }
+}
+
 export function sectionFor(element: Control): {
   section: string;
   index: number;
@@ -1293,6 +1309,14 @@ function pageSectionFor(element: Control): {
   const jobvite = element.closest(".jv-prescreen-element");
   const jobviteRow = jobvite && jobvitePrescreenRow(jobvite, element);
   if (jobviteRow) return jobviteRow;
+  // iCIMS iForms' education table: one block per school, its controls named
+  // by suffix ("icims_f_name_school", "icims_f_name_school_1", their
+  // "icims_f_date_graduation_1_Year"), with radios numbered apart from them
+  // ("icims_f_graduate1", "icims_f_graduate2"). Read in page order, a
+  // control of the block belongs to the school named last before it; all
+  // were row 0, and the second school's Year boxes held back as twins.
+  const iformRow = iformEducationRow(element);
+  if (iformRow !== undefined) return { section: "Education", index: iformRow };
   // iCIMS's own education and work blocks: "icims_1_SchoolName" is the second
   // block, and the page's heading above the group ("EDUCATION (COMPLETED)")
   // is its section, which tells a finished degree's blocks from the "currently

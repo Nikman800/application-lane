@@ -36,6 +36,12 @@ function ageTest(text: string): AgeTest | undefined {
   let q = question(text).replace(/\beighteen\b/g, "18").replace(/\bsixteen\b/g, "16").replace(/\btwenty one\b/g, "21");
   q = q.replace(/^at the time of (application|applying) /, "").replace(/ (as of today|today)$/, "");
   q = q.replace(/^(are you|is your age) /, "").replace(/^(age|aged) /, "");
+  // "If you are hired, can you furnish proof that you are 18 years old or
+  // older, or, if you are under 18, do you have a permit to work?" (iCIMS
+  // iForms): one of age has that proof (and Yes is all it can say).
+  const proof = /^(if (you are )?hired )?(can|will|could|would) you (furnish|provide|submit|show|present) (proof|documentation|evidence) that you are /;
+  const proved = proof.test(q);
+  if (proved) q = q.replace(proof, "").replace(/ or if you are under 18 do you have a (work )?permit( to work)?$/, "");
   // "Are you over the age of 18 or will you be within the next 6 months?"
   // (an Oracle questionnaire): anyone of that age now is, and only a Yes
   // can be said for it.
@@ -44,9 +50,10 @@ function ageTest(text: string): AgeTest | undefined {
   q = q.replace(soon, "");
   const lower = q.match(/^(at least|over|older than|under|younger than|less than) (?:the age of )?(\d{1,3})(?: years?(?: of age| old)?)?$/);
   if (lower && later && /under|younger|less/.test(lower[1])) return;
-  if (lower) return { minimum: Number(lower[2]), inclusive: later || lower[1] === "at least", below: /under|younger|less/.test(lower[1]), ...(later ? { onlyYes: true } : {}) };
+  if (lower && proved && /under|younger|less/.test(lower[1])) return;
+  if (lower) return { minimum: Number(lower[2]), inclusive: later || lower[1] === "at least", below: /under|younger|less/.test(lower[1]), ...(later || proved ? { onlyYes: true } : {}) };
   const after = q.match(/^(\d{1,3})(?: years?(?: of age| old)?)? (?:or|and) (older|over|above|younger)(?: years?(?: of age| old)?)?$/);
-  if (after) return { minimum: Number(after[1]), inclusive: true, below: after[2] === "younger" };
+  if (after) return { minimum: Number(after[1]), inclusive: true, below: after[2] === "younger", ...(proved ? { onlyYes: true } : {}) };
 }
 
 function binary(value: boolean, field: Field): Answer {

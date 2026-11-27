@@ -162,7 +162,10 @@ export function deterministicAnswer(
   field: Field,
   profile: Profile,
 ): string | undefined {
-  const label = normalize(field.label);
+  // A school block's controls numbered by block ("Name School 1", "Major 1"
+  // in iCIMS iForms' second block) ask what the first block's do.
+  const label = normalize(field.label).replace(
+    /education/.test(normalize(field.section || "")) && field.index ? new RegExp(` ${field.index}$`) : /$^/, "");
   if (
     // (A "Middle initial" is part of the name, not an initialled consent.)
     /password|captcha|one time|verification code|\bsign(?:ature|ing)?\b|(?<!\bmiddle (name )?)\binitial(?:s| each)?\b|\bconsent\b|\bagree\b|\bcertif\w*|\bi (?:understand|authorize|hereby)\b/.test(
@@ -210,7 +213,7 @@ export function deterministicAnswer(
     const row = /education/.test(section) ? educationRowFor(profile, section, field.index) : profile.work[field.index || 0];
     if (!row) return;
     if (
-      /^(company|employer|organization|school|university|institution)( name| dropdown)?$|^name of (the |your )?(company|employer|organization|school|university|college|institution)$|^graduate (school|university)$/.test(
+      /^(company|employer|organization|school|university|institution)( name| dropdown)?$|^name of (the |your )?(company|employer|organization|school|university|college|institution)$|^graduate (school|university)$|^name school$/.test(
         label,
       ) || (/education/.test(section) && schoolNameQuestion(field.label))
     )
@@ -236,6 +239,9 @@ export function deterministicAnswer(
     if (/^(start|from)( date)?( month| day| year)?$/.test(label))
       return dateAnswer(row.startDate, label, field, profile);
     if (/^(end|to)( date)?( month| day| year)?$/.test(label))
+      return dateAnswer(row.endDate, label, field, profile);
+    // iCIMS iForms: "Date of Graduation" in Month, Day and Year parts.
+    if (/education/.test(section) && /^date of graduation( month| day| year)$/.test(label))
       return dateAnswer(row.endDate, label, field, profile);
     // A job without an end date is the one held now: Greenhouse's "Current
     // role" box.
@@ -739,7 +745,9 @@ export function profileAnswer(
   // left empty with no reason for a citizen (one employer's Jobvite).
   const proofAsked = normalize(askedPart(field.label));
   if (
-    /^(if hired )?(will|would|can|could) you (be able to )?(provide|furnish|submit|present|produce) (proof|documentation|evidence|documents)\b/.test(proofAsked) &&
+    // ("If you are hired, can you submit verification of your right to work
+    // in the U.S.?", iCIMS iForms.)
+    /^(if (you are )?hired )?(will|would|can|could) you (be able to )?(provide|furnish|submit|present|produce) (proof|documentation|evidence|documents|verification)\b/.test(proofAsked) &&
     /\b(right|authori[sz]ation|eligibility|eligible) to work\b|\bemployment eligibility\b/.test(proofAsked) &&
     !/\b(temporary|visa|permit type|sponsor\w*)\b/.test(proofAsked)
   ) {
@@ -1803,14 +1811,20 @@ function screeningAnswer({ field, profile, label, qualified, saved, immigration,
   // the applicant has worked for a government entity: No. The model, held to
   // the saved words, found no source for "government entity". Military service, relatives and clearances
   // are other questions, left to it.
-  const governmentAsked = normalize(askedPart(field.label));
+  // "Within the past five (5) years have you served as a civilian employee or
+  // a U.S. Military Commissioned Officer for the U.S. Government?" is the same
+  // question, with military service in it too: No for one who saved that they
+  // are not a veteran.
+  const governmentAsked = normalize(askedPart(field.label)).replace(/^(within|in|during) the (past|last) [a-z0-9 ]*? years? /, "");
+  const neverServed = /^i am not a veteran\.?$/i.test((profile.veteranStatus || "").trim());
   if (
     /^never\b/i.test((profile.legal?.government || "").trim()) &&
     /^(have|are|were|did) you\b/.test(governmentAsked) &&
     /\b(work\w*|employ\w*|serv\w*)\b/.test(governmentAsked) &&
-    /\bgovernment (entity|entities|agency|agencies|employee|employer|organization|body|bodies|office)|\bpublic (official|office)\b/.test(governmentAsked) &&
+    /\bgovernment (entity|entities|agency|agencies|employee|employer|organization|body|bodies|office)|\bpublic (official|office)\b|\b(employee|officer)\b.* for the (u s |united states |federal )?government$/.test(governmentAsked) &&
     // (Of the whole question: "(This includes military service)" is a note.)
-    !/\b(military|armed forces|veteran|relative|family|spouse|friend|clearance)\b/.test(label)
+    !/\b(relative|family|spouse|friend|clearance)\b/.test(label) &&
+    (neverServed || !/\b(military|armed forces|veteran)\b/.test(label))
   )
     return { value: "No" };
   // "Are you eligible to obtain a U.S. security clearance? This is typically
