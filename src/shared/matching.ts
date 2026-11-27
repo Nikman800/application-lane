@@ -795,6 +795,9 @@ export function profileAnswer(
     for (const [pattern, key] of [
       [/\bsexual orientation\b/, "sexualOrientation"],
       [/\bpronouns?\b/, "pronouns"],
+      // "How would you describe your gender identity? (mark all that apply)":
+      // its "Man" box is the saved Male.
+      [/\bgender( identity)?\b/, "gender"],
     ] as const)
       if (pattern.test(asked)) {
         const answer = canonicalAnswer(key, profile[key]);

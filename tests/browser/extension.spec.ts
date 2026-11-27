@@ -7531,6 +7531,39 @@ test("a Lever box covered by a fixed banner is ticked without a click on the ban
 // one employer's: a required one, "the locations you would be
 // interested in relocating to", read as optional boxes listed one by one,
 // and nothing ticked them for an applicant who will relocate anywhere.
+// Greenhouse's older embedded form, as captured on an employer's own site:
+// each demographic question is a label naming no control, then a
+// div.multivalueselect of boxes, each in a name of its own. Each box read as
+// a question of its own ("Man"), and none was ticked.
+test("a Greenhouse embed's mark-all-that-apply boxes carry their question, and the saved answer is ticked", async () => {
+  const group = (id: string, title: string, options: string[], first: number) =>
+    `<label class="job_application_form_label" for="${id}"> ${title} </label> <div class="multivalueselect">${options
+      .map((name, index) => `<div class="job_application__field-wrapper"> <input class="multi " type="checkbox" id="${name}" name="${first - index}"> <label for="${name}"> ${name}</label> </div>`)
+      .join(" ")}</div>`;
+  await context.route("https://boards.greenhouse.io/embed/acme/**", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><html><head><title>Engineer - Acme</title></head><body><form id="application_form" onsubmit="window.submissions++; return false">
+        <label for="email">Email</label><input id="email" name="email" type="email" required>
+        ${group("4270", "How would you describe your gender identity? (mark all that apply)", ["Man", "Non-binary", "Woman", "I prefer to self-describe", "I don't wish to answer"], 27890)}
+        ${group("4268", "How would you describe your sexual orientation? (mark all that apply)", ["Asexual", "Bisexual", "Gay", "Heterosexual", "Lesbian", "I don't wish to answer"], 27870)}
+        <button type="submit">Submit Application</button></form><script>window.submissions = 0;</script></body></html>`,
+    }),
+  );
+  await ui({ type: "API", path: "/v1/profile", method: "PUT", body: { ...profile, gender: "Male", sexualOrientation: "Straight" } });
+  const page = await context.newPage();
+  await page.goto("https://boards.greenhouse.io/embed/acme/jobs/1");
+  await panel.bringToFront();
+  await enqueue([page]);
+  await expect.poll(async () => (await state()).applications[0].status, { timeout: 45000 }).toMatch(/^(awaiting-user|ready)$/);
+  await expect(page.locator("#email")).toHaveValue(profile.email);
+  const tabId = await panel.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, page.url());
+  const fields = (await ui({ type: "SCAN_TAB", tabId })).observation.fields as { label: string; question?: string }[];
+  expect(fields.find((field) => field.label === "Man")?.question).toBe("How would you describe your gender identity? (mark all that apply)");
+  await expect.poll(() => page.locator("input:checked").evaluateAll((inputs) => inputs.map((input) => input.id))).toEqual(["Man", "Heterosexual"]);
+  expect(await page.evaluate(() => (window as any).submissions)).toBe(0);
+});
+
 test("an Ashby checkbox question keeps its boxes together: each carries the question, and only the answer is ticked", async () => {
   const group = (path: string, title: string, options: string[], required = false) =>
     `<div class="ashby-application-form-field-entry" data-field-path="${path}"><label class="ashby-application-form-question-title${required ? " _required_x" : ""}">${title}</label>${options

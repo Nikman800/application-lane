@@ -173,6 +173,14 @@ export function checkboxEntryTitle(element: Element): string {
   const row = element.closest(".input-row");
   const rowLabel = row?.querySelector(":scope > form-element-label label .input-row__linebreak, :scope > label .input-row__linebreak");
   if (row && rowLabel && row.querySelectorAll('input[type="checkbox"]').length > 1) return cleanLabel(labelText(rowLabel));
+  // Greenhouse's older embedded form: a label naming no control ("How would
+  // you describe your gender identity? (mark all that apply)"), then a
+  // div.multivalueselect of boxes, each named after its option and in a
+  // name of its own.
+  const multi = element.closest(".multivalueselect");
+  const lead = multi?.previousElementSibling;
+  if (multi && lead instanceof HTMLLabelElement && !lead.control && multi.querySelectorAll('input[type="checkbox"]').length > 1)
+    return cleanLabel(labelText(lead));
   const entry = element.closest('.ashby-application-form-field-entry,fieldset[class*="_fieldEntry_"]');
   const title = entry?.querySelector(":scope > .ashby-application-form-question-title, :scope > legend");
   return entry && title && entry.querySelectorAll('input[type="checkbox"]').length > 1 ? cleanLabel(labelText(title)) : "";
