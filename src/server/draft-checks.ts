@@ -131,7 +131,7 @@ export function questionKey(field: Field) {
   // Keyed by the question the writer was asked (writerLabel): a split start
   // date's month named alone is not an answer to the whole date.
   const words = writerLabel(field).toLowerCase().replace(/\(required\)/gu, " ").replace(/[*\s]+/gu, " ").trim();
-  return JSON.stringify([words, field.maxLength ?? null, field.maxWords ?? null]);
+  return JSON.stringify([words, field.maxLength ?? null, field.maxWords ?? null, field.maxSentences ?? null]);
 }
 
 // Lines that say drafts went out unchecked: they hold for every answer.

@@ -1,11 +1,39 @@
 import { type Field } from "../shared/model";
 import { siteInvalid } from "../engine/page/invalid";
 import { tdsDateBox } from "../engine/page/tds-date-picker";
-import { wordLimit } from "../shared/questions";
+import { wordLimit, sentenceLimit } from "../shared/questions";
 import { askedLevel } from "../shared/transcripts";
 import { cleanLabel, labelText } from "../engine/page/labels";
 // Read by the engine as well, so they live there; named here as before.
 export { cleanLabel, labelText };
+
+// The form's words under a question: its aria-describedby text and a
+// description beside the label in the question's own box (Ashby's
+// ".ashby-application-form-question-description": "No more than 2
+// sentences", or "What have you built that you are most proud of?" under
+// "Why you?"). Error messages are not hints; text the label already holds is
+// not repeated.
+const hintSelector = '[class*="description" i],[class*="helper" i],[class*="hint" i],.help-block,.form-text';
+export function fieldHint(element: Element, label: string): string | undefined {
+  const texts: string[] = [];
+  const root = element.getRootNode() as Document | ShadowRoot;
+  const usable = (node: Element | null | undefined) =>
+    node && !node.closest('[role="alert"],[aria-live="assertive"],[class*="error" i]') && !node.contains(element);
+  for (const id of (element.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean)) {
+    const node = root.querySelector(`#${CSS.escape(id)}`);
+    if (usable(node)) texts.push(node!.textContent || "");
+  }
+  let parent = element.parentElement;
+  for (let depth = 0; parent && depth < 3; depth++, parent = parent.parentElement) {
+    if (parent.querySelectorAll('input:not([type="hidden"]),textarea,select').length !== 1) break;
+    for (const node of parent.querySelectorAll(hintSelector))
+      if (usable(node) && !node.parentElement?.closest(hintSelector)) texts.push(node.textContent || "");
+  }
+  const own = label.replace(/\s+/g, " ").trim().toLowerCase();
+  const kept = [...new Set(texts.map((text) => text.replace(/\s+/g, " ").trim()))]
+    .filter((text) => text && !own.includes(text.toLowerCase()));
+  return kept.length ? kept.join(" ").slice(0, 500) : undefined;
+}
 
 export function fieldWordLimit(element: Element, label: string): number | undefined {
   const texts = [label];
@@ -1601,4 +1629,8 @@ export function selectedCustomValue(element: Control): string | undefined {
   // discards it on blur. With no selected value the field is empty.
   if (shell) return "";
   return element.getAttribute("aria-valuetext") ?? undefined;
+}
+
+export function fieldSentenceLimit(label: string, hint: string | undefined): number | undefined {
+  return sentenceLimit(`${label} ${hint || ""}`);
 }

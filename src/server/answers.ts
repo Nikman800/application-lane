@@ -118,7 +118,7 @@ Return ONLY this JSON: {"answers":[{"fieldId":"q1","text":"...","sources":["..."
 - Say why this company only from what the job text says about its product, domain or problem. When the job text is empty, skip why-this-company and other motivation questions.
 - notUsed on a question says why your earlier answer to it could not be used. Write it again so that problem is gone: say only what the profile states, keep the profile's own figures and names, and leave out a claim the profile does not make instead of rewording it. Do not mention the earlier answer.
 - pageFields are the form's other fields, with what is chosen in them. A question that refers to another field ("the work you listed above", "the area you selected") is answered from that field's chosen value; if it has none, skip it.
-- Length: stay within both maxWords and maxLength when given. With a word limit, provide enough concrete detail to answer the question, using multiple examples when asked. Otherwise: preference and background-fact answers under 250 characters, other short answers 150-250 characters, project or experience answers 300-500, "why us" and motivation answers 500-1000.
+- Length: stay within maxWords, maxLength and maxSentences when given. With a word limit, provide enough concrete detail to answer the question, using multiple examples when asked. Otherwise: preference and background-fact answers under 250 characters, other short answers 150-250 characters, project or experience answers 300-500, "why us" and motivation answers 500-1000.
 - First person, the applicant's own voice: direct, technical, concrete, short active sentences, real numbers from the profile. Every sentence says something on its own; none only restates a role name or dates. Plain text: no markdown, no bullets, no em dashes (use commas or colons), no greeting or sign-off.
 - Never write passionate, team player, hit the ground running, from day one, from the first week, track record, fast learner, think outside the box, synergy, results-driven, detail-oriented, perfect candidate or great fit.`;
 
@@ -308,6 +308,7 @@ export async function writeAnswers(
               ...(asksForToolList(field.label) ? { note: TOOL_LIST_NOTE } : {}),
               ...(field.maxLength ? { maxLength: field.maxLength } : {}),
               ...(field.maxWords ? { maxWords: field.maxWords } : {}),
+              ...(field.maxSentences ? { maxSentences: field.maxSentences } : {}),
               ...(options.rejected?.[field.id] ? { notUsed: options.rejected[field.id].slice(0, 400) } : {}),
             })),
           }),

@@ -34,8 +34,8 @@ export function startDateMonth(field: Pick<Field, "label" | "kind" | "value" | "
 // The label a writer is asked for a field: the Month box of a split start
 // date stands for the whole question, answered as a date or "Immediately"
 // (asked as "…: Month", a model named a month and nothing else).
-export function writerLabel(field: Pick<Field, "label" | "kind" | "value" | "protected">): string {
-  if (!startDateMonth(field)) return field.label;
+export function writerLabel(field: Pick<Field, "label" | "kind" | "value" | "protected" | "hint">): string {
+  if (!startDateMonth(field)) return field.hint ? `${field.label} (${field.hint})` : field.label;
   return `${field.label.replace(/\s*:?\s*month\s*$/i, "")} (the whole start date: answer with a date as mm/dd/yyyy, or "Immediately")`;
 }
 
@@ -172,23 +172,37 @@ export function wordLimit(text: string): number | undefined {
     .filter((n) => n > 0 && n <= 10000);
   return limits.length ? Math.min(...limits) : undefined;
 }
+// "No more than 2 sentences", "Answer in one sentence", "3 sentences max".
+const counted: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+export function sentenceLimit(text: string): number | undefined {
+  const limits = [
+    ...text.matchAll(/\b(?:no more than|not more than|at most|max(?:imum)?(?: of)?|up to|limit(?:ed)? to|(?:answer|respond|reply|explain|describe)(?: \w+){0,3} in|in)\s+(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:\w+\s+)?sentences?\b|\b(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\s+sentences?\s+(?:max(?:imum)?|or (?:less|fewer))\b/giu),
+  ].map((m) => { const n = (m[1] || m[2]).toLowerCase(); return counted[n] ?? Number(n); }).filter((n) => n > 0 && n <= 50);
+  return limits.length ? Math.min(...limits) : undefined;
+}
+const sentenceBreak = /(?<=[.!?])\s+(?=[\p{Lu}\p{N}"“])/u;
+export function sentenceCount(text: string): number {
+  return text.trim() ? text.trim().split(sentenceBreak).length : 0;
+}
 export function answerLimitError(
   text: string,
-  field: Pick<Field, "maxLength" | "maxWords">,
+  field: Pick<Field, "maxLength" | "maxWords" | "maxSentences">,
 ): string | undefined {
   if (field.maxWords && wordCount(text) > field.maxWords)
     return `Use at most ${field.maxWords} words.`;
+  if (field.maxSentences && sentenceCount(text) > field.maxSentences)
+    return `Use at most ${field.maxSentences} sentence${field.maxSentences === 1 ? "" : "s"}.`;
   const characters = Math.min(field.maxLength || 4000, 4000);
   if (text.length > characters) return `Use at most ${characters} characters.`;
 }
 // Keep complete sentences; never turn an oversized draft into a fragment.
 export function fitAnswerLength(
   text: string,
-  field: Pick<Field, "maxLength" | "maxWords">,
+  field: Pick<Field, "maxLength" | "maxWords" | "maxSentences">,
 ): string {
   if (!answerLimitError(text, field)) return text;
   let kept = "";
-  for (const sentence of text.split(/(?<=[.!?])\s+(?=[\p{Lu}\p{N}"“])/u)) {
+  for (const sentence of text.split(sentenceBreak)) {
     const next = [kept, sentence].filter(Boolean).join(" ");
     if (answerLimitError(next, field)) break;
     kept = next;

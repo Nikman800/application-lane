@@ -22,7 +22,7 @@ import {
   fieldFallbackSources,
   writeFieldFallback,
 } from "../src/server/field-fallback";
-import { structuredFallbackField } from "../src/shared/questions";
+import { structuredFallbackField, sentenceLimit, sentenceCount, answerLimitError } from "../src/shared/questions";
 import { CHECKING_BUDGET_MS, GenerationQueue, postingReadable, unsupportedClaims, wantsLetter } from "../src/server/generation";
 import { evidenceEntries, heldByOneEntry, supportedBy, talksAboutSources, unclaimed, checkers, verifier, secondCheckAvailable, type Draft, type Verdict } from "../src/server/verify";
 import { configSchema, Store } from "../src/server/store";
@@ -1581,6 +1581,24 @@ test("single-question drafts keep page context, plural project sources, model id
   assert.match(written.sources.technical, /Student web application; Platform Engineer/);
   assert.deepEqual(written.providers!.technical, { provider: "http", model: "fixture" });
   assert.match(sent().messages[0].content, /multiple relevant real projects/);
+});
+
+test("a question's hint reaches the writer, and its sentence limit keeps the answer to whole sentences", async (t) => {
+  const { config, sent } = await endpoint(t, [
+    { fieldId: "q1", text: "I built a TypeScript web application used by 2,000 students. I cut API latency 35% with a Redis cache at Initrode. I like developer tools. I want to build them here.", sources: ["Student web application", "Platform Engineer"] },
+  ]);
+  const context = await skillContext(await checkout());
+  const selected = field("Why Contoso?", { id: "why", kind: "text", hint: "No more than 2 sentences", maxSentences: 2 });
+  const written = await writeAnswers(config, { ...request([selected]), purpose: "answers" as const, questionIds: ["why"] }, profile, context, new AbortController().signal);
+  const input = JSON.parse(sent().messages[1].content);
+  assert.equal(input.questions[0].label, "Why Contoso? (No more than 2 sentences)");
+  assert.equal(input.questions[0].maxSentences, 2);
+  assert.equal(sentenceCount(written.answers[0].value), 2, "the answer keeps the form's sentence limit");
+  assert.equal(sentenceLimit("No more than 2 sentences"), 2);
+  assert.equal(sentenceLimit("Answer in one sentence."), 1);
+  assert.equal(sentenceLimit("3 sentences max"), 3);
+  assert.equal(sentenceLimit("Write a few sentences about yourself"), undefined);
+  assert.match(answerLimitError("One. Two. Three.", { maxSentences: 2 })!, /2 sentences/);
 });
 
 test("all empty questions are drafted in bounded batches, including more than 25 questions", async (t) => {

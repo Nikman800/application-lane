@@ -2,7 +2,7 @@
 // Split out of content.ts as it was; see content.ts for how it starts.
 import { type Observation, type Field, normalize } from "../../shared/model";
 import { adapterFor } from "../adapters";
-import { proficiencyGauge, writable, controlVisible, isToggleChoice, sectionFor, placeholderOption, isRequired, fieldWordLimit, replacesForm, groupQuestion, checkboxEntryTitle, hiddenAnswerQuestion, validationState, rendered, wfnDropdown, digitsOnlyBox } from "../semantics";
+import { proficiencyGauge, writable, controlVisible, isToggleChoice, sectionFor, placeholderOption, isRequired, fieldWordLimit, fieldHint, fieldSentenceLimit, replacesForm, groupQuestion, checkboxEntryTitle, hiddenAnswerQuestion, validationState, rendered, wfnDropdown, digitsOnlyBox } from "../semantics";
 import { radioGroup, lockKey, closestAcrossShadows, searchWithoutPick, manualSigningControl, clip, drawnOptions, picksOf, inEntryEditor, readableText, nextButton } from "../content-dom";
 import { configEngineEnabled } from "../../engine/mode";
 import { resumeSlotOpen, slowResumeParse, configUploadSlots, addableCollections } from "../../engine/runtime";
@@ -10,6 +10,15 @@ import { cs } from "./state";
 import { adoptSiteValue, besideLastWrite, controls, hasEditLock, lockReason, valueOf, writePending } from "./controls";
 import { INVISIBLE_CAPTCHA, calendarBox, dateFormatHint, legacyReactSelect, pickerBox } from "./core";
 import { addLock, documentId, fieldLabel, fileKind, nodeRecords, ownLabel, records, semanticIds } from "./tracking";
+
+// A text question's hint and sentence limit; other controls' descriptions
+// are not questions to write to.
+function questionHint(element: Element, label: string): { hint?: string; maxSentences?: number } {
+  if (!(element instanceof HTMLTextAreaElement || (element instanceof HTMLInputElement && element.type === "text"))) return {};
+  const hint = fieldHint(element, label);
+  const maxSentences = fieldSentenceLimit(label, hint);
+  return { ...(hint ? { hint } : {}), ...(maxSentences ? { maxSentences } : {}) };
+}
 
 export function inspect(): Observation {
   const ats = adapterFor(location.href);
@@ -311,6 +320,7 @@ export function inspect(): Observation {
       accept: (element.getAttribute("accept") || "").slice(0, 1000),
       format: dateFormatHint(element),
       maxWords: fieldWordLimit(element, label),
+      ...questionHint(element, label),
       ...((element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) &&
       element.maxLength > 0
         ? { maxLength: element.maxLength }

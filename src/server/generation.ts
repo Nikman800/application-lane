@@ -596,7 +596,7 @@ export class GenerationQueue {
             const value = answers.find((answer) => answer.fieldId === field.id)?.value || "";
             return {
               fieldId: field.id, label: field.label, required: field.required, value,
-              maxLength: field.maxLength, maxWords: field.maxWords,
+              maxLength: field.maxLength, maxWords: field.maxWords, maxSentences: field.maxSentences,
               source: written.sources[field.id], draftedWith: written.providers?.[field.id],
               ...(!value ? { skipReason: written.reasons?.[field.id] || "The draft was withheld during review. Try drafting it separately or write your answer." } : {}),
               ...(value && draftChecks.getStore()?.has(`answer:${field.id}`) ? { unchecked: true } : {}),

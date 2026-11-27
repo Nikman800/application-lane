@@ -23463,6 +23463,25 @@ test("reviewed batch filling keeps changed fields and refuses drafts after navig
   } finally { await fixture.close(); }
 });
 
+test("an Ashby question's description is read as its hint, and a sentence limit in it is kept", async () => {
+  const fixture = await answerPage();
+  try {
+    const { page, tabId } = fixture;
+    // Ashby's markup: the description sits between the label and the input's
+    // own box, inside the field entry.
+    const entry = (id: string, title: string, description: string) => `<div class="_fieldEntry_1e3gg_28 ashby-application-form-field-entry" data-field-path="${id}"><label class="_heading_f7cvd_52 _required_f7cvd_91 _label_1e3gg_42 ashby-application-form-question-title" for="${id}">${title}</label><div class="_description_1e3gg_48 ashby-application-form-question-description"><p>${description}</p></div><div><input placeholder="Type here..." name="${id}" required="" id="${id}" type="text" class="_input_80epu_28 _input_1e3gg_32 ashby-application-form-input-text"></div></div>`;
+    await context.route(`${atsOrigins[1]}/**`, (route) => route.fulfill({ contentType: "text/html", body: `<!doctype html><form>${entry("why-us", "Why Contoso?", "No more than 2 sentences")}${entry("why-you", "Why you?", "What have you built that you are most proud of?")}${entry("in-person", "Excited to work in-person?", "")}</form>` }));
+    await page.locator("main").evaluate((main, url) => { const iframe = document.createElement("iframe"); iframe.src = url; main.append(iframe); }, `${atsOrigins[1]}/ashby-questions`);
+    await expect(page.frameLocator("iframe").locator("#why-you")).toBeVisible();
+    const fields = (await ui({ type: "QUESTION_FIELDS", tabId })).fields;
+    const named = (label: string) => fields.find((field: { label: string }) => field.label === label);
+    expect(named("Why Contoso?").maxSentences, "the sentence limit under the question is read").toBe(2);
+    expect(named("Why Contoso?").hint).toBe("No more than 2 sentences");
+    expect(named("Why you?").hint, "the prompt under the question reaches the writer").toBe("What have you built that you are most proud of?");
+    expect(named("Why you?").maxSentences).toBeUndefined();
+  } finally { await fixture.close(); }
+});
+
 test("question drafting includes embedded frames and fills a reviewed batch across frames", async () => {
   const fixture = await answerPage();
   try {

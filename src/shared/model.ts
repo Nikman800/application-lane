@@ -440,6 +440,13 @@ export const fieldSchema = z.object({
   // The field's own character limit, when it sets one.
   maxLength: z.number().int().positive().optional(),
   maxWords: z.number().int().positive().optional(),
+  // "No more than 2 sentences" in the line under the question (Ashby's
+  // description): a limit the answer keeps.
+  maxSentences: z.number().int().positive().optional(),
+  // The form's own words under the question, when they add to it (Ashby's
+  // "Why you?" asks beneath it "What have you built that you are most proud
+  // of?"); the writer reads them as part of the question.
+  hint: z.string().max(500).optional(),
   // A resume uploader that parses the file and rewrites the form.
   replacesForm: z.boolean().optional(),
   // The question this control is one option of (a checkbox in a group). Its
@@ -506,7 +513,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-26-ethnic-origin";
+export const CONTENT_VERSION = "2026-11-26-question-hint";
 export type Proposal = {
   fieldId: string;
   value: string;
@@ -731,6 +738,7 @@ export type AnswerDraft = {
   required: boolean;
   maxLength?: number;
   maxWords?: number;
+  maxSentences?: number;
   source?: string;
   draftedWith?: DraftProvider;
   skipReason?: string;

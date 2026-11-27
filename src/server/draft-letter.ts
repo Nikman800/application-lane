@@ -32,7 +32,7 @@ function selectionContext(profile: Profile, request: GenerationRequest) {
   );
   return {
     facts: profile.facts.map((f, i) => ({ id: factRefs[i], text: f.text })),
-    fields: fields.map((f, i) => ({ id: fieldRefs[i], label: writerLabel(f), ...(asksForToolList(f.label) ? { note: TOOL_LIST_NOTE } : {}), ...(f.maxLength ? { maxLength: f.maxLength } : {}), ...(f.maxWords ? { maxWords: f.maxWords } : {}) })),
+    fields: fields.map((f, i) => ({ id: fieldRefs[i], label: writerLabel(f), ...(asksForToolList(f.label) ? { note: TOOL_LIST_NOTE } : {}), ...(f.maxLength ? { maxLength: f.maxLength } : {}), ...(f.maxWords ? { maxWords: f.maxWords } : {}), ...(f.maxSentences ? { maxSentences: f.maxSentences } : {}) })),
     factsByRef: new Map(
       profile.facts.flatMap((f, i) => [
         [f.id, f.id],
