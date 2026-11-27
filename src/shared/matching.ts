@@ -602,6 +602,23 @@ const preferredNameLabel = /^preferred( first)? name(?: (?:enter|please|the name
 // names, in a field it names, and ends by its deadline; No with none under
 // way; a field it does not name is left (a "related" field is the
 // applicant's to judge).
+// "What is your level of proficiency with developing software in C and
+// C++?" over a list of levels in words (No experience, Basic, Intermediate,
+// Advanced, Expert): the saved levels (1 to 5) of the skills it names, the
+// lowest of them, when filling levels is switched on and each has one.
+const levelWords: RegExp[] = [/\b(beginner|novice|basic)\b/, /\b(basic|beginner|novice|familiar)\b/, /\b(intermediate|proficient|competent)\b/, /\badvanced\b/, /\bexpert\b/];
+function namedSkillLevel(field: Field, label: string, profile: Profile): string | undefined {
+  if (!field.options.length || !profile.fillSkillLevels) return;
+  const asked = label.match(/^what is your (?:level of )?proficiency (?:with|in) (?:developing software in |programming in |using )?(.+)$/);
+  if (!asked) return;
+  const names = field.label.replace(/^.*\b(?:in|with|using)\s+/i, "").replace(/[?*\s]+$/, "").split(/\s*(?:,|\/|\band\b|&)\s*/).filter(Boolean);
+  if (!names.length || names.length > 4) return;
+  const levels = names.map((name) => skillLevel(profile, name));
+  if (levels.some((level) => !level)) return;
+  const level = Math.min(...(levels as number[]));
+  const options = field.options.filter((option) => levelWords[level - 1].test(normalize(option)));
+  return options.length === 1 ? options[0] : undefined;
+}
 const seasonEnd: Record<string, number> = { spring: 6, summer: 8, fall: 12, autumn: 12 };
 function pursuingByDeadline(label: string, profile: Profile): string | undefined {
   const asked = label.match(/^are you (?:currently )?(?:pursuing|enrolled in|working toward|studying for)\b(.*)\b(?:graduation|completion) date (?:of|in|by) (?:the )?(spring|summer|fall|autumn|january|february|march|april|may|june|july|august|september|october|november|december) (?:of )?(\d{4}) or (?:earlier|before|sooner)$/);
@@ -680,7 +697,10 @@ export function profileAnswer(
       /\b(opt|cpt|optional practical training|curricular practical training|temporary (work )?authori[sz]ation)\b/.test(temporaryAsked)) {
     const entry = authorizationEntry(profile, askedPart(field.label));
     if (entry && (entry.status === "citizen" || entry.status === "permanent-resident")) {
-      if (/^if you are\b|\b(extension|stem)\b/.test(temporaryAsked)) {
+      // "STEM OPT" named as one kind of training ("on or in the process of
+      // receiving an F-1 OPT/OPT EAD/STEM OPT … or CPT?", iCIMS) asks about
+      // no extension: that is No, like the rest.
+      if (/^if you are\b|\bextension\b|\bstem\b(?! opt\b)/.test(temporaryAsked)) {
         const notApplicable = field.options.find((option) => /^\s*(n\/?a|not applicable)\b/i.test(option));
         return notApplicable ? { value: notApplicable } : undefined;
       }
@@ -995,6 +1015,8 @@ function educationAndPlaceAnswer({ field, profile, label, asked, educationRow }:
     return field.options.length ? { value: "Yes" } : undefined;
   const pursuing = pursuingByDeadline(label, profile);
   if (pursuing) return { value: pursuing };
+  const skill = namedSkillLevel(field, label, profile);
+  if (skill) return { value: skill };
   // "Anticipated graduation month/year" comes from the latest education end
   // date; an ongoing program without an end date leaves it to the user.
   // Never for a Yes/No asked about it ("Are you … with an anticipated

@@ -3133,6 +3133,20 @@ test("a yes/no on pursuing a degree by a deadline is answered from the program u
   assert.equal(valueOf(asked, yesNo), "No");
 });
 
+// iCIMS: a select asking about OPT/CPT that names "STEM OPT" only as one
+// kind of training, and a proficiency list in words for the skills it names.
+test("an OPT/CPT question naming STEM OPT is No for a citizen, and a proficiency list in words takes the saved levels", () => {
+  const citizen = profileSchema.parse({ ...rivera, workAuthorization: [{ country: "US", status: "citizen", needsSponsorship: false }] });
+  const opt = "Are you currently on or in the process of receiving an F-1 OPT/OPT EAD/STEM OPT (Optional Practical Training) or CPT (Curricular Practical Training) work authorization?";
+  assert.equal(valueOf(opt, { kind: "select", options: ["Yes", "No"] }, citizen), "No");
+  const levels = ["No experience", "Basic - some exposure, but just learning", "Intermediate - requires minimal supervision", "Advanced - can train others in this skill", "Expert - recognized as skilled by others"];
+  const asked = "What is your level of proficiency with developing software in C and C++?";
+  const coder = (on: boolean, cpp = 3) => profileSchema.parse({ ...rivera, skills: ["C", "C++", "Python"], skillLevels: { C: 4, "C++": cpp, Python: 5 }, fillSkillLevels: on });
+  assert.equal(valueOf(asked, { kind: "select", options: levels }, coder(true)), "Intermediate - requires minimal supervision");
+  assert.equal(valueOf(asked, { kind: "select", options: levels }, coder(true, 5)), "Advanced - can train others in this skill");
+  assert.equal(valueOf(asked, { kind: "select", options: levels }, coder(false)), undefined);
+});
+
 test("a LinkedIn yes/no and a URL-only request are answered from the saved address", () => {
   assert.equal(valueOf("Do you have a LinkedIn profile?", yesNo), "Yes");
   assert.equal(valueOf("Do you have a LinkedIn profile?", yesNo, profileSchema.parse({ ...rivera, linkedin: "" })), undefined);
