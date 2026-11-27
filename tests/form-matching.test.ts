@@ -3552,3 +3552,13 @@ test("a current student majoring in a named field is answered from the school ro
   assert.equal(valueOf(asked, yesNo, studying("Computer Science", false)), "No");
   assert.equal(valueOf(asked, yesNo, studying("Data Science", true)), undefined);
 });
+
+// iCIMS: a sponsorship question naming the document sponsorship is for ("…for
+// an employment-based work permit or other work authorization document?")
+// was taken for one asking for proof, and left.
+test("a sponsorship question naming the work authorization document it is for is answered from the saved status", () => {
+  const citizen = profileSchema.parse({ ...rivera, workAuthorization: [{ country: "US", status: "citizen", needsSponsorship: false }] });
+  const asked = "Will you now or in the future require work authorization sponsorship from our company for an employment-based work permit or other work authorization document?";
+  assert.equal(valueOf(asked, { kind: "select", options: ["No, I do not require sponsorship.", "Yes, I do require work authorization sponsorship."] }, citizen), "No, I do not require sponsorship.", "the sponsorship question was left as one asking for proof");
+  assert.equal(valueOf("Can you provide a work authorization document on your first day?", yesNo, citizen), undefined);
+});

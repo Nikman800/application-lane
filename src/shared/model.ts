@@ -513,7 +513,7 @@ export type Observation = {
   // that keeps the form apart from the posting, usually the posting.
   referrer?: string;
 };
-export const CONTENT_VERSION = "2026-11-27-current-major";
+export const CONTENT_VERSION = "2026-11-27-sponsorship-document";
 export type Proposal = {
   fieldId: string;
   value: string;

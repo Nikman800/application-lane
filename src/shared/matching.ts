@@ -777,8 +777,12 @@ export function profileAnswer(
   // list, not a temporary permit asked about (Oracle). So is "temporary
   // residence" in the statuses a U.S. person question lists and defines
   // (Lever): that question is answered from citizenship below.)
+  // ("…require work authorization sponsorship from our company for an
+  // employment-based work permit or other work authorization document?"
+  // (iCIMS) names the document sponsorship is for, and asks for none.)
   if (!/\bu ?s person\b/.test(label) &&
-      /\b(proof|document\w*|verification|temporary|permit type)\b/.test(normalize(askedPart(field.label)).replace(/\blawful temporary resident\b/, "")) &&
+      /\b(proof|document\w*|verification|temporary|permit type)\b/.test(normalize(askedPart(field.label)).replace(/\blawful temporary resident\b/, "")
+        .replace(/\bsponsorship\b.*$/, (rest) => rest.replace(/\b(work )?authori[sz]ation documents?\b/g, ""))) &&
       /authori[sz]|right to work|visa/.test(label)) return;
   // "Do you currently have an active immigration case (ex H-1B extension,
   // green card)?" (Ashby, an employer): a U.S. citizen has none in the
