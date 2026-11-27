@@ -340,6 +340,17 @@ export async function writeFieldFallback(
       value = "";
       skipReason ||= "A follow-up to a Yes; left empty.";
     }
+    // A box that says to be left blank when it does not apply ("please
+    // provide the related details. If not applicable, please leave blank",
+    // iCIMS) takes no "N/A": the model wrote one there.
+    if (
+      value &&
+      /^(n\/?a|none|not applicable|no)\.?$/i.test(value) &&
+      /\bif (it is |this is )?not applicable,? (please )?leave (it |this )?(blank|empty)\b|\bleave (it |this )?(blank|empty) if (it is |this is )?not applicable\b/i.test(`${field.label} ${field.question || ""}`)
+    ) {
+      value = "";
+      skipReason ||= "Left blank, as the question asks when it does not apply.";
+    }
     // "I have a preferred name" reveals the preferred-name boxes. It is true
     // only of an applicant who saved one; the model ticked it from the first
     // name alone (Workday).

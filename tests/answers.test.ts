@@ -1446,6 +1446,8 @@ test("AI structured-field suggestions require saved sources and exact available 
                     value: "N/A",
                     sourceIds: ["education.1"],
                   },
+                  { fieldId: "q6", value: "N/A", sourceIds: ["education.1"] },
+                  { fieldId: "q7", value: "N/A", sourceIds: ["education.1"] },
                 ],
               }),
             },
@@ -1512,6 +1514,9 @@ test("AI structured-field suggestions require saved sources and exact available 
     field("Degree level", {
       id: "local-degree", kind: "select", section: "Education Information 1",
       options: ["High school", "Bachelor's degree", "Master's degree"],
+    }),    // iCIMS: a required box asking to be left blank when it does not apply.
+    field("If you have ever been terminated or been asked to resign by a previous employer, please provide the related details. If not applicable, please leave blank.", {
+      id: "terminated-details", kind: "textarea", section: "Job-Specific Information",
     }),
   ];
   const result = await writeFieldFallback(
@@ -1543,6 +1548,10 @@ test("AI structured-field suggestions require saved sources and exact available 
   // question it follows read as a contradiction.
   assert.equal(result.drafts[4].value, "");
   assert.match(result.drafts[4].skipReason!, /follow-up to a Yes/);
+  // A box that says to leave it blank when it does not apply takes no "N/A".
+  const blank = result.drafts.find((draft) => draft.fieldId === "terminated-details")!;
+  assert.equal(blank.value, "", "an N/A was written where the question asks for a blank");
+  assert.match(blank.skipReason!, /Left blank/);
   const input = JSON.parse(sent.messages[1].content);
   assert.equal(result.drafts.some(draft => draft.fieldId === "local-degree"), false);
   assert.equal(input.fields.some((candidate: { label: string }) => candidate.label === "Degree level"), false);
