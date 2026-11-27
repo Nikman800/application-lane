@@ -305,8 +305,8 @@ export function deterministicAnswer(
   const keys: [RegExp, keyof Profile][] = [
     [/^(first|given) name$|^legal first name$/, "firstName"],
     [/^(last|family|sur) ?name$|^legal last name$/, "lastName"],
-    [/^preferred( first)? name$/, "preferredName"],
-    [/^(legal )?middle name$/, "middleName"],
+    [preferredNameLabel, "preferredName"],
+    [/^(legal )?middle name(?: please leave (?:it |this )?blank if you (?:do not|don t) have (?:a|one)(?: middle name)?)?$/, "middleName"],
     // The profile keeps one last name: the one the applicant goes by too.
     [/^preferred (last|family|sur) ?name$/, "lastName"],
     [/^e ?mail( address)?$|^what is your (personal |preferred |primary |best |current )?e ?mail( address)?$/, "email"],
@@ -378,7 +378,7 @@ export function deterministicAnswer(
     ]
       .filter(Boolean)
       .join("\n");
-  if (/^preferred( first)? name$/.test(label))
+  if (preferredNameLabel.test(label))
     return profile.preferredName || profile.firstName || undefined;
   // A saved LinkedIn address answers "Do you have a LinkedIn profile?" Yes;
   // without one the applicant is left to say (they may have one unsaved).
@@ -590,6 +590,38 @@ type AnswerContext = {
 };
 // A part of profileAnswer none of whose rules asks the field.
 const NEXT = Symbol("next rule");
+// "Preferred First Name", or with the form's hint after it (Greenhouse's
+// "Preferred First Name: Enter the name you go by—even if it's your legal
+// name.", left to the AI step).
+const preferredNameLabel = /^preferred( first)? name(?: (?:enter|please|the name|if|this|what|how|leave)\b.*)?$/;
+
+// "Are you currently pursuing a bachelor's or master's degree in Data Science,
+// Computer Science, … or a related technical field, with an anticipated
+// graduation date of Spring 2028 or earlier?": a Yes/No asked of the degree
+// under way. Yes when a school row still under way is at a level the question
+// names, in a field it names, and ends by its deadline; No with none under
+// way; a field it does not name is left (a "related" field is the
+// applicant's to judge).
+const seasonEnd: Record<string, number> = { spring: 6, summer: 8, fall: 12, autumn: 12 };
+function pursuingByDeadline(label: string, profile: Profile): string | undefined {
+  const asked = label.match(/^are you (?:currently )?(?:pursuing|enrolled in|working toward|studying for)\b(.*)\b(?:graduation|completion) date (?:of|in|by) (?:the )?(spring|summer|fall|autumn|january|february|march|april|may|june|july|august|september|october|november|december) (?:of )?(\d{4}) or (?:earlier|before|sooner)$/);
+  if (!asked) return;
+  const [, degree, season, year] = asked;
+  const month = seasonEnd[season] ?? months.findIndex((name) => normalize(name) === season) + 1;
+  if (!month) return;
+  const deadline = `${year}-${String(month).padStart(2, "0")}`;
+  const under = profile.education.filter((row) => studying(row));
+  if (!under.length) return profile.education.length ? "No" : undefined;
+  const levels = [/\bbachelor/.test(degree) && 2, /\bmaster/.test(degree) && 3, /\b(phd|doctor)/.test(degree) && 4].filter(Boolean);
+  const fits = under.some((row) => {
+    const field = normalize(row.fieldOfStudy || "");
+    return field && degree.includes(field) &&
+      (!levels.length || levels.includes(levelRank[degreeLevel(row.title)])) &&
+      /^\d{4}-\d{2}/.test(row.endDate) && row.endDate.slice(0, 7) <= deadline;
+  });
+  return fits ? "Yes" : undefined;
+}
+
 export function profileAnswer(
   field: Field,
   profile: Profile,
@@ -958,8 +990,12 @@ function educationAndPlaceAnswer({ field, profile, label, asked, educationRow }:
   if (/\bcompleted (at least )?\d+ (college |semester |university )?credit hours\b/.test(label) &&
       profile.education.some((row) => /\bbachelor|\bb\.?\s?(s|a|sc|eng)\b\.?/i.test(`${row.title} ${row.details || ""}`) && /^\d{4}-\d{2}/.test(row.endDate) && row.endDate.slice(0, 7) < currentMonth()))
     return field.options.length ? { value: "Yes" } : undefined;
+  const pursuing = pursuingByDeadline(label, profile);
+  if (pursuing) return { value: pursuing };
   // "Anticipated graduation month/year" comes from the latest education end
   // date; an ongoing program without an end date leaves it to the user.
+  // Never for a Yes/No asked about it ("Are you … with an anticipated
+  // graduation date of Spring 2028 or earlier?" was offered "December 2027").
   // "What year did you or, if you have not graduated, will you receive your
   // degree?" asks the same.
   // Amazon's: "In what month and year did you (or do you expect to) graduate
@@ -970,7 +1006,8 @@ function educationAndPlaceAnswer({ field, profile, label, asked, educationRow }:
   // (report).
   // SmartRecruiters' "Which year did/do you Graduate?".
   if ((/\b(anticipated|expected|projected)\b.*\bgraduat|\bgraduation (date|month|year)\b|\b(which|what) year (did |do |will |would )+you graduate\b|\bwill you (receive|earn|complete|be awarded) (your|the|a) degree\b|\b(month|year|date) in which you will (receive|earn|complete|be awarded) (your|the|a) degree\b|\bexpect to graduate\b|\b(anticipated|expected|projected) (degree )?completion date\b/.test(label)) &&
-      !/\bwhat is (the |your )?highest (level of )?(education|degree|diploma)\b/.test(label)) {
+      !/\bwhat is (the |your )?highest (level of )?(education|degree|diploma)\b/.test(label) &&
+      !/^(are|is|do|does|did|will|would|have|has|can) (you|your)\b/.test(label)) {
     // Only a date still ahead is an anticipated graduation; a finished
     // degree's end date is not.
     const latest = educationRow

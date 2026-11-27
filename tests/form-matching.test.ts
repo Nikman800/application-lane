@@ -3104,6 +3104,35 @@ test("a preferred-name box, middle name and optional preferred name are answered
   assert.equal(valueOf("Preferred Name (Optional)", { required: false }), "Lex");
 });
 
+// iCIMS names a box "Legal Middle Name (please leave blank if you do not have
+// a middle name)", and a list only "Availability" (Immediately, Within 1
+// week…); Workday asks "Preferred First Name" with its instructions in the
+// label. Each was left empty, or given to the AI step.
+test("a middle name, preferred name and availability list asked with their notes are answered from the profile", () => {
+  assert.equal(valueOf("Legal Middle Name (please leave blank if you do not have a middle name)"), "Quinn");
+  assert.equal(valueOf("Preferred First Name: Enter the name you go by, if different from your legal first name"), "Lex");
+  const weeks = ["— Make a Selection —", "Immediately", "Within 1 week", "Within 2 weeks", "Other"];
+  assert.equal(valueOf("Availability", { kind: "combobox", options: weeks }), "Immediately");
+  assert.equal(valueOf("Availability", { kind: "combobox" }), "Immediately");
+  // Days and shifts, or a box: another question.
+  assert.equal(valueOf("Availability", { kind: "select", options: ["Weekdays", "Weekends", "Nights"] }), undefined);
+  assert.equal(valueOf("Availability", { kind: "text" }), undefined);
+});
+
+// "Are you currently pursuing a Bachelor's or Master's degree in Data Science
+// with an anticipated graduation date of Fall 2027 or earlier?" is a Yes/No:
+// the graduation rule offered the month and year to it.
+test("a yes/no on pursuing a degree by a deadline is answered from the program under way", () => {
+  const student = (endDate: string) => profileSchema.parse({ ...rivera, education: [
+    { organization: "Penn State", title: "Master of Science", fieldOfStudy: "Data Science", startDate: "2025-08-21", endDate, current: true },
+    { organization: "Virginia Tech", title: "Bachelor of Science", fieldOfStudy: "Computer Science", startDate: "2020-08", endDate: "2024-05" },
+  ] });
+  const asked = "Are you currently pursuing a Bachelor's or Master's degree in Data Science with an anticipated graduation date of Fall 2027 or earlier?";
+  assert.equal(valueOf(asked, yesNo, student("2027-05-10")), "Yes");
+  assert.equal(valueOf(asked, yesNo, student("2028-05-10")), undefined);
+  assert.equal(valueOf(asked, yesNo), "No");
+});
+
 test("a LinkedIn yes/no and a URL-only request are answered from the saved address", () => {
   assert.equal(valueOf("Do you have a LinkedIn profile?", yesNo), "Yes");
   assert.equal(valueOf("Do you have a LinkedIn profile?", yesNo, profileSchema.parse({ ...rivera, linkedin: "" })), undefined);
